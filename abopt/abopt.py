@@ -1,17 +1,20 @@
-def UndefinedDot(a, b):
-    raise NotImplementedError('Inner product operator is required but undefined')
+def default_addmul(a, b, s):
+    return a + b * s
 
-def UndefinedCreate():
-    raise NotImplementedError('Allocation operator is required but undefined')
-
-def UndefinedAddMul(a, b, scale):
-    raise NotImplementedError('AddMul operator is required but undefined')
+def default_dot(a, b):
+    if hasattr(a, 'dot'):
+        return a.dot(b)
+    try:
+        return sum(a * b)
+    except TypeError:
+        return float(a * b)
 
 class Optimizer(object):
     def __init__(self,
-                 dot=UndefinedDot,
-                 create=UndefinedCreate,
-                 addmul=UndefinedAddMul):
+                 addmul=default_addmul,
+                 dot=default_dot,
+                 create=None
+                 ):
         # FIXME: use check the function signature is correct.
         self.dot = dot
         self.create = create
