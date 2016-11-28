@@ -137,9 +137,10 @@ def main(argv):
         print("*** Benchmarks should not be run against debug version; remove -g flag ***")
 
     if not args.no_build:
-        site_dir = build_project(args)
+        site_dir, site_dir2 = build_project(args)
         sys.path.insert(0, site_dir)
-        os.environ['PYTHONPATH'] = site_dir
+        sys.path.insert(0, site_dir2)
+        os.environ['PYTHONPATH'] = site_dir + ':' + site_dir2
 
     extra_argv = args.args[:]
     if extra_argv and extra_argv[0] == '--':
@@ -388,8 +389,9 @@ def build_project(args):
 
     from distutils.sysconfig import get_python_lib
     site_dir = get_python_lib(prefix=dst_dir, plat_specific=True)
+    site_dir2 = get_python_lib(prefix=dst_dir, plat_specific=False)
 
-    return site_dir
+    return site_dir, site_dir2
 
 
 #
