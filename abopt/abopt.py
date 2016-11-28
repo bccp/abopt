@@ -1,8 +1,17 @@
+def UndefinedDot(a, b):
+    raise NotImplementedError('Inner product operator is required but undefined')
+
+def UndefinedCreate():
+    raise NotImplementedError('Allocation operator is required but undefined')
+
+def UndefinedAddMul(a, b, scale):
+    raise NotImplementedError('AddMul operator is required but undefined')
+
 class Optimizer(object):
     def __init__(self,
-                 dot,
-                 create,
-                 addmul):
+                 dot=UndefinedDot,
+                 create=UndefinedCreate,
+                 addmul=UndefinedAddMul):
         # FIXME: use check the function signature is correct.
         self.dot = dot
         self.create = create
@@ -20,7 +29,7 @@ class State(dict):
     pass
 
 class GradientDescent(Optimizer):
-    def __init__(self, dot, create, addmul):
+    def __init__(self, dot=UndefinedDot, create=UndefinedCreate, addmul=UndefinedAddMul):
         Optimizer.__init__(self, dot, create, addmul)
 
     def configure(self,
