@@ -54,7 +54,7 @@ class GradientDescent(Optimizer):
         y0 = objective(x0)
         while step < maxsteps:
             dx0 = gradient(x0)
-            gradnorm = self.dot(dx0, dx0)
+            gradnorm = self.dot(dx0, dx0) ** 0.5
             state = State(x=x0, y=y0, dy=dy, gradient=dx0, gradnorm=gradnorm, step=step)
             notification(state)
 
