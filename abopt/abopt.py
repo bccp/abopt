@@ -37,7 +37,7 @@ class GradientDescent(Optimizer):
                 gtol=1e-6,
                 maxsteps=1000,
                 gamma=1e-3,
-                notification=None,
+                monitor=None,
                 **kwargs):
 
         c = {}
@@ -45,7 +45,7 @@ class GradientDescent(Optimizer):
         c['gtol'] = gtol
         c['maxsteps'] = maxsteps
         c['gamma'] = gamma
-        c['notification'] = notification
+        c['monitor'] = monitor
         c.update(kwargs)
         
         Optimizer.configure(self, **c)
@@ -55,7 +55,7 @@ class GradientDescent(Optimizer):
         gtol = self.config.get('gtol')
         maxsteps = self.config.get('maxsteps')
         gamma = self.config.get('gamma')
-        notification = self.config.get('notification')
+        monitor = self.config.get('monitor')
 
         # FIXME: line search 
         step = 0
@@ -65,7 +65,7 @@ class GradientDescent(Optimizer):
             dx0 = gradient(x0)
             gradnorm = self.dot(dx0, dx0) ** 0.5
             state = State(x=x0, y=y0, dy=dy, gradient=dx0, gradnorm=gradnorm, step=step)
-            notification(state)
+            monitor(state)
 
             if gradnorm < gtol: break
             if dy is not None and dy < tol: break

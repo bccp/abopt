@@ -22,7 +22,7 @@ def test_gradient_descent():
         called[0] = True
 
     optimizer.configure(maxstep=1000, tol=1e-2, gtol=1e-2, stepsize=0.01)
-    optimizer.configure(notification=notification)
+    optimizer.configure(monitor=notification)
     result = optimizer.minimize(objective=f, gradient=df, x0=6.)
     assert called[0]
     assert abs(result['x'] - 2.25) < 0.05
