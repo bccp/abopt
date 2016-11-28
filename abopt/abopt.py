@@ -1,4 +1,6 @@
 def default_addmul(a, b, s):
+    if s == 0:
+        return 1.0 * a # always a new instance is created
     return a + b * s
 
 def default_dot(a, b):
@@ -13,11 +15,19 @@ class Optimizer(object):
     def __init__(self,
                  addmul=default_addmul,
                  dot=default_dot,
-                 create=None
                  ):
+        """
+            Parameters
+            ----------
+            addmul : callable
+                addmul(a, b, s) returns a + b * s as a new vector from vector a, b and a Python scalar s.
+                when s is 0 (not 0.0), it returns a copy of a, serving as a constructor of new vectors.
+
+            dot : callable
+                dot(a, b) returns the inner product of vectors a and b as a Python scalar
+        """
         # FIXME: use check the function signature is correct.
         self.dot = dot
-        self.create = create
         self.addmul = addmul
         self.config = {}
         self.configure()
