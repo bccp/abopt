@@ -29,8 +29,6 @@ class State(dict):
     pass
 
 class GradientDescent(Optimizer):
-    def __init__(self, dot=UndefinedDot, create=UndefinedCreate, addmul=UndefinedAddMul):
-        Optimizer.__init__(self, dot, create, addmul)
 
     def configure(self,
                 tol=1e-6,
