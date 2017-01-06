@@ -136,9 +136,10 @@ class VM(object):
             func.lout = lout
             func.grad = gradient_decorator
             return func
-        # no parameters
+        # no parameters, just a plain decorator
         if hasattr(fout, "__call__"):
-            return decorator(fout)
+            func = fout
+            return decorator(func)
         return decorator
 
     def __init__(self):
@@ -157,13 +158,12 @@ class VM(object):
             >>> vm.push('mul', 3.0)
             >>> vm.push('mul', 2.0)
         """
-        impl = self._find_impl(op)
-        self._microcodes.append((impl, args))
-
-    def _find_impl(self, op):
         for name, impl in self.__class__.__dict__.items():
-            if name == op: return impl
-        raise AttributeError("code %s is not found" % op)
+            if name == op:
+                self._microcodes.append((impl, args))
+                break 
+        else:
+            raise AttributeError("code %s is not found" % op)
 
     def compute(self, fout, init, tape=None):
         """
