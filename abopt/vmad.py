@@ -91,8 +91,14 @@ class VM(object):
                     record[var] = frontier[var]
                     if var in impl.fout:
                         # save a copy of the variables for in-place operations.
-                        frontier[var] = frontier[var].copy()
-                print(op, 'called with', VM.inspect(record))
+                        # the upstream is not necessary an array, so we 
+                        if hasattr(frontier[var], 'copy'):
+                            frontier[var] = frontier[var].copy()
+                        else:
+                            # if it can't clone itself, we ask for help from numpy.
+                            frontier[var] = numpy.array(frontier[var], copy=True)
+
+                # print(op, 'called with', VM.inspect(record))
                 tape.append(record)
 
             impl(self, frontier, *args)
@@ -150,12 +156,10 @@ class VM(object):
             d.update(frontier)
             impl = self._find_impl(op)
 
-            print ('gradient', op, 'before', VM.inspect(record))
+#            print ('gradient', op, 'before', VM.inspect(record))
 
-#            if any([name not in d for name in impl.g.gin]):
-#                print ('gradient', op, 'skipped due to missing', name)
-#                continue
             for name in impl.g.gin:
+                # non existing inputs are implied to start with gradients of 0
                 if name not in d:
                     d[name] = 0
 
@@ -165,7 +169,7 @@ class VM(object):
             for name in impl.g.gout:
                 vname = name[1:]
                 uid = id(record[vname])
-                print('partial gradient', name, d[name])
+#                print('partial gradient', name, d[name])
                 if uid not in partial:
                     # this is the first channel, create the gradient storage
                     partial[uid] = d[name]
@@ -181,7 +185,7 @@ class VM(object):
                     # update the frontier with the new gradients
                     # we no longer need to save it on partial since cummulation is done.
                     frontier[name] = partial.pop(uid)
-                    print('finalized gradient', name, frontier[name])
+                    # print('finalized gradient', name, frontier[name])
         d = {}
         for name in gout:
             d[name] = frontier[name]
