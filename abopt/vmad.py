@@ -1,13 +1,16 @@
 import numpy
-class BOTType(object):
-    # we essentially want the Bottom Type object here
+class ZeroType(object):
+    # this is similiar but not exactly the Bottom type.
     # https://en.wikipedia.org/wiki/Bottom_type
-    # any computation path involves BOT shall give BOT
-
-    # is there a better way of doing this?
+    #
+    # It is a special kind of Zero
+    # any multiplication computation path involves Zero shall give Zero
+    # any additive computation path involves Zero shall gives the other operand.
 
     def __init__(self):
         pass
+    def __array__(self):
+        return numpy.array(0)
     def __neg__(self):
         return self
     def __pos__(self):
@@ -19,11 +22,11 @@ class BOTType(object):
     def __complex__(self):
         return self
     def __int__(self):
-        return self
+        return 0
     def __float__(self):
-        return self
+        return 0.0
     def __round__(self):
-        return self
+        return 0
     def __mul__(self, a):
         return self
     def __rmul__(self, a):
@@ -33,13 +36,13 @@ class BOTType(object):
     def __rmatmul__(self, a):
         return self
     def __add__(self, a):
-        return self
+        return a
     def __radd__(self, a):
-        return self
+        return a
     def __sub__(self, a):
-        return self
+        return -a
     def __rsub__(self, a):
-        return self
+        return a
     def __mod__(self, a):
         return self
     def __rmod__(self, a):
@@ -47,35 +50,37 @@ class BOTType(object):
     def __divmod__(self, a):
         return self
     def __rdivmod__(self, a):
-        return self
+        raise ZeroDivisionError
     def __div__(self, a):
         return self
     def __rdiv__(self, a):
-        return self
+        raise ZeroDivisionError
     def __truediv__(self, a):
         return self
     def __rtruediv__(self, a):
-        return self
+        raise ZeroDivisionError
     def __floordiv__(self, a):
         return self
     def __rfloordiv__(self, a):
-        return self
+        raise ZeroDivisionError
     def __pow__(self, a, modulo):
         return self
     def __rpow__(self, a):
-        return self
+        # really should be a different error
+        # we never raise something to a gradient power
+        return ZeroDivisionError
     def __and__(self, a):
         return self
     def __rand__(self, a):
         return self
     def __xor__(self, a):
-        return self
+        return ~a
     def __rxor__(self, a):
-        return self
+        return ~a
     def __or__(self, a):
-        return self
+        return a
     def __ror__(self, a):
-        return self
+        return a
     def __lshift__(self, a):
         return self
     def __rlshift__(self, a):
@@ -90,17 +95,19 @@ class BOTType(object):
         return self
 
 class VM(object):
-    BOT = BOTType()
+    Zero = ZeroType()
     @staticmethod
     def inspect(record):
         return str(list((k, "0x%0X" % id(v)) for k, v in record.items()))
 
     @staticmethod
-    def microcode(fout=[], fin=[]):
+    def microcode(fout=[], fin=[], lout=[]):
         """ Declare a subclass member function as a microcode.
 
             A microcode is a function with names of input and names of output
             It always takes a frontier argument and a list of *args.
+
+            lout is the list of 'literal' outputs (do not participate in gradients)
 
             >>> @VM.microcode(fin=['x'], fout=['x'])
             >>> def mul(self, frontier, factor):
@@ -124,6 +131,7 @@ class VM(object):
 
             func.fout = fout
             func.fin = fin
+            func.lout = lout
             func.grad = gradient_decorator
             return func
         # no parameters
@@ -163,6 +171,7 @@ class VM(object):
         frontier = {}
         frontier.update(init)
         microcodes = self.microcodes
+        literals = []
 
         # must add the final fout into the tape
         # to properly update refcount of the input gradients
@@ -173,11 +182,13 @@ class VM(object):
                 impl = lambda self, frontier, *args: None
                 impl.fin = fout
                 impl.fout = []
+                impl.lout = []
             else:
                 impl = self._find_impl(op)
+
             if tape is not None:
                 record = {}
-                for var in impl.fin:
+                for var in impl.fin + literals:
                     record[var] = frontier[var]
                     if var in impl.fout:
                         # save a copy of the variables for in-place operations.
@@ -191,8 +202,12 @@ class VM(object):
                 # print(op, 'called with', VM.inspect(record))
                 tape.append(record)
 
+            literals = list(set(literals + impl.lout))
             impl(self, frontier, *args)
-
+        if tape is not None:
+            # record fout for future consistency checks
+            tape.append(fout)
+            tape.append(literals)
         d = {}
         for name in fout:
             d[name] = frontier[name]
@@ -220,38 +235,51 @@ class VM(object):
             >>> vm.gradient(['^x'], {'^x', numpy.ones(10)}, tape)
         """
 
-        microcodes = self.microcodes
-
-        # first item in tape is the inital value
-        tape = tape[1:]
-
+        sentinal = [(None, ())]
+        microcodes = self.microcodes + sentinal
+        fout = tape[-2]
+        literals = tape[-1]
+        tape = tape[:-2]
         refcount = self._refcount(tape)
+
+        #for i, n in refcount.items():
+        #    print ('0X%X' %i, n)
 
         # we never use the last record on the tape for the gradient computation
         # we only use the corresponding inputs.
         # but we do need to properly add the refcounts of elements in ginit,
         # such that they are properly cummulated; e.g. some final output variables
-        # are irrelevant (we assign VM.BOT to their gradients to speed up computing)
-
-        tape = tape[:-1]
+        # are irrelevant (we assign VM.Zero to their gradients to speed up computing)
 
         # holding the gradient of variables
         partial = {}
 
         frontier = {}
-        frontier.update(ginit)
         for (op, args), record in zip(microcodes[::-1], tape[::-1]):
+        #    print ('gradient', op, 'before', VM.inspect(record))
+
             d = {}
             d.update(record)
             d.update(frontier)
-            impl = self._find_impl(op)
 
-#            print ('gradient', op, 'before', VM.inspect(record))
+            if op is not None:
+                impl = self._find_impl(op)
+            else:
+                # sentinal -- initialization
+                # pump up d with the initial and fill in the missing
+                # gradients with VM.Zero
+
+                impl = lambda : None
+                impl.g = lambda self, d: None
+                # literals are skipped
+                impl.g.gin = ['^' + v for v in fout if v not in literals]
+                impl.g.gout = ['^' + v for v in fout if v not in literals]
+                d.update(ginit)
 
             for name in impl.g.gin:
-                # non existing inputs are implied to start with gradients of VM.BOT
+                # non existing inputs are implied to start with gradients of VM.Zero
                 if name not in d:
-                    d[name] = VM.BOT
+                    d[name] = VM.Zero
 
             impl.g(self, d, *args)
 
@@ -259,12 +287,12 @@ class VM(object):
             for name in impl.g.gout:
                 vname = name[1:]
                 uid = id(record[vname])
-#                print('partial gradient', name, d[name])
+                #print('partial gradient', name, refcount[uid], d[name])
                 pg = d[name]
-                if uid not in partial or partial[uid] is VM.BOT:
+                if uid not in partial or partial[uid] is VM.Zero:
                     # this is the first channel, create the gradient storage
                     partial[uid] = pg
-                elif pg is not VM.BOT:
+                elif pg is not VM.Zero:
                     # this is an additional channel. cummulate the gradient.
                     partial[uid][...] += pg
                 refcount[uid] = refcount[uid] - 1
@@ -273,7 +301,11 @@ class VM(object):
                     # update the frontier with the new gradients
                     # we no longer need to save it on partial since cummulation is done.
                     frontier[name] = partial.pop(uid)
-                    # print('finalized gradient', name, frontier[name])
+                #    print('finalized gradient', name, frontier[name])
+
+#        for i, v in partial.items():
+#            print('problem: remainging partial', '0X%X' % i, v, refcount[i])
+        assert len(partial) == 0
         r = {}
         for name in gout:
             r[name] = frontier[name]
