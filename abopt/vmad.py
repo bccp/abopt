@@ -1,6 +1,42 @@
 import numpy
+class BOTType(object):
+    # we essentially want the Bottom Type object here
+    # https://en.wikipedia.org/wiki/Bottom_type
+    # any computation path involves BOT shall give BOT
+
+    # is there a better way of doing this?
+
+    def __init__(self):
+        pass
+    def __neg__(self):
+        return self
+    def __mul__(self, a):
+        return self
+    def __rmul__(self, a):
+        return self
+    def __matmul__(self, a):
+        return self
+    def __rmatmul__(self, a):
+        return self
+    def __add__(self, a):
+        return self
+    def __radd__(self, a):
+        return self
+    def __div__(self, a):
+        return self
+    def __rdiv__(self, a):
+        return self
+    def __div__(self, a):
+        return self
+    def __rdiv__(self, a):
+        return self
+    def __sub__(self, a):
+        return self
+    def __rsub__(self, a):
+        return self
 
 class VM(object):
+    BOT = BOTType()
     @staticmethod
     def inspect(record):
         return str(list((k, "0x%0X" % id(v)) for k, v in record.items()))
@@ -141,7 +177,7 @@ class VM(object):
         # we only use the corresponding inputs.
         # but we do need to properly add the refcounts of elements in ginit,
         # such that they are properly cummulated; e.g. some final output variables
-        # are irrelevant (we assign 0 to their gradients to speed up computing)
+        # are irrelevant (we assign VM.BOT to their gradients to speed up computing)
 
         tape = tape[:-1]
 
@@ -159,9 +195,9 @@ class VM(object):
 #            print ('gradient', op, 'before', VM.inspect(record))
 
             for name in impl.g.gin:
-                # non existing inputs are implied to start with gradients of 0
+                # non existing inputs are implied to start with gradients of VM.BOT
                 if name not in d:
-                    d[name] = 0
+                    d[name] = VM.BOT
 
             impl.g(self, d, *args)
 
@@ -170,15 +206,13 @@ class VM(object):
                 vname = name[1:]
                 uid = id(record[vname])
 #                print('partial gradient', name, d[name])
-                if uid not in partial:
+                pg = d[name]
+                if uid not in partial or partial[uid] is VM.BOT:
                     # this is the first channel, create the gradient storage
-                    partial[uid] = d[name]
-                else:
+                    partial[uid] = pg
+                elif pg is not VM.BOT:
                     # this is an additional channel. cummulate the gradient.
-                    try:
-                        partial[uid][...] += d[name]
-                    except:
-                        partial[uid] += d[name]
+                    partial[uid][...] += pg
                 refcount[uid] = refcount[uid] - 1
 
                 if refcount[uid] == 0:
@@ -186,8 +220,8 @@ class VM(object):
                     # we no longer need to save it on partial since cummulation is done.
                     frontier[name] = partial.pop(uid)
                     # print('finalized gradient', name, frontier[name])
-        d = {}
+        r = {}
         for name in gout:
-            d[name] = frontier[name]
-        return d
+            r[name] = frontier[name]
+        return r
 
