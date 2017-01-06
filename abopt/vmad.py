@@ -1,102 +1,18 @@
 import numpy
 import warnings
-class ZeroType(object):
-    # this is similiar but not exactly the Bottom type.
-    # https://en.wikipedia.org/wiki/Bottom_type
-    #
-    # It is a special kind of Zero
-    # any multiplication computation path involves Zero shall give Zero
-    # any additive computation path involves Zero shall gives the other operand.
-
-    def __init__(self):
-        pass
-    def __array__(self):
-        return numpy.array(0)
-    def __neg__(self):
-        return self
-    def __pos__(self):
-        return self
-    def __abs__(self):
-        return self
-    def __invert__(self):
-        return self
-    def __complex__(self):
-        return self
-    def __int__(self):
-        return 0
-    def __float__(self):
-        return 0.0
-    def __round__(self):
-        return 0
-    def __mul__(self, a):
-        return self
-    def __rmul__(self, a):
-        return self
-    def __matmul__(self, a):
-        return self
-    def __rmatmul__(self, a):
-        return self
-    def __add__(self, a):
-        return a
-    def __radd__(self, a):
-        return a
-    def __sub__(self, a):
-        return -a
-    def __rsub__(self, a):
-        return a
-    def __mod__(self, a):
-        return self
-    def __rmod__(self, a):
-        return self
-    def __divmod__(self, a):
-        return self
-    def __rdivmod__(self, a):
-        raise ZeroDivisionError
-    def __div__(self, a):
-        return self
-    def __rdiv__(self, a):
-        raise ZeroDivisionError
-    def __truediv__(self, a):
-        return self
-    def __rtruediv__(self, a):
-        raise ZeroDivisionError
-    def __floordiv__(self, a):
-        return self
-    def __rfloordiv__(self, a):
-        raise ZeroDivisionError
-    def __pow__(self, a, modulo):
-        return self
-    def __rpow__(self, a):
-        # really should be a different error
-        # we never raise something to a gradient power
-        return ZeroDivisionError
-    def __and__(self, a):
-        return self
-    def __rand__(self, a):
-        return self
-    def __xor__(self, a):
-        return ~a
-    def __rxor__(self, a):
-        return ~a
-    def __or__(self, a):
-        return a
-    def __ror__(self, a):
-        return a
-    def __lshift__(self, a):
-        return self
-    def __rlshift__(self, a):
-        return self
-    def __rshift__(self, a):
-        return self
-    def __rrshift__(self, a):
-        return self
-    def __getitem__(self, key):
-        return self
-    def __reversed__(self, key):
-        return self
 
 class VM(object):
-    Zero = ZeroType()
+
+    def copy_var(self, a):
+        """ override for copying a variable """
+        try:
+            return a.copy()
+        except:
+            return 1.0 * a
+
+    def iadd_var(self, a, b):
+        """ override for inplace adding to a variable """
+        a[...] += b
 
     @staticmethod
     def inspect(record):
@@ -147,6 +63,7 @@ class VM(object):
 
     @property
     def microcodes(self):
+        # always append a sentinal for final connection to the output.
         r = self._microcodes + [(None, ())]
         return r
 
@@ -198,11 +115,7 @@ class VM(object):
                     if var in impl.fout:
                         # save a copy of the variables for in-place operations.
                         # the upstream is not necessary an array, so we 
-                        if hasattr(frontier[var], 'copy'):
-                            frontier[var] = frontier[var].copy()
-                        else:
-                            # if it can't clone itself, we ask for help from numpy.
-                            frontier[var] = numpy.array(frontier[var], copy=True)
+                        frontier[var] = self.copy_var(frontier[var])
 
                 # print(op, 'called with', VM.inspect(record))
                 tape.append(record)
@@ -263,7 +176,7 @@ class VM(object):
         partial = {}
 
         frontier = {}
-        for (impl, args), record in reversed(zip(self.microcodes, tape)):
+        for (impl, args), record in reversed(list(zip(self.microcodes, tape))):
         #    print ('gradient', impl.__name__, 'before', VM.inspect(record))
 
             d = {}
@@ -301,7 +214,7 @@ class VM(object):
                     partial[uid] = pg
                 elif pg is not VM.Zero:
                     # this is an additional channel. cummulate the gradient.
-                    partial[uid][...] += pg
+                    self.iadd_var(partial[uid], pg)
                 refcount[uid] = refcount[uid] - 1
 
                 if refcount[uid] == 0:
@@ -318,3 +231,63 @@ class VM(object):
             r[name] = frontier[name]
         return r
 
+#####################
+#
+# ZeroType.
+#
+# Zero * anything = Zero; Zero + anything = anything
+#
+# VM.Zero is used to suppress gradient computation
+# backtracing from VM.Zero shall always give VM.Zero
+# regardless of the microcode function; this may 
+# get more complicated if a microcode function
+# has multiple outputs -- e.g. if the backtrace gradient
+# of some are not VM.Zero.
+#
+# In case it occurs in a regular Python expression,
+# these operator overides ensure we can 
+# propagate VM.Zero properly.
+#
+# In other cases the microcode functions may need
+# to special case on variables that are VM.Zero.
+
+def ZeroType():
+    """ creates a special type of ZeroType; """
+    def self(self, *args): return self
+    def other(self, other): return other
+    def zde(self, a): raise ZeroDivisionError
+    def __sub__(self, a): return -a
+    def __xor__(self, a): return ~a
+    def __int__(self): return 0
+    def __float__(self): return 0.0
+    def __round__(self): return 0
+    def __array__(self): return numpy.array(0)
+
+    dict = {}
+    for name, value in locals().items():
+         if name.startswith("__"): dict[name] = value
+
+    for name in [
+        "neg", "pos", "abs", "invert", "complex",
+        "mul", "rmul", "matmul", "rmatmul", 
+        "mod", "divmod", "div", "truediv", "floordiv",
+        "pow",
+        "and", "rand", "lshift", "rlshift", "rshift", "rrshift",
+        "getitem", "reversed"]:
+        dict["__" + name + "__"] = self
+
+    for name in [
+        "rmod", "rdivmod", "rdiv", "rtruediv", "rfloordiv",
+        "rpow", "rsub", "rxor"]:
+        dict["__" + name + "__"] = zde
+    for name in [
+        "add", "radd", "or", "ror"]:
+        dict["__" + name + "__"] = other
+
+    return type("ZeroType", (object,), dict)
+
+ZeroType = ZeroType()
+Zero = ZeroType()
+
+# now add Zero to VM for easier access.
+VM.Zero = Zero
