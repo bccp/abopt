@@ -121,8 +121,8 @@ class VM(object):
                     if var in impl.fout:
                         # save a copy of the variables for in-place operations.
                         # the upstream is not necessary an array, so we 
-                        copy = self.copy_var(frontier[var])
-                        assert id(copy) != id(frontier[var])
+                        copy = self.copy_var(record[var])
+                        assert id(copy) != id(record[var])
                         frontier[var] = copy
 
                 # print(op, 'called with', VM.inspect(record))
@@ -148,6 +148,8 @@ class VM(object):
         d = {}
         for record in tape:
             for name, value in record.items():
+                # note that all variables on the record are alive,
+                # in this case id uniquely determines the values.
                 uid = id(value)
                 d[uid] = d.get(uid, 0) + 1
         return d
