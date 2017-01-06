@@ -95,7 +95,7 @@ class VM(object):
 
         frontier = {}
         frontier.update(init)
-        literals = []
+        literals = set()
 
         for impl, args in self.microcodes:
             if impl is None:
@@ -104,13 +104,19 @@ class VM(object):
                 # to properly update refcount of the input gradients
 
                 impl = lambda self, frontier: None
-                impl.fin = fout
+                # skip the literal from fin, even if it is requested from fout.
+                impl.fin = [v for v in fout if v not in literals]
                 impl.fout = []
                 impl.lout = []
 
             if tape is not None:
                 record = {}
-                for var in impl.fin + literals:
+                for name in impl.fin:
+                    if name in literals:
+                        raise RuntimeError(
+                        "An input of microcode `%s`, `%s` is marked as literal by previous steps. The machine is likely buggy." % (name, impl.__name__))
+
+                for var in set(impl.fin) | literals:
                     record[var] = frontier[var]
                     if var in impl.fout:
                         # save a copy of the variables for in-place operations.
@@ -120,7 +126,7 @@ class VM(object):
                 # print(op, 'called with', VM.inspect(record))
                 tape.append(record)
 
-            literals = list(set(literals + impl.lout))
+            literals |= set(impl.lout)
             impl(self, frontier, *args)
 
         if tape is not None:
@@ -166,13 +172,7 @@ class VM(object):
         #for i, n in refcount.items():
         #    print ('0X%X' %i, n)
 
-        # we never use the last record on the tape for the gradient computation
-        # we only use the corresponding inputs.
-        # but we do need to properly add the refcounts of elements in ginit,
-        # such that they are properly cummulated; e.g. some final output variables
-        # are irrelevant (we assign VM.Zero to their gradients to speed up computing)
-
-        # holding the gradient of variables
+        # holding the partially computed gradient of variables
         partial = {}
 
         frontier = {}
@@ -191,9 +191,13 @@ class VM(object):
                 impl = lambda : None
                 impl.g = lambda self, d: None
                 # literals are skipped from gradients, even if they are
-                # requested by fout.
+                # requested by fout; if we keep them here
+                # we will end up having warnings about unfinished partial
+                # gradients. -- this is the only path literals gets mixed.
+                # otherwise the some of the microcodes has inproperly decleared
+                # literals in fin.
                 impl.g.gin = ['^' + v for v in fout if v not in literals]
-                impl.g.gout = ['^' + v for v in fout if v not in literals]
+                impl.g.gout = impl.g.gin
                 d.update(ginit)
             
             for name in impl.g.gin:
@@ -280,6 +284,7 @@ def ZeroType():
         "rmod", "rdivmod", "rdiv", "rtruediv", "rfloordiv",
         "rpow", "rsub", "rxor"]:
         dict["__" + name + "__"] = zde
+
     for name in [
         "add", "radd", "or", "ror"]:
         dict["__" + name + "__"] = other
