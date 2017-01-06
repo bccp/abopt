@@ -70,7 +70,7 @@ def test_myvm():
         r = vm.compute(['x'], init, tape)
     #    ginit = {'^chi2' : 1.}
         ginit = {'^x' : 2 * r['x']}
-        r = vm.gradient(['^x', '^v'], ginit, init, tape)
+        r = vm.gradient(['^x', '^v'], ginit, tape)
         return r
 
     x0 = numpy.ones(1024) 

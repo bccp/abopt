@@ -6,7 +6,25 @@ class VM(object):
         return str(list((k, "0x%0X" % id(v)) for k, v in record.items()))
 
     @staticmethod
-    def microcode(fout=[], fin=[], gout=[]):
+    def microcode(fout=[], fin=[]):
+        """ Declare a subclass member function as a microcode.
+
+            A microcode is a function with names of input and names of output
+            It always takes a frontier argument and a list of *args.
+
+            >>> @VM.microcode(fin=['x'], fout=['x'])
+            >>> def mul(self, frontier, factor):
+            >>>    frontier['x'] = factor * frontier['x']
+
+            The backtrace gradient microcode shall be
+            >>> @mul.grad
+            >>> @VM.microcode
+            >>> def gmul(self, frontier, factor):
+            >>>    frontier['^x'] = factor * frontier['^x']
+
+            Notice that `^` denotes the backtraced gradient against a variable.
+            The same name can be both lvalue and rvalue
+        """
         def decorator(func):
             def gradient_decorator(func1):
                 func1.gout = ['^' + v for v in fin]
@@ -18,20 +36,40 @@ class VM(object):
             func.fin = fin
             func.grad = gradient_decorator
             return func
+        # no parameters
+        if hasattr(fout, "__call__"):
+            return decorator(fout)
         return decorator
 
     def __init__(self):
         self.microcodes = []
 
     def push(self, op, *args):
+        """ Append to the microcode list of the VM
+
+            Use this to build complicated microcode sequences.
+
+            >>> vm.push('mul', 3.0)
+            >>> vm.push('mul', 2.0)
+        """
         self.microcodes.append((op, args))
 
-    def find_impl(self, op):
+    def _find_impl(self, op):
         for name, impl in self.__class__.__dict__.items():
             if name == op: return impl
         raise AttributeError("code %s is not found" % op)
 
     def compute(self, fout, init, tape=None):
+        """
+            Run the list of microcodes with `init` dictionary as input
+            Record the results on `tape` (list), and return a dictionary
+            contains variables named in fout (list).
+            The items in the init shall support [...] or the '+' operator
+
+            >>> vm.compute(['x'], {'x': numpy.ones(10)})
+
+        """
+
         frontier = {}
         frontier.update(init)
         microcodes = self.microcodes
@@ -46,7 +84,7 @@ class VM(object):
                 impl.fin = fout
                 impl.fout = []
             else:
-                impl = self.find_impl(op)
+                impl = self._find_impl(op)
             if tape is not None:
                 record = {}
                 for var in impl.fin:
@@ -74,8 +112,22 @@ class VM(object):
                 d[uid] = d.get(uid, 0) + 1
         return d
 
-    def gradient(self, gout, ginit, init, tape):
+    def gradient(self, gout, ginit, tape):
+        """ Backtrace the gradient from ginit (dict).
+
+            tape is obtained from a prevoius call to `compute`.
+
+            Returns a dict contains the requested gradients in gout (list).
+
+            >>> tape = []
+            >>> vm.compute(['x'], {'x': numpy.ones(10)})
+            >>> vm.gradient(['^x'], {'^x', numpy.ones(10)}, tape)
+        """
+
         microcodes = self.microcodes
+
+        # first item in tape is the inital value
+        tape = tape[1:]
 
         refcount = self._refcount(tape)
 
@@ -91,13 +143,12 @@ class VM(object):
         partial = {}
 
         frontier = {}
-        frontier.update(init)
         frontier.update(ginit)
         for (op, args), record in zip(microcodes[::-1], tape[::-1]):
             d = {}
             d.update(record)
             d.update(frontier)
-            impl = self.find_impl(op)
+            impl = self._find_impl(op)
 
             print ('gradient', op, 'before', VM.inspect(record))
 
