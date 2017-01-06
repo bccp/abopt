@@ -121,7 +121,9 @@ class VM(object):
                     if var in impl.fout:
                         # save a copy of the variables for in-place operations.
                         # the upstream is not necessary an array, so we 
-                        frontier[var] = self.copy_var(frontier[var])
+                        copy = self.copy_var(frontier[var])
+                        assert id(copy) != id(frontier[var])
+                        frontier[var] = copy
 
                 # print(op, 'called with', VM.inspect(record))
                 tape.append(record)
