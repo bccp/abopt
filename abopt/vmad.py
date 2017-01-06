@@ -10,6 +10,20 @@ class BOTType(object):
         pass
     def __neg__(self):
         return self
+    def __pos__(self):
+        return self
+    def __abs__(self):
+        return self
+    def __invert__(self):
+        return self
+    def __complex__(self):
+        return self
+    def __int__(self):
+        return self
+    def __float__(self):
+        return self
+    def __round__(self):
+        return self
     def __mul__(self, a):
         return self
     def __rmul__(self, a):
@@ -22,17 +36,57 @@ class BOTType(object):
         return self
     def __radd__(self, a):
         return self
-    def __div__(self, a):
-        return self
-    def __rdiv__(self, a):
-        return self
-    def __div__(self, a):
-        return self
-    def __rdiv__(self, a):
-        return self
     def __sub__(self, a):
         return self
     def __rsub__(self, a):
+        return self
+    def __mod__(self, a):
+        return self
+    def __rmod__(self, a):
+        return self
+    def __divmod__(self, a):
+        return self
+    def __rdivmod__(self, a):
+        return self
+    def __div__(self, a):
+        return self
+    def __rdiv__(self, a):
+        return self
+    def __truediv__(self, a):
+        return self
+    def __rtruediv__(self, a):
+        return self
+    def __floordiv__(self, a):
+        return self
+    def __rfloordiv__(self, a):
+        return self
+    def __pow__(self, a, modulo):
+        return self
+    def __rpow__(self, a):
+        return self
+    def __and__(self, a):
+        return self
+    def __rand__(self, a):
+        return self
+    def __xor__(self, a):
+        return self
+    def __rxor__(self, a):
+        return self
+    def __or__(self, a):
+        return self
+    def __ror__(self, a):
+        return self
+    def __lshift__(self, a):
+        return self
+    def __rlshift__(self, a):
+        return self
+    def __rshift__(self, a):
+        return self
+    def __rrshift__(self, a):
+        return self
+    def __getitem__(self, key):
+        return self
+    def __reversed__(self, key):
         return self
 
 class VM(object):
