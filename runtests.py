@@ -137,10 +137,9 @@ def main(argv):
         print("*** Benchmarks should not be run against debug version; remove -g flag ***")
 
     if not args.no_build:
-        site_dir, site_dir2 = build_project(args)
+        site_dir = build_project(args)
         sys.path.insert(0, site_dir)
-        sys.path.insert(0, site_dir2)
-        os.environ['PYTHONPATH'] = site_dir + ':' + site_dir2
+        os.environ['PYTHONPATH'] = site_dir
 
     extra_argv = args.args[:]
     if extra_argv and extra_argv[0] == '--':
@@ -257,7 +256,8 @@ def main(argv):
             # fix up test path
             p = x.split(':')
             p[0] = os.path.relpath(os.path.abspath(p[0]),
-                                   test_dir)
+                                   ROOT_DIR)
+            p[0] = os.path.join(site_dir, p[0])
             return ':'.join(p)
 
         tests = [fix_test_path(x) for x in args.tests]
@@ -270,6 +270,7 @@ def main(argv):
             return Tester(tests[0]).test(*a, **kw)
     else:
         __import__(PROJECT_MODULE)
+        print("Using module", PROJECT_MODULE, " from", sys.modules[PROJECT_MODULE])
         test = sys.modules[PROJECT_MODULE].test
     # Run the tests under build/test
     try:
@@ -389,10 +390,13 @@ def build_project(args):
 
     from distutils.sysconfig import get_python_lib
     site_dir = get_python_lib(prefix=dst_dir, plat_specific=True)
-    site_dir2 = get_python_lib(prefix=dst_dir, plat_specific=False)
-
-    return site_dir, site_dir2
-
+    if not os.path.exists(os.path.join(site_dir, PROJECT_MODULE)):
+        # purelib?
+        site_dir = get_python_lib(prefix=dst_dir, plat_specific=False)
+    if not os.path.exists(os.path.join(site_dir, PROJECT_MODULE)):
+        print("Package %s not properly installed" % PROJECT_MODULE)
+        sys.exit(1)
+    return site_dir
 
 #
 # GCOV support
