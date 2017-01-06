@@ -1,4 +1,5 @@
 import numpy
+import warnings
 class ZeroType(object):
     # this is similiar but not exactly the Bottom type.
     # https://en.wikipedia.org/wiki/Bottom_type
@@ -96,6 +97,7 @@ class ZeroType(object):
 
 class VM(object):
     Zero = ZeroType()
+
     @staticmethod
     def inspect(record):
         return str(list((k, "0x%0X" % id(v)) for k, v in record.items()))
@@ -140,7 +142,12 @@ class VM(object):
         return decorator
 
     def __init__(self):
-        self.microcodes = []
+        self._microcodes = []
+
+    @property
+    def microcodes(self):
+        r = self._microcodes + [(None, ())]
+        return r
 
     def push(self, op, *args):
         """ Append to the microcode list of the VM
@@ -150,7 +157,8 @@ class VM(object):
             >>> vm.push('mul', 3.0)
             >>> vm.push('mul', 2.0)
         """
-        self.microcodes.append((op, args))
+        impl = self._find_impl(op)
+        self._microcodes.append((impl, args))
 
     def _find_impl(self, op):
         for name, impl in self.__class__.__dict__.items():
@@ -170,21 +178,18 @@ class VM(object):
 
         frontier = {}
         frontier.update(init)
-        microcodes = self.microcodes
         literals = []
 
-        # must add the final fout into the tape
-        # to properly update refcount of the input gradients
-        sentinal = [(None, ())]
+        for impl, args in self.microcodes:
+            if impl is None:
+                # sentinal,
+                # add the final fout into the tape
+                # to properly update refcount of the input gradients
 
-        for op, args in microcodes + sentinal:
-            if op is None:
-                impl = lambda self, frontier, *args: None
+                impl = lambda self, frontier: None
                 impl.fin = fout
                 impl.fout = []
                 impl.lout = []
-            else:
-                impl = self._find_impl(op)
 
             if tape is not None:
                 record = {}
@@ -204,14 +209,17 @@ class VM(object):
 
             literals = list(set(literals + impl.lout))
             impl(self, frontier, *args)
+
         if tape is not None:
-            # record fout for future consistency checks
+            # record fout literals
+            # for future gradient
             tape.append(fout)
             tape.append(literals)
-        d = {}
+
+        r = {}
         for name in fout:
-            d[name] = frontier[name]
-        return d
+            r[name] = frontier[name]
+        return r
 
     @staticmethod
     def _refcount(tape):
@@ -236,11 +244,11 @@ class VM(object):
         """
 
         sentinal = [(None, ())]
-        microcodes = self.microcodes + sentinal
+
         fout = tape[-2]
         literals = tape[-1]
-        tape = tape[:-2]
-        refcount = self._refcount(tape)
+
+        refcount = self._refcount(tape[:-2])
 
         #for i, n in refcount.items():
         #    print ('0X%X' %i, n)
@@ -255,27 +263,26 @@ class VM(object):
         partial = {}
 
         frontier = {}
-        for (op, args), record in zip(microcodes[::-1], tape[::-1]):
-        #    print ('gradient', op, 'before', VM.inspect(record))
+        for (impl, args), record in reversed(zip(self.microcodes, tape)):
+        #    print ('gradient', impl.__name__, 'before', VM.inspect(record))
 
             d = {}
             d.update(record)
             d.update(frontier)
 
-            if op is not None:
-                impl = self._find_impl(op)
-            else:
+            if impl is None:
                 # sentinal -- initialization
-                # pump up d with the initial and fill in the missing
-                # gradients with VM.Zero
+                # pump up d with the initial and be aware of missing items
+                # in ginit -- if they are in gin we later set them to zero.
 
                 impl = lambda : None
                 impl.g = lambda self, d: None
-                # literals are skipped
+                # literals are skipped from gradients, even if they are
+                # requested by fout.
                 impl.g.gin = ['^' + v for v in fout if v not in literals]
                 impl.g.gout = ['^' + v for v in fout if v not in literals]
                 d.update(ginit)
-
+            
             for name in impl.g.gin:
                 # non existing inputs are implied to start with gradients of VM.Zero
                 if name not in d:
@@ -303,9 +310,9 @@ class VM(object):
                     frontier[name] = partial.pop(uid)
                 #    print('finalized gradient', name, frontier[name])
 
-#        for i, v in partial.items():
-#            print('problem: remainging partial', '0X%X' % i, v, refcount[i])
-        assert len(partial) == 0
+        for i, v in partial.items():
+            warnings.warn('problem: remainging partial : 0X%X %d %s' % (i, refcount[i], str(v)), RuntimeWarning)
+
         r = {}
         for name in gout:
             r[name] = frontier[name]
