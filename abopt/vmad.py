@@ -63,6 +63,9 @@ class VM(object):
     def __init__(self):
         self._microcodes = []
 
+    def __len__(self):
+        return len(self._microcodes) + 1
+
     @property
     def microcodes(self):
         # always append a sentinal for final connection to the output.
@@ -84,7 +87,7 @@ class VM(object):
         else:
             raise AttributeError("code %s is not found" % op)
 
-    def compute(self, fout, init, tape=None):
+    def compute(self, fout, init, tape=None, monitor=None):
         """
             Run the list of microcodes with `init` dictionary as input
             Record the results on `tape` (list), and return a dictionary
@@ -99,7 +102,7 @@ class VM(object):
         frontier.update(init)
         literals = set()
 
-        for impl, args in self.microcodes:
+        for step, (impl, args) in enumerate(self.microcodes):
             if impl is None:
                 # sentinal,
                 # add the final fout into the tape
@@ -111,23 +114,28 @@ class VM(object):
                 impl.fout = []
                 impl.lout = []
 
-            if tape is not None:
-                record = {}
-                for name in impl.fin:
-                    if name in literals:
-                        raise RuntimeError(
-                        "An input of microcode `%s`, `%s` is marked as literal by previous steps. The machine is likely buggy." % (name, impl.__name__))
+            for name in impl.fin:
+                if name in literals:
+                    raise RuntimeError(
+                    "An input of microcode `%s`, `%s` is marked as literal by previous steps. The machine is likely buggy." % (name, impl.__name__))
 
-                for var in set(impl.fin) | literals:
-                    record[var] = frontier[var]
+            record = {}
+
+            for var in set(impl.fin) | literals:
+                record[var] = frontier[var]
+
+            if monitor:
+                monitor(step, len(self), impl, args, VM.inspect(record))
+
+            if tape is not None:
+                # replace the frontier with a copy -- such that the one on tape is preserved.
+                for var in record:
                     if var in impl.fout:
                         # save a copy of the variables for in-place operations.
-                        # the upstream is not necessary an array, so we 
                         copy = self.copy_var(record[var])
                         assert id(copy) != id(record[var])
                         frontier[var] = copy
 
-                # print(op, 'called with', VM.inspect(record))
                 tape.append(record)
 
             literals |= set(impl.lout)
@@ -156,7 +164,7 @@ class VM(object):
                 d[uid] = d.get(uid, 0) + 1
         return d
 
-    def gradient(self, gout, ginit, tape):
+    def gradient(self, gout, ginit, tape, monitor=None):
         """ Backtrace the gradient from ginit (dict).
 
             tape is obtained from a prevoius call to `compute`.
@@ -176,15 +184,13 @@ class VM(object):
         refcount = self._refcount(tape[:-2])
 
         #for i, n in refcount.items():
-        #    print ('0X%X' %i, n)
+            #print ('0X%X' %i, n)
 
         # holding the partially computed gradient of variables
         partial = {}
 
         frontier = {}
         for (impl, args), record in reversed(list(zip(self.microcodes, tape))):
-        #    print ('gradient', impl.__name__, 'before', VM.inspect(record))
-
             d = {}
             d.update(record)
             d.update(frontier)
@@ -205,6 +211,10 @@ class VM(object):
                 impl.g.gin = ['^' + v for v in fout if v not in literals]
                 impl.g.gout = impl.g.gin
                 d.update(ginit)
+
+            if monitor:
+                monitor('gradient', impl, 'before', VM.inspect(record))
+
             
             for name in impl.g.gin:
                 # non existing inputs are implied to start with gradients of VM.Zero
@@ -217,7 +227,8 @@ class VM(object):
             for name in impl.g.gout:
                 vname = name[1:]
                 uid = id(record[vname])
-                #print('partial gradient', name, refcount[uid], d[name])
+                if monitor:
+                    monitor('partial gradient', name, refcount[uid], d[name])
                 pg = d[name]
                 if uid not in partial or partial[uid] is VM.Zero:
                     # this is the first channel, create the gradient storage
@@ -231,7 +242,8 @@ class VM(object):
                     # update the frontier with the new gradients
                     # we no longer need to save it on partial since cummulation is done.
                     frontier[name] = partial.pop(uid)
-                #    print('finalized gradient', name, frontier[name])
+                    if monitor:
+                        monitor('finalized gradient', name, frontier[name])
 
         for i, v in partial.items():
             warnings.warn('problem: remainging partial : 0X%X %d %s' % (i, refcount[i], str(v)), RuntimeWarning)
