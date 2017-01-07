@@ -33,7 +33,6 @@ class VM(object):
 
             The backtrace gradient microcode shall be
             >>> @mul.grad
-            >>> @VM.microcode
             >>> def gmul(self, frontier, factor):
             >>>    frontier['^x'] = factor * frontier['^x']
 
@@ -44,6 +43,9 @@ class VM(object):
             def gradient_decorator(func1):
                 func1.gout = ['^' + v for v in fin]
                 func1.gin  = ['^' + v for v in fout]
+                func1.fin = func.fin
+                func1.fout = []
+                func1.lout = []
                 func.g = func1
                 return func1
 

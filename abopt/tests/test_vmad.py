@@ -8,8 +8,8 @@ def test_booster():
         @VM.microcode(fin=['x'], fout=['x'])
         def boost(self, frontier, factor):
             frontier['x'] = frontier['x'] * factor
+
         @boost.grad
-        @VM.microcode
         def gboost(self, frontier, factor):
             frontier['^x'] = frontier['^x'] * factor
 
@@ -39,7 +39,6 @@ def test_integrator():
             frontier['v'] = frontier['v'] + frontier['a'] * 0.01
 
         @kick.grad
-        @VM.microcode(fin=[])
         def gkick(self, frontier):
             frontier['^v'] = frontier['^v']
             frontier['^a'] = 0.01 * frontier['^v']
@@ -49,7 +48,6 @@ def test_integrator():
             frontier['x'] = frontier['x'] + frontier['v'] * 0.01
 
         @drift.grad
-        @VM.microcode(fin=[])
         def gdrift(self, frontier):
             frontier['^x'] = frontier['^x']
             frontier['^v'] = 0.01 * frontier['^x']
@@ -60,7 +58,6 @@ def test_integrator():
             frontier['a'] = - frontier['x']
 
         @force.grad
-        @VM.microcode(fin=[])
         def gforce(self, frontier):
             frontier['^x'] = - frontier['^a']
 
@@ -69,7 +66,6 @@ def test_integrator():
             frontier['chi2'] = (frontier['x'] ** 2).sum()
 
         @reduce.grad
-        @VM.microcode(fin=['x'])
         def greduce(self, frontier):
             frontier['^x'] = (frontier['x'] * 2)
 
