@@ -3,8 +3,9 @@ import numpy
 import warnings
 import functools
 
+class MicroCode(object): pass
 def microcode(ain, aout):
-    class decorator(object):
+    class decorator(MicroCode):
         def __init__(self, function):
             self.function = function
             self.instance = None
@@ -29,14 +30,17 @@ def microcode(ain, aout):
             return self
 
         def __get__(self, instance, owner):
+            """ As a class member, return the microcode,
+                As an instance member of VM, returns the function as a method,
+                As an instance member of Code, returns a method to add to the code.
+            """
             if instance is not None:
-                if not isinstance(instance, Code):
-                    raise TypeError("Use the result of VM.code() to build code.")
-
-                @functools.wraps(self.function)
-                def method(**kwargs):
-                    instance.append(self, kwargs)
-                return method
+                if isinstance(instance, Code):
+                    @functools.wraps(self.function)
+                    def method(**kwargs):
+                        instance.append(self, kwargs)
+                    return method
+                return self.function.__get__(instance, owner)
             return self
 
         def __repr__(self):
@@ -66,7 +70,7 @@ def microcode(ain, aout):
                 if an in self.aout and an in self.ain:
                     vn = kwargs.get(an, an)
                     if vn in din:
-                        data = vm.copy_var(data)
+                        data = vm.copy(data)
                 vin.append(data)
 
             out = self.function(vm, *vin)
@@ -177,7 +181,7 @@ class Code(list):
         started = False
         for i, (microcode, kwargs) in enumerate(self.microcodes):
             try:
-                r = microcode.invoke(self, frontier, kwargs, tape, monitor)
+                r = microcode.invoke(self.vm, frontier, kwargs, tape, monitor)
             except Exception as e:
                 print("Failure in running `%s`" % microcode)
                 raise
@@ -192,11 +196,71 @@ class Code(list):
             r = r[0]
         return r
 
+
+    def _gc(self, frontier, future, vout, monitor=None):
+        """ remove variables that are never used again """
+        used = []
+        used.extend(vout)
+        for code, kwargs in future:
+            for an in code.ain:
+                vn = kwargs.get(an, an)
+                used.append(vn)
+
+        used = set(used)
+        for vn in list(frontier.keys()):
+            if vn not in used:
+                if monitor:
+                    monitor("freeing", vn)
+                frontier.pop(vn)
+
+    def _terminate(self, future, vout):
+        """ No variables in vout are mentioned in the future, we can terminate. """
+        used = []
+        for code, kwargs in future:
+            for an in code.aout:
+                vn = kwargs.get(an, an)
+                used.append(vn)
+
+        used = set(used)
+        for vn in vout:
+            if vn in used: return False
+        return True
+
+
+
+class VM(object):
+    @microcode(ain=['a'], aout=['b'])
+    def copy(self, a):
+        return 1.0 * a
+
+    @copy.grad
+    def gcopy(self, _b):
+        return _b
+
+    @microcode(ain=['a', 'b'], aout=['c'])
+    def add(self, a, b):
+        if a is VM.Zero: return b
+        if b is VM.Zero: return a
+        return a + b
+
+    @add.grad
+    def gadd(self, _c, _a, _b):
+        return _c, _c
+
+
+    def code(self):
+        d = {}
+        for name, method in type(self).__dict__.items():
+            if isinstance(method, MicroCode):
+                d[name] = method
+        MyCode = type("Code%s" % (type(self).__name__), (Code, ), d)
+        return MyCode(self)
+
     def gradient(self, tape, add):
         """ set up the VM as the gradient of the objective VM.
             with tape and a microcode for adding partial gradients.
         """
-        newinst = self.vm.code()
+        newinst = self.code()
 
         occurances = {}
 
@@ -254,48 +318,6 @@ class Code(list):
 
         return newinst
 
-    def _gc(self, frontier, future, vout, monitor=None):
-        """ remove variables that are never used again """
-        used = []
-        used.extend(vout)
-        for code, kwargs in future:
-            for an in code.ain:
-                vn = kwargs.get(an, an)
-                used.append(vn)
-
-        used = set(used)
-        for vn in list(frontier.keys()):
-            if vn not in used:
-                if monitor:
-                    monitor("freeing", vn)
-                frontier.pop(vn)
-
-    def _terminate(self, future, vout):
-        """ No variables in vout are mentioned in the future, we can terminate. """
-        used = []
-        for code, kwargs in future:
-            for an in code.aout:
-                vn = kwargs.get(an, an)
-                used.append(vn)
-
-        used = set(used)
-        for vn in vout:
-            if vn in used: return False
-        return True
-
-
-
-class VM(object):
-    def copy_var(self, a):
-        return 1.0 * a
-
-    def code(self):
-        class MyCode(Code, type(self)):
-            def __init__(self, vm):
-                Code.__init__(self, vm)
-
-        return MyCode(self)
-
     @microcode(ain=['x'], aout=['y'])
     def func(self, x, factor):
         """ this is a function """
@@ -306,14 +328,6 @@ class VM(object):
     def gfunc(self, x, factor, _y):
         _x = factor * _y
         return _x
-
-    @microcode(ain=['a', 'b'], aout=['c'])
-    def add(self, a, b):
-        return a + b
-
-    @add.grad
-    def gadd(self, _c, _a, _b):
-        return _c, _c
 
 #####################
 #

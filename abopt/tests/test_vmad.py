@@ -17,8 +17,8 @@ def test_booster():
         def add(self, x, y):
             return x + y
 
-    booster = Booster()
-    code = booster.code()
+    vm = Booster()
+    code = vm.code()
     code.boost(x='i', y='r1', factor=1.0)
     code.boost(x='r1', y='r2', factor=2.0)
     code.boost(x='r2', y='y', factor=3.0)
@@ -28,7 +28,7 @@ def test_booster():
     y = code.compute('y', {'i' : numpy.ones(1)}, tape)
     assert_array_equal(y, 6.0)
     print(tape)
-    gcode = code.gradient(tape, add=Booster.add)
+    gcode = vm.gradient(tape, add=Booster.add)
     print(gcode)
     _i = gcode.compute('_i', {'_y' : numpy.ones(1)}, monitor=print)
     assert_array_equal(_i, 6.0)
@@ -37,7 +37,7 @@ def test_booster():
     y = code.compute('y', {'i' : 1}, tape)
     assert_array_equal(y, 6.0)
 
-    gcode = code.gradient(tape, add=Booster.add)
+    gcode = vm.gradient(tape, add=Booster.add)
     _i = gcode.compute('_i', {'_y' : 1})
     assert_array_equal(_i, 6.0)
 
@@ -104,7 +104,7 @@ def test_integrator():
         tape = Tape()
         x = code.compute('x', init, tape, monitor=print)
         print(tape)
-        gcode = code.gradient(tape, add=Integrator.add)
+        gcode = vm.gradient(tape, add=Integrator.add)
         print(gcode)
     #    ginit = {'^chi2' : 1.}
         ginit = {'_x' : 2 * x, '_a' : VM.Zero}
