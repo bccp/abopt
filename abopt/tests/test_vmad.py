@@ -5,7 +5,7 @@ import numpy
 
 def test_booster():
     class Booster(VM):
-        @VM.microcode(ain=['x'], aout=['y'], lin=['q'])
+        @VM.microcode(ain=['x'], aout=['y'], literals=['q'])
         def boost(self, x, q, factor):
             return x * factor
 
