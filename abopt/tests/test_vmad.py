@@ -5,104 +5,114 @@ import numpy
 
 def test_booster():
     class Booster(VM):
-        @VM.microcode(fin=['x'], fout=['x'])
-        def boost(self, frontier, factor):
-            frontier['x'] = frontier['x'] * factor
+        @VM.microcode(ain=['x'], aout=['y'], literals=['q'])
+        def boost(self, x, q, factor):
+            return x * factor
 
         @boost.grad
-        def gboost(self, frontier, factor):
-            frontier['^x'] = frontier['^x'] * factor
+        def gboost(self, _y, factor):
+            return _y * factor
 
-    booster = Booster()
-    booster.push('boost', 1.0)
-    booster.push('boost', 2.0)
-    booster.push('boost', 3.0)
+    vm = Booster()
+    code = vm.code()
+    code.boost(x='i', y='r1', factor=1.0)
+    code.boost(x='r1', y='r2', factor=2.0)
+    code.boost(x='r2', y='y', factor=3.0)
+    print(code)
 
-    tape = []
-    r = booster.compute(['x'], {'x' : numpy.ones(1)}, tape)
-    assert_array_equal(r['x'], 6.0)
+    tape = vm.tape()
+    y = code.compute('y', {'i' : numpy.ones(1), 'q' : 1234}, tape)
+    assert_array_equal(y, 6.0)
+    print(tape)
+    gcode = vm.gradient(tape, add=Booster.add)
+    print(gcode)
+    _i = gcode.compute('_i', {'_y' : numpy.ones(1)}, monitor=print)
+    assert_array_equal(_i, 6.0)
 
-    r = booster.gradient(['^x'], {'^x' : numpy.ones(1)}, tape)
-    assert_array_equal(r['^x'], 6.0)
+    tape = vm.tape()
+    y = code.compute('y', {'i' : 1, 'q' : 1234}, tape)
+    assert_array_equal(y, 6.0)
 
-    tape = []
-    r = booster.compute(['x'], {'x' : 1}, tape)
-    assert_array_equal(r['x'], 6.0)
-
-    r = booster.gradient(['^x'], {'^x' : 1}, tape)
-    assert_array_equal(r['^x'], 6.0)
+    gcode = vm.gradient(tape, add=Booster.add)
+    _i = gcode.compute('_i', {'_y' : 1})
+    assert_array_equal(_i, 6.0)
 
 def test_integrator():
     class Integrator(VM):
-        @VM.microcode(fin=['v', 'a'], fout=['v'])
-        def kick(self, frontier):
-            frontier['v'] = frontier['v'] + frontier['a'] * 0.01
-
+        @VM.microcode(ain=['v', 'a'], aout=['v'])
+        def kick(self, v, a):
+            v[...] += a * 0.01
+            return v
         @kick.grad
-        def gkick(self, frontier):
-            frontier['^v'] = frontier['^v']
-            frontier['^a'] = 0.01 * frontier['^v']
+        def gkick(self, v, a, _v):
+            _a = 0.01 * _v
+            return _v, _a
 
-        @VM.microcode(fin=['x', 'v'], fout=['x'])
-        def drift(self, frontier):
-            frontier['x'] = frontier['x'] + frontier['v'] * 0.01
+        @VM.microcode(ain=['x', 'v'], aout=['x'])
+        def drift(self, x, v):
+            x[...] += v * 0.01
+            return x
 
         @drift.grad
-        def gdrift(self, frontier):
-            frontier['^x'] = frontier['^x']
-            frontier['^v'] = 0.01 * frontier['^x']
+        def gdrift(self, x, v, _x):
+            _v = 0.01 * _x
+            return _x, _v
 
-
-        @VM.microcode(fin=['x'], fout=['a'])
-        def force(self, frontier):
-            frontier['a'] = - frontier['x']
+        @VM.microcode(ain=['x'], aout=['a'])
+        def force(self, x):
+            return -x
 
         @force.grad
-        def gforce(self, frontier):
-            frontier['^x'] = - frontier['^a']
+        def gforce(self, x, _a):
+            _x = - _a
+            return _x
 
-        @VM.microcode(fin=['x'], fout=['chi2'])
-        def reduce(self, frontier):
-            frontier['chi2'] = (frontier['x'] ** 2).sum()
+        @VM.microcode(ain=['x'], aout=['chi2'])
+        def reduce(self, x):
+            return (x ** 2).sum()
 
         @reduce.grad
-        def greduce(self, frontier):
-            frontier['^x'] = (frontier['x'] * 2)
+        def greduce(self, x, _chi2):
+            return 2 * x * _chi2
 
     vm = Integrator()
-    tape = []
-
-    vm.push('force')
+    tape = vm.tape()
+    code = vm.code()
+    code.force()
     for i in range(2):
-        vm.push('kick')
-        vm.push('drift')
-        vm.push('drift')
-        vm.push('force')
-        vm.push('kick')
+        code.kick()
+        code.drift()
+        code.drift()
+        code.force()
+        code.kick()
+
     #vm.push('reduce')
 
     def objective(x, v):
         init = {'x' : x, 'v' : v}
-        tape = []
-        #r = vm.compute(['chi2'], init, tape)
-        r = vm.compute(['x'], init, tape)
-        r['chi2'] = (r['x'] ** 2).sum()
-        return r['chi2']
+        tape = vm.tape()
+        x = code.compute('x', init, tape)
+        chi2 = (x ** 2).sum()
+        return chi2
 
     def gradient(x, v):
         init = {'x' : x, 'v' : v}
-        tape = []
-        r = vm.compute(['x'], init, tape)
+        tape = vm.tape()
+        x = code.compute('x', init, tape, monitor=print)
+        print(tape)
+        gcode = vm.gradient(tape, add=Integrator.add)
+        print(gcode)
     #    ginit = {'^chi2' : 1.}
-        ginit = {'^x' : 2 * r['x']}
-        r = vm.gradient(['^x', '^v'], ginit, tape)
+        ginit = {'_x' : 2 * x, '_a' : VM.Zero}
+        r = gcode.compute(['_x', '_v'], ginit, monitor=print)
         return r
 
     x0 = numpy.ones(1024) 
     v0 = numpy.zeros_like(x0)
     eps = numpy.zeros_like(x0)
 
-    g = gradient(x0, v0)
+    g_x, g_v = gradient(x0, v0)
+
     eps[0] = 1e-7
     chi0 = objective(x0 - eps, v0)
     chi1 = objective(x0 + eps, v0)
@@ -111,5 +121,5 @@ def test_integrator():
     chi1 = objective(x0, v0 + eps)
     numgv = (chi1 - chi0) / (2 * eps[0])
     assert_allclose(
-        [g['^x'][0], g['^v'][0]], 
+        [g_x[0], g_v[0]],
         [numgx, numgv], rtol=1e-3)
