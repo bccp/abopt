@@ -166,14 +166,14 @@ class LBFGS(Optimizer):
             q = mycopy(g)
             thism = min(m, step)
 
-            for i in range(m):
+            for i in range(thism):
                 dotproduct = self.dot(s[i], q)
                 alpha[i] = rho[i] * dotproduct
                 q = self.addmul(q, y[i], -alpha[i])
 
             z = self.mul(q, H0k)
 
-            for i in range(m - 1, -1, -1):
+            for i in range(thism - 1, -1, -1):
                 dotproduct = self.dot(y[i], z)
                 beta = rho[i] * dotproduct
                 z = self.addmul(z, s[i], alpha[i] - beta)
@@ -246,8 +246,11 @@ class LBFGS(Optimizer):
             ys = self.dot(s[0], y[0])
             yy = self.dot(y[0], y[0])
 
-            if ys == 0.0 or yy == 0.0:
-                converged_state = "NO: LBFGS didn't move for some reason, QUITTING"
+            if ys == 0.0:
+                converged_state = "NO: LBFGS didn't move for some reason ys is 0, QUITTING"
+                break
+            if yy == 0.0:
+                converged_state = "NO: LBFGS didn't move for some reason yy is 0, QUITTING"
                 break
 
             rho.insert(0, 1.0 / ys)
