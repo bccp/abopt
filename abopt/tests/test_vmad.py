@@ -1,5 +1,5 @@
 from __future__ import print_function
-from abopt.vmad2 import VM, Tape
+from abopt.vmad import VM
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
 import numpy
 
@@ -20,7 +20,7 @@ def test_booster():
     code.boost(x='r2', y='y', factor=3.0)
     print(code)
 
-    tape = Tape()
+    tape = vm.tape()
     y = code.compute('y', {'i' : numpy.ones(1), 'q' : 1234}, tape)
     assert_array_equal(y, 6.0)
     print(tape)
@@ -29,7 +29,7 @@ def test_booster():
     _i = gcode.compute('_i', {'_y' : numpy.ones(1)}, monitor=print)
     assert_array_equal(_i, 6.0)
 
-    tape = Tape()
+    tape = vm.tape()
     y = code.compute('y', {'i' : 1, 'q' : 1234}, tape)
     assert_array_equal(y, 6.0)
 
@@ -76,7 +76,7 @@ def test_integrator():
             return 2 * x * _chi2
 
     vm = Integrator()
-    tape = Tape()
+    tape = vm.tape()
     code = vm.code()
     code.force()
     for i in range(2):
@@ -90,14 +90,14 @@ def test_integrator():
 
     def objective(x, v):
         init = {'x' : x, 'v' : v}
-        tape = Tape()
+        tape = vm.tape()
         x = code.compute('x', init, tape)
         chi2 = (x ** 2).sum()
         return chi2
 
     def gradient(x, v):
         init = {'x' : x, 'v' : v}
-        tape = Tape()
+        tape = vm.tape()
         x = code.compute('x', init, tape, monitor=print)
         print(tape)
         gcode = vm.gradient(tape, add=Integrator.add)

@@ -1,257 +1,390 @@
+from __future__ import print_function
 import numpy
 import warnings
+import functools
 
-class VM(object):
+class MicroCode(object):
+    """ An object that represents a microcode.
 
-    def copy_var(self, a):
-        """ override for copying a variable """
-        try:
-            return a.copy()
-        except:
-            return 1.0 * a
+        Mostly a python function with some additional introspection, marking
+        the input and output variables.
+    """
+    def __init__(self, function, ain, aout, literals):
+        self.function = function
+        self.ain = ain
+        self.aout = aout
+        self.literals = literals
+        self.argnames = function.__code__.co_varnames[1:function.__code__.co_argcount]
+        for an in ain:
+            if not an in self.argnames:
+                raise ValueError(
+    "argument `%s` of ain in microcode decorator is not declared by function `%s`"
+                       % (an, str(self.function))
+                )
+        self.gradient = NotImplemented
+        functools.update_wrapper(self, function)
 
-    def iadd_var(self, a, b):
-        """ override for inplace adding to a variable """
-        a[...] += b
+    def grad(self, function):
+        gout = ['_' + a for a in self.ain]
+        gin  = ['_' + a for a in self.aout]
 
-    @staticmethod
-    def inspect(record):
-        return str(list((k, "0x%0X" % id(v)) for k, v in record.items()))
+        self.gradient = microcode(gin, gout)(function)
+        # allow the gradient with the same name as the original function.
+        return self
 
-    @staticmethod
-    def microcode(fout=[], fin=[], lout=[]):
-        """ Declare a subclass member function as a microcode.
-
-            A microcode is a function with names of input and names of output
-            It always takes a frontier argument and a list of *args.
-
-            lout is the list of 'literal' outputs (do not participate in gradients)
-
-            >>> @VM.microcode(fin=['x'], fout=['x'])
-            >>> def mul(self, frontier, factor):
-            >>>    frontier['x'] = factor * frontier['x']
-
-            The backtrace gradient microcode shall be
-            >>> @mul.grad
-            >>> def gmul(self, frontier, factor):
-            >>>    frontier['^x'] = factor * frontier['^x']
-
-            Notice that `^` denotes the backtraced gradient against a variable.
-            The same name can be both lvalue and rvalue
+    def __get__(self, instance, owner):
+        """ As a class member, return the microcode,
+            As an instance member of VM, returns the function as a method,
+            As an instance member of Code, returns a method to add to the code.
         """
-        def decorator(func):
-            def gradient_decorator(func1):
-                func1.gout = ['^' + v for v in fin]
-                func1.gin  = ['^' + v for v in fout]
-                func1.fin = func.fin
-                func1.fout = []
-                func1.lout = []
-                func.g = func1
-                return func1
+        if instance is not None:
+            if isinstance(instance, Code):
+                @functools.wraps(self.function)
+                def method(**kwargs):
+                    instance.append(self, kwargs)
+                return method
+            return self.function.__get__(instance, owner)
+        return self
 
-            func.fout = fout
-            func.fin = fin
-            func.lout = lout
-            func.grad = gradient_decorator
-            return func
-        # no parameters, just a plain decorator
-        if hasattr(fout, "__call__"):
-            func = fout
-            return decorator(func)
-        return decorator
+    def __repr__(self):
+        return self.function.__name__
 
-    def __init__(self):
-        self._microcodes = []
+    def invoke(self, vm, frontier, kwargs, tape, monitor=None):
+        din = {}
 
-    def __len__(self):
-        return len(self._microcodes) + 1
-
-    @property
-    def microcodes(self):
-        # always append a sentinal for final connection to the output.
-        r = self._microcodes + [(None, ())]
-        return r
-
-    def push(self, op, v, args):
-        """ Append to the microcode list of the VM
-
-            Use this to build complicated microcode sequences.
-
-            >>> vm.push('mul', 3.0)
-            >>> vm.push('mul', 2.0)
-        """
-        for name, impl in self.__class__.__dict__.items():
-            if name == op:
-                self._microcodes.append((impl, args))
-                break 
-        else:
-            raise AttributeError("code %s is not found" % op)
-
-    def compute(self, fout, init, tape=None, monitor=None):
-        """
-            Run the list of microcodes with `init` dictionary as input
-            Record the results on `tape` (list), and return a dictionary
-            contains variables named in fout (list).
-            The items in the init shall support [...] or the '+' operator
-
-            >>> vm.compute(['x'], {'x': numpy.ones(10)})
-
-        """
-
-        frontier = {}
-        frontier.update(init)
-        literals = set()
-
-        for step, (impl, args) in enumerate(self.microcodes):
-            if impl is None:
-                # sentinal,
-                # add the final fout into the tape
-                # to properly update refcount of the input gradients
-
-                impl = lambda self, frontier: None
-                # skip the literal from fin, even if it is requested from fout.
-                impl.fin = [v for v in fout if v not in literals]
-                impl.fout = []
-                impl.lout = []
-
-            for name in impl.fin:
-                if name in literals:
-                    raise RuntimeError(
-                    "An input of microcode `%s`, `%s` is marked as literal by previous steps. The machine is likely buggy." % (name, impl.__name__))
-
-            record = {}
-
-            for var in set(impl.fin) | literals:
-                record[var] = frontier[var]
-
-            if monitor:
-                monitor(step, len(self), impl, args, VM.inspect(record))
-
-            if tape is not None:
-                # replace the frontier with a copy -- such that the one on tape is preserved.
-                for var in record:
-                    if var in impl.fout:
-                        # save a copy of the variables for in-place operations.
-                        copy = self.copy_var(record[var])
-                        assert id(copy) != id(record[var])
-                        frontier[var] = copy
-
-                tape.append(record)
-
-            literals |= set(impl.lout)
-            impl(self, frontier, *args)
+        # copy in all arguments
+        for an in self.argnames:
+            if an in self.ain + self.literals:
+                # replace argument with variable name
+                # then fetch it from the frontier.
+                vn = kwargs.get(an, an)
+                if vn not in frontier:
+                    raise ValueError("Argument `%s' of `%s` resolves to an undefined varabile `%s'" % (an, self, vn))
+                din[an] = frontier[vn]
+            else:
+                # use the kwargs -- raise error if not found!
+                if an not in kwargs:
+                    raise ValueError("Argument `%s' of `%s' could not be bound to a keyword argument" % (an, self))
+                din[an] = kwargs.get(an)
 
         if tape is not None:
-            # record fout literals
-            # for future gradient
-            tape.append(fout)
-            tape.append(literals)
+            tape.append(self, kwargs, din)
+
+        vin = []
+        for an in self.argnames:
+            data = din[an]
+            if an in self.aout and an in self.ain:
+                vn = kwargs.get(an, an)
+                if vn in din:
+                    data = vm.copy(data)
+            vin.append(data)
+
+        out = self.function(vm, *vin)
+
+        # zip the output arguments
+        if len(self.aout) == 1: out = [out]
+        dout = {}
+        for an, value in zip(self.aout, out):
+            dout[an] = value
 
         r = {}
-        for name in fout:
-            r[name] = frontier[name]
+        for an in self.aout:
+            vn = kwargs.get(an, an)
+            r[vn] = dout[an]
+
+        if monitor:
+            monitor(self, din, dout, frontier, r)
         return r
 
-    @staticmethod
-    def _refcount(tape):
-        """ count number of references to any variables on a tape """
-        d = {}
-        for record in tape:
-            for name, value in record.items():
-                # note that all variables on the record are alive,
-                # in this case id uniquely determines the values.
-                uid = id(value)
-                d[uid] = d.get(uid, 0) + 1
-        return d
+def microcode(ain, aout, literals=[]):
+    """ Declares a VM member function as a 'microcode'.
+        microcode is the building block for Code objects,
+        which can be computed and differentiated.
 
-    def gradient(self, gout, ginit, tape, monitor=None):
-        """ Backtrace the gradient from ginit (dict).
+        See MicroCode. 
+    """
+    def decorator(func):
+        return MicroCode(func, ain, aout, literals)
+    return decorator
 
-            tape is obtained from a prevoius call to `compute`.
+class VM(object):
+    """ A virtual machine that interprets and runs Code objects
+        consisting of microcodes.
 
-            Returns a dict contains the requested gradients in gout (list).
+        Subclass VM to add more microcodes.
+        Override `copy` and `add` to support different types of
+        variables.
 
-            >>> tape = []
-            >>> vm.compute(['x'], {'x': numpy.ones(10)})
-            >>> vm.gradient(['^x'], {'^x', numpy.ones(10)}, tape)
+        Convention for gradient is to prepend `_`, e.g. `_x` is the gradient
+        backtraced to `x`.
+
+        The Each microcode carries a list of input and output arguments (
+        `ain` and `aout`) that can be assigned as variable names (string).
+
+        The rest of arguments in the function signature
+        are external parameters who do not go into gradients.
+
+        Example
+        -------
+
+        >>> vm = VM()
+        >>> code = vm.code()
+        >>> code.add(a='x', b='x', c='y')
+        >>> code.compute('y', {'x' : 10})
+
+    """
+
+    @microcode(ain=['a'], aout=['b'])
+    def copy(self, a): return 1.0 * a
+
+    @copy.grad
+    def gcopy(self, _b): return _b
+
+    @microcode(ain=['a', 'b'], aout=['c'])
+    def add(self, a, b):
+        if a is VM.Zero: return b
+        if b is VM.Zero: return a
+        return a + b
+
+    @add.grad
+    def gadd(self, _c, _a, _b): return _c, _c
+
+    def tape(self):
+        return Tape()
+
+    def code(self):
+        """ Creates a Code object for this VM.
+
+            Build model with this.
         """
+        d = {}
+        for name, method in type(self).__dict__.items():
+            if isinstance(method, MicroCode):
+                d[name] = method
+        MyCode = type("Code%s" % (type(self).__name__), (Code, ), d)
+        return MyCode(self)
 
-        sentinal = [(None, ())]
+    def gradient(self, tape, add=None):
+        """ Create a code object that backtraces the gradient of a previously
+            recorded execution in `tape`.
 
-        fout = tape[-2]
-        literals = tape[-1]
+            The `add` microcode (None means `type(self).add`) reduces partial
+            derivatives.
 
-        refcount = self._refcount(tape[:-2])
+        """
+        newinst = self.code()
 
-        #for i, n in refcount.items():
-            #print ('0X%X' %i, n)
+        if add is None:
+            add = type(self).add
 
-        # holding the partially computed gradient of variables
-        partial = {}
+        occurances = {}
 
-        frontier = {}
-        for (impl, args), record in reversed(list(zip(self.microcodes, tape))):
-            d = {}
-            d.update(record)
-            d.update(frontier)
+        def emit_add(a, b, c):
+            din = {}
+            din[add.ain[0]] = a
+            din[add.ain[1]] = b
+            din[add.aout[0]] = c
+            newinst.append(add, din)
 
-            if impl is None:
-                # sentinal -- initialization
-                # pump up d with the initial and be aware of missing items
-                # in ginit -- if they are in gin we later set them to zero.
+        for microcode, kwargs, record in tape[::-1]:
+            din = {}
 
-                impl = lambda : None
-                impl.g = lambda self, d: None
-                # literals are skipped from gradients, even if they are
-                # requested by fout; if we keep them here
-                # we will end up having warnings about unfinished partial
-                # gradients. -- this is the only path literals gets mixed.
-                # otherwise the some of the microcodes has inproperly decleared
-                # literals in fin.
-                impl.g.gin = ['^' + v for v in fout if v not in literals]
-                impl.g.gout = impl.g.gin
-                d.update(ginit)
+            din.update(kwargs)
+            din.update(record)
 
-            if monitor:
-                monitor('gradient', impl, 'before', VM.inspect(record))
+            # inputs
+            for an in microcode.aout:
+                din['_' + an] = '_' + kwargs.get(an, an)
 
-            
-            for name in impl.g.gin:
-                # non existing inputs are implied to start with gradients of VM.Zero
-                if name not in d:
-                    d[name] = VM.Zero
+            for an in microcode.ain:
+                # need to rename to avoid accidentally overwrite
+                # a finished gradient
+                din['_' + an] = '#partial#_' + kwargs.get(an, an)
+                value = record[an]
+                if tape.get_refcount(value) == 1:
+                    # direct overwriting is OK. no partials.
+                    din['_' + an] = '_' + kwargs.get(an, an)
+                else:
+                    if an in microcode.aout:
+                        # rename the input.
+                        emit_add("", '_' + kwargs.get(an, an), din['_' + an])
 
-            impl.g(self, d, *args)
+            newinst.append(microcode.gradient, din)
 
-            # reduce the result
-            for name in impl.g.gout:
-                vname = name[1:]
-                uid = id(record[vname])
-                if monitor:
-                    monitor('partial gradient', name, refcount[uid], d[name])
-                pg = d[name]
-                if uid not in partial or partial[uid] is VM.Zero:
-                    # this is the first channel, create the gradient storage
-                    partial[uid] = pg
-                elif pg is not VM.Zero:
-                    # this is an additional channel. cummulate the gradient.
-                    self.iadd_var(partial[uid], pg)
-                refcount[uid] = refcount[uid] - 1
+            # outputs
+            for an in microcode.ain:
+                value = record[an]
+                uid = tape.get_uid(value)
+                oc = occurances.get(uid, 0)
+                occurances[uid] = oc + 1
 
-                if refcount[uid] == 0:
-                    # update the frontier with the new gradients
-                    # we no longer need to save it on partial since cummulation is done.
-                    frontier[name] = partial.pop(uid)
-                    if monitor:
-                        monitor('finalized gradient', name, frontier[name])
+                if tape.get_refcount(value) > 1:
+                    reduceto = '_' + kwargs.get(an, an)
+                    partial = din['_' + an]
+                    if oc > 0:
+                        emit_add(reduceto, partial, reduceto)
+                    else:
+                        # move the partial to reduceto
+                        # OK to use a move because a partial is only used once.
+                        emit_add("", partial, reduceto)
+                else:
+                    # result already in right place
+                    pass
 
-        for i, v in partial.items():
-            warnings.warn('problem: remainging partial : 0X%X %d %s' % (i, refcount[i], str(v)), RuntimeWarning)
+        return newinst
 
-        r = {}
-        for name in gout:
-            r[name] = frontier[name]
+    @microcode(ain=['x'], aout=['y'])
+    def func(self, x, factor):
+        """ this is a function """
+        y = factor * x
+        return y
+
+    @func.grad
+    def gfunc(self, x, factor, _y):
+        _x = factor * _y
+        return _x
+
+class Tape(list):
+    """ A tape records the computation of a code object.
+        The tape object can then be used by the VM to build
+        a gradient code object.
+    """
+    def __init__(self):
+        list.__init__(self)
+        self.init = {}
+        self._refcount = {}
+
+    def __str__(self):
+        def format(microcode, kwargs, d):
+            r = str(microcode)
+            r += ' '
+            r += str(kwargs)
+            r += ' '
+            r += ', '.join([ '%s(%08X) : %s ' % (name, id(value), str(value)[:17])
+                    for name, value in d.items()])
+            return r
+        r = '-- Inputs (%08X)----\n' % id(self)
+        r += '\n'.join([format(microcode, kwargs, d) for microcode, kwargs, d in self ])
+        r += '\n'
+        r += '-- Refcounts ----\n'
+        r += ' '.join(["%08X : %d" % refcount for refcount in self._refcount.items()])
         return r
+
+    def get_uid(self, value):
+        return id(value)
+
+    def get_refcount(self, value):
+        uid = id(value)
+        return self._refcount.get(uid, 0)
+
+    def append(self, microcode, kwargs, din):
+        """ add a record to the tape. Record is the argument name and the value. """
+        for an, value in din.items():
+            uid = id(value)
+            self._refcount[uid] = self._refcount.get(uid, 0) + 1
+        list.append(self, (microcode, kwargs, din))
+
+class Code(list):
+    """ A code object is a sequence of microcodes with input, output variables and parameters.
+    """
+    def __init__(self, vm):
+        self.microcodes = []
+        self.vm = vm
+
+    def append(self, microcode, kwargs):
+        self.microcodes.append( (microcode, kwargs))
+
+    def __repr__(self):
+        r = "--Code---\n"
+        def format(code, kwargs):
+            return '%s : %s' % (str(code), str(kwargs))
+
+        r += '\n'.join(format(code, kwargs) for code, kwargs in self.microcodes)
+        r += '\n'
+        return r
+
+    def _find_inputs(self):
+        live = set()
+        for microcode, kwargs in reversed(self.microcodes):
+            for an in microcode.aout:
+                vn = kwargs.get(an, an)
+                if vn in live:
+                    live.remove(vn)
+
+            for an in microcode.ain:
+                vn = kwargs.get(an, an)
+                live.add(vn)
+        return list(live)
+
+    def compute(self, vout, init, tape=None, monitor=None):
+        if not isinstance(vout, (tuple, list)):
+            vout = [vout]
+            squeeze = True
+        else:
+            squeeze = False
+
+        inputs = self._find_inputs()
+        frontier = {}
+        frontier.update(init)
+        frontier[""] = VM.Zero
+
+        for vn in inputs:
+            if vn not in frontier:
+                raise ValueError("`%s` not defined in inputs" % vn)
+
+        if tape is not None:
+            tape.init.update(init)
+
+        started = False
+        for i, (microcode, kwargs) in enumerate(self.microcodes):
+            try:
+                r = microcode.invoke(self.vm, frontier, kwargs, tape, monitor)
+            except Exception as e:
+                print("Failure in running `%s`" % microcode)
+                raise
+            frontier.update(r)
+            future = self.microcodes[i+1:]
+            self._gc(frontier, future, vout, monitor)
+            if self._terminate(future, vout):
+                break
+
+        r = [frontier[vn] for vn in vout]
+        if squeeze:
+            r = r[0]
+        return r
+
+
+    def _gc(self, frontier, future, vout, monitor=None):
+        """ remove variables that are never used again """
+        used = []
+        used.extend(vout)
+        for microcode, kwargs in future:
+            for an in microcode.ain + microcode.literals:
+                vn = kwargs.get(an, an)
+                used.append(vn)
+
+        used = set(used)
+        for vn in list(frontier.keys()):
+            if vn not in used:
+                if monitor:
+                    monitor("freeing", vn)
+                frontier.pop(vn)
+
+    def _terminate(self, future, vout):
+        """ No variables in vout are mentioned in the future, we can terminate. """
+        used = []
+        for microcode, kwargs in future:
+            for an in microcode.aout:
+                vn = kwargs.get(an, an)
+                used.append(vn)
+
+        used = set(used)
+        for vn in vout:
+            if vn in used: return False
+        return True
+
+
+
 
 #####################
 #
@@ -284,7 +417,7 @@ def ZeroType():
     def __float__(self): return 0.0
     def __round__(self): return 0
     def __array__(self): return numpy.array(0)
-
+    def __repr__(self): return "<ZERO>"
     dict = {}
     for name, value in locals().items():
          if name.startswith("__"): dict[name] = value
@@ -307,10 +440,12 @@ def ZeroType():
         "add", "radd", "or", "ror"]:
         dict["__" + name + "__"] = other
 
+    dict["__repr__"] = __repr__
     return type("ZeroType", (object,), dict)
 
 ZeroType = ZeroType()
 Zero = ZeroType()
 
-# now add Zero to VM for easier access.
 VM.Zero = Zero
+VM.microcode = staticmethod(microcode)
+
