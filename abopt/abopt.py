@@ -85,7 +85,8 @@ class GradientDescent(Optimizer):
             dx0 = gradient(x0)
             gradnorm = self.dot(dx0, dx0) ** 0.5
             state = State(x=x0, y=y0, dy=dy, gradient=dx0, gradnorm=gradnorm, step=step)
-            monitor(state)
+            if monitor:
+                monitor(state)
 
             if gradnorm < gtol: break
             if dy is not None and dy < tol: break
@@ -160,7 +161,8 @@ class LBFGS(Optimizer):
         converged_state = "NO"
 
         state = State(x = x, y = val, dy = dy, gradient = g, gradnorm = gradnorm, step = it, function_evaluations = function_eval, steepest_descent = use_steepest_descent, converged = converged_state)
-        monitor(state)
+        if monitor:
+            monitor(state)
 
         while True:
             q = mycopy(g)
@@ -264,11 +266,13 @@ class LBFGS(Optimizer):
                 break
 
             state = State(x = x, y = val, dy = dy, gradient = g, gradnorm = gradnorm, step = it, function_evaluations = function_eval, steepest_descent = use_steepest_descent, converged = converged_state)
-            monitor(state)
+            if monitor:
+                monitor(state)
 
         # update the state one last time
         state = State(x = x, y = val, dy = dy, gradient = g, gradnorm = gradnorm, step = it, function_evaluations = function_eval, steepest_descent = use_steepest_descent, converged = converged_state)
-        monitor(state)
+        if monitor:
+            monitor(state)
 
         return state
 
