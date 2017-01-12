@@ -140,11 +140,9 @@ class LBFGS(Optimizer):
         g = gradient(x)
         gradnorm = self.dot(g, g) ** 0.5
 
-        rho = [0.0] * m
-        alpha = [0.0] * m
-        zero = self.mul(x0, 0.0)
-        s = [zero] * m
-        y = [zero] * m
+        rho = []
+        s = []
+        y = []
 
         xprev = mycopy(x)
         gprev = mycopy(g)
@@ -166,16 +164,19 @@ class LBFGS(Optimizer):
 
         while True:
             q = mycopy(g)
-            thism = min(m, step)
 
-            for i in range(thism):
+            alpha = []
+            for i in range(len(s)):
                 dotproduct = self.dot(s[i], q)
-                alpha[i] = rho[i] * dotproduct
+                alpha.append(rho[i] * dotproduct)
                 q = self.addmul(q, y[i], -alpha[i])
+            assert len(s) == len(rho)
+            assert len(s) == len(y)
+            assert len(s) == len(alpha)
 
             z = self.mul(q, H0k)
 
-            for i in range(thism - 1, -1, -1):
+            for i in reversed(list(range(len(s)))):
                 dotproduct = self.dot(y[i], z)
                 beta = rho[i] * dotproduct
                 z = self.addmul(z, s[i], alpha[i] - beta)
@@ -240,9 +241,6 @@ class LBFGS(Optimizer):
                 break
 
             # move everything down
-            del s[-1]
-            del y[-1]
-            del rho[-1]
             s.insert(0, self.addmul(x, xprev, -1))
             y.insert(0, self.addmul(g, gprev, -1))
             ys = self.dot(s[0], y[0])
@@ -256,6 +254,12 @@ class LBFGS(Optimizer):
                 break
 
             rho.insert(0, 1.0 / ys)
+
+            if len(s) > m:
+                del s[-1]
+                del y[-1]
+                del rho[-1]
+
             H0k = ys / yy
 
             xprev = mycopy(x)
