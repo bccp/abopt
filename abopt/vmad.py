@@ -72,7 +72,7 @@ class VM(object):
         r = self._microcodes + [(None, ())]
         return r
 
-    def push(self, op, *args):
+    def push(self, op, v, args):
         """ Append to the microcode list of the VM
 
             Use this to build complicated microcode sequences.

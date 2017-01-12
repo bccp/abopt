@@ -1,6 +1,8 @@
 from __future__ import print_function
 import numpy
 import warnings
+import functools
+
 def microcode(ain, aout):
     class decorator(object):
         def __init__(self, function):
@@ -16,6 +18,7 @@ def microcode(ain, aout):
                            % (an, str(self.function))
                     )
             self.gradient = NotImplemented
+            functools.update_wrapper(self, function)
 
         def grad(self, function):
             gout = ['_' + a for a in ain]
@@ -25,25 +28,26 @@ def microcode(ain, aout):
             # allow the gradient with the same name as the original function.
             return self
 
-        def __get__(self, vm, owner):
-            if vm is not None:
+        def __get__(self, instance, owner):
+            if instance is not None:
+                if not isinstance(instance, Code):
+                    raise TypeError("Use the result of VM.code() to build code.")
+
+                @functools.wraps(self.function)
                 def method(**kwargs):
-                    vm.append(self, kwargs)
+                    instance.append(self, kwargs)
                 return method
             return self
-
-        def __call__(self, **kwargs):
-            self.instance.append(self, kwargs)
 
         def __repr__(self):
             return self.function.__name__
 
-        def invoke(self, instance, frontier, kwargs, tape, monitor=None):
+        def invoke(self, vm, frontier, kwargs, tape, monitor=None):
             din = {}
 
             # copy in all arguments
             for an in self.argnames:
-                din[an] = kwargs[an]
+                din[an] = kwargs.get(an, an)
 
             # replace argument with variable name
             # then fetch it from the frontier.
@@ -52,18 +56,20 @@ def microcode(ain, aout):
                 vn = kwargs.get(an, an)
                 din[an] = frontier[vn]
                 vin.append(vn)
-            if tape is not None:
-                for an in self.aout:
-                    vn = kwargs.get(an, an)
-                    if vn in vin and an in din:
-                        # overwriting, need backup
-                        din[an] = instance.copy_var(din[an])
 
+            if tape is not None:
                 tape.append(self, kwargs, din)
 
-            vin = [ din[an] for an in self.argnames ]
+            vin = []
+            for an in self.argnames:
+                data = din[an]
+                if an in self.aout and an in self.ain:
+                    vn = kwargs.get(an, an)
+                    if vn in din:
+                        data = vm.copy_var(data)
+                vin.append(data)
 
-            out = self.function(instance, *vin)
+            out = self.function(vm, *vin)
 
             # zip the output arguments
             if len(self.aout) == 1: out = [out]
@@ -71,13 +77,13 @@ def microcode(ain, aout):
             for an, value in zip(self.aout, out):
                 dout[an] = value
 
-            if monitor:
-                monitor(self, din, dout)
-
             r = {}
             for an in self.aout:
                 vn = kwargs.get(an, an)
                 r[vn] = dout[an]
+
+            if monitor:
+                monitor(self, din, dout, frontier, r)
             return r
 
     return decorator
@@ -89,16 +95,16 @@ class Tape(list):
         self._refcount = {}
 
     def __str__(self):
-        def format(code, kwargs, d):
-            r = str(code)
+        def format(microcode, kwargs, d):
+            r = str(microcode)
             r += ' '
             r += str(kwargs)
             r += ' '
             r += ', '.join([ '%s(%08X) : %s ' % (name, id(value), str(value)[:17])
                     for name, value in d.items()])
             return r
-        r = '-- Inputs ----\n'
-        r += '\n'.join([format(code, kwargs, d) for code, kwargs, d in self ])
+        r = '-- Inputs (%08X)----\n' % id(self)
+        r += '\n'.join([format(microcode, kwargs, d) for microcode, kwargs, d in self ])
         r += '\n'
         r += '-- Refcounts ----\n'
         r += ' '.join(["%08X : %d" % refcount for refcount in self._refcount.items()])
@@ -109,32 +115,190 @@ class Tape(list):
 
     def get_refcount(self, value):
         uid = id(value)
-        return self._refcount.get(uid)
+        return self._refcount.get(uid, 0)
 
-    def append(self, code, kwargs, din):
+    def append(self, microcode, kwargs, din):
         """ add a record to the tape. Record is the argument name and the value. """
         for an, value in din.items():
             uid = id(value)
             self._refcount[uid] = self._refcount.get(uid, 0) + 1
-        list.append(self, (code, kwargs, din))
+        list.append(self, (microcode, kwargs, din))
+
+class Code(list):
+
+    def __init__(self, vm):
+        self.microcodes = []
+        self.vm = vm
+
+    def append(self, microcode, kwargs):
+        self.microcodes.append( (microcode, kwargs))
+
+    def __repr__(self):
+        r = "--Code---\n"
+        def format(code, kwargs):
+            return '%s : %s' % (str(code), str(kwargs))
+
+        r += '\n'.join(format(code, kwargs) for code, kwargs in self.microcodes)
+        r += '\n'
+        return r
+
+    def _find_inputs(self):
+        live = set()
+        for microcode, kwargs in reversed(self.microcodes):
+            for an in microcode.aout:
+                vn = kwargs.get(an, an)
+                if vn in live:
+                    live.remove(vn)
+
+            for an in microcode.ain:
+                vn = kwargs.get(an, an)
+                live.add(vn)
+        return list(live)
+
+    def compute(self, vout, init, tape=None, monitor=None):
+        if not isinstance(vout, (tuple, list)):
+            vout = [vout]
+            squeeze = True
+        else:
+            squeeze = False
+
+        inputs = self._find_inputs()
+        frontier = {}
+        frontier.update(init)
+        frontier[""] = VM.Zero
+
+        for vn in inputs:
+            if vn not in frontier:
+                raise ValueError("`%s` not defined in inputs" % vn)
+
+        if tape is not None:
+            tape.init.update(init)
+
+        started = False
+        for i, (microcode, kwargs) in enumerate(self.microcodes):
+            try:
+                r = microcode.invoke(self, frontier, kwargs, tape, monitor)
+            except Exception as e:
+                print("Failure in running `%s`" % microcode)
+                raise
+            frontier.update(r)
+            future = self.microcodes[i+1:]
+            self._gc(frontier, future, vout, monitor)
+            if self._terminate(future, vout):
+                break
+
+        r = [frontier[vn] for vn in vout]
+        if squeeze:
+            r = r[0]
+        return r
+
+    def gradient(self, tape, add):
+        """ set up the VM as the gradient of the objective VM.
+            with tape and a microcode for adding partial gradients.
+        """
+        newinst = self.vm.code()
+
+        occurances = {}
+
+        def emit_add(a, b, c):
+            din = {}
+            din[add.ain[0]] = a
+            din[add.ain[1]] = b
+            din[add.aout[0]] = c
+            newinst.append(add, din)
+
+        for microcode, kwargs, record in tape[::-1]:
+            din = {}
+
+            din.update(kwargs)
+            din.update(record)
+
+            # inputs
+            for an in microcode.aout:
+                din['_' + an] = '_' + kwargs.get(an, an)
+
+            for an in microcode.ain:
+                # need to rename to avoid accidentally overwrite
+                # a finished gradient
+                din['_' + an] = '#partial#_' + kwargs.get(an, an)
+                value = record[an]
+                if tape.get_refcount(value) == 1:
+                    # direct overwriting is OK. no partials.
+                    din['_' + an] = '_' + kwargs.get(an, an)
+                else:
+                    if an in microcode.aout:
+                        # rename the input.
+                        emit_add("", '_' + kwargs.get(an, an), din['_' + an])
+
+            newinst.append(microcode.gradient, din)
+
+            # outputs
+            for an in microcode.ain:
+                value = record[an]
+                uid = tape.get_uid(value)
+                oc = occurances.get(uid, 0)
+                occurances[uid] = oc + 1
+
+                if tape.get_refcount(value) > 1:
+                    reduceto = '_' + kwargs.get(an, an)
+                    partial = din['_' + an]
+                    if oc > 0:
+                        emit_add(reduceto, partial, reduceto)
+                    else:
+                        # move the partial to reduceto
+                        # OK to use a move because a partial is only used once.
+                        emit_add("", partial, reduceto)
+                else:
+                    # result already in right place
+                    pass
+
+        return newinst
+
+    def _gc(self, frontier, future, vout, monitor=None):
+        """ remove variables that are never used again """
+        used = []
+        used.extend(vout)
+        for code, kwargs in future:
+            for an in code.ain:
+                vn = kwargs.get(an, an)
+                used.append(vn)
+
+        used = set(used)
+        for vn in list(frontier.keys()):
+            if vn not in used:
+                if monitor:
+                    monitor("freeing", vn)
+                frontier.pop(vn)
+
+    def _terminate(self, future, vout):
+        """ No variables in vout are mentioned in the future, we can terminate. """
+        used = []
+        for code, kwargs in future:
+            for an in code.aout:
+                vn = kwargs.get(an, an)
+                used.append(vn)
+
+        used = set(used)
+        for vn in vout:
+            if vn in used: return False
+        return True
+
 
 
 class VM(object):
     def copy_var(self, a):
         return 1.0 * a
 
-    def __init__(self):
-        self._microcodes = []
+    def code(self):
+        class MyCode(Code, type(self)):
+            def __init__(self, vm):
+                Code.__init__(self, vm)
 
-    @property
-    def microcodes(self):
-        return self._microcodes
-
-    def append(self, code, kwargs):
-        self._microcodes.append((code, kwargs))
+        return MyCode(self)
 
     @microcode(ain=['x'], aout=['y'])
     def func(self, x, factor):
+        """ this is a function """
         y = factor * x
         return y
 
@@ -150,97 +314,6 @@ class VM(object):
     @add.grad
     def gadd(self, _c, _a, _b):
         return _c, _c
-
-    def _gc(self, frontier, future, vout):
-        """ remove variables that are never used again """
-        used = []
-        used.extend(vout)
-        for code, kwargs in future:
-            for an in code.ain:
-                vn = kwargs.get(an, an)
-                used.append(vn)
-
-        used = set(used)
-        for vn in list(frontier.keys()):
-            if vn not in used: frontier.pop(vn)
-
-    def _terminate(self, future, vout):
-        """ No variables in vout are mentioned in the future, we can terminate. """
-        used = []
-        for code, kwargs in future:
-            for an in code.aout:
-                vn = kwargs.get(an, an)
-                used.append(vn)
-
-        used = set(used)
-        for vn in vout:
-            if vn in used: return False
-        return True
-
-    def compute(self, vout, init, tape=None, monitor=None):
-        frontier = {}
-        frontier.update(init)
-        if tape is not None:
-            tape.init.update(init)
-
-        started = False
-        for i, (code, kwargs) in enumerate(self.microcodes):
-            r = code.invoke(self, frontier, kwargs, tape, monitor)
-            frontier.update(r)
-            future = self.microcodes[i+1:]
-            self._gc(frontier, future, vout)
-            if self._terminate(future, vout):
-                break
-
-        if not isinstance(vout, (tuple, list)):
-            r = frontier[vout]
-        else:
-            r = [frontier[vn] for vn in vout]
-        return r
-
-    def gradient_of(self, tape, add):
-        """ set up the VM as the gradient of the objective VM.
-            with tape and a microcode for adding partial gradients.
-        """
-        occurances = {}
-
-        for code, kwargs, record in tape[::-1]:
-            din = {}
-
-            din.update(kwargs)
-            din.update(record)
-
-            for an in code.aout:
-                din['_' + an] = '_' + kwargs.get(an, an)
-
-            for an in code.ain:
-                value = record[an]
-                uid = tape.get_uid(value)
-                oc = occurances.get(uid, 0)
-                din['_' + an] = '_' + kwargs.get(an, an)
-                if oc > 0:
-                    din['_' + an] += '_%d' % oc
-
-            self.append(code.gradient, din)
-
-            # now append a reduction operation for the partial gradients
-            for an in code.ain:
-                value = record[an]
-                uid = tape.get_uid(value)
-                oc = occurances.get(uid, 0)
-
-                if oc > 0:
-                    reduceto = '_' + kwargs.get(an, an)
-                    partial = din['_' + an]
-                    din = {}
-                    din[add.ain[0]] = reduceto
-                    din[add.ain[1]] = partial
-                    din[add.aout[0]] = reduceto
-                    self.append(add, din)
-
-                occurances[uid] = oc + 1
-
-        return self
 
 #####################
 #
@@ -273,7 +346,7 @@ def ZeroType():
     def __float__(self): return 0.0
     def __round__(self): return 0
     def __array__(self): return numpy.array(0)
-
+    def __repr__(self): return "<ZERO>"
     dict = {}
     for name, value in locals().items():
          if name.startswith("__"): dict[name] = value
@@ -296,27 +369,30 @@ def ZeroType():
         "add", "radd", "or", "ror"]:
         dict["__" + name + "__"] = other
 
+    dict["__repr__"] = __repr__
     return type("ZeroType", (object,), dict)
 
 ZeroType = ZeroType()
 Zero = ZeroType()
 
 VM.Zero = Zero
-VM.microcode = microcode
+VM.microcode = staticmethod(microcode)
 
 vm = VM()
 
-vm.func(x='a', y='a1', factor=10)
-vm.add(a='a1', b='a', c='a')
-vm.func(x='b', y='b', factor=2)
-vm.add(a='a', b='b', c='c')
-vm.func(x='c', y='d', factor=2)
-tape = Tape()
-vm.compute('c', init={'a' : numpy.array(10), 'b' : numpy.array(1)}, tape=tape, monitor=print)
-print(tape)
-print(tape._refcount)
+if False:
+    vm.func(x='a', y='a1', factor=10)
+    vm.add(a='a1', b='a', c='a')
+    vm.func(x='b', y='b', factor=2)
+    vm.add(a='a', b='b', c='c')
+    vm.func(x='c', y='d', factor=2)
+    tape = Tape()
+    vm.compute('c', init={'a' : numpy.array(10), 'b' : numpy.array(1)}, tape=tape, monitor=print)
+    help(vm.func)
+    print(tape)
+    print(tape._refcount)
 
-gvm = VM()
-gvm.gradient_of(tape, add=VM.add)
-print(gvm.microcodes)
-print(gvm.compute(['_a', '_b'], init={'_c' : numpy.array(1)}, monitor=print))
+    gvm = VM()
+    gvm.gradient_of(tape, add=VM.add)
+    print(gvm.microcodes)
+    print(gvm.compute(['_a', '_b'], init={'_c' : numpy.array(1)}, monitor=print))
