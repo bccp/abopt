@@ -3,96 +3,245 @@ import numpy
 import warnings
 import functools
 
-class MicroCode(object): pass
+class MicroCode(object):
+    """ An object that represents a microcode.
+
+        Mostly a python function with some additional introspection, marking
+        the input and output variables.
+    """
+    def __init__(self, function, ain, aout):
+        self.function = function
+        self.ain = ain
+        self.aout = aout
+        self.argnames = function.__code__.co_varnames[1:function.__code__.co_argcount]
+        for an in ain:
+            if not an in self.argnames:
+                raise ValueError(
+    "argument `%s` of ain in microcode decorator is not declared by function `%s`"
+                       % (an, str(self.function))
+                )
+        self.gradient = NotImplemented
+        functools.update_wrapper(self, function)
+
+    def grad(self, function):
+        gout = ['_' + a for a in self.ain]
+        gin  = ['_' + a for a in self.aout]
+
+        self.gradient = microcode(gin, gout)(function)
+        # allow the gradient with the same name as the original function.
+        return self
+
+    def __get__(self, instance, owner):
+        """ As a class member, return the microcode,
+            As an instance member of VM, returns the function as a method,
+            As an instance member of Code, returns a method to add to the code.
+        """
+        if instance is not None:
+            if isinstance(instance, Code):
+                @functools.wraps(self.function)
+                def method(**kwargs):
+                    instance.append(self, kwargs)
+                return method
+            return self.function.__get__(instance, owner)
+        return self
+
+    def __repr__(self):
+        return self.function.__name__
+
+    def invoke(self, vm, frontier, kwargs, tape, monitor=None):
+        din = {}
+
+        # copy in all arguments
+        for an in self.argnames:
+            din[an] = kwargs.get(an, an)
+
+        # replace argument with variable name
+        # then fetch it from the frontier.
+        vin = []
+        for an in self.ain:
+            vn = kwargs.get(an, an)
+            din[an] = frontier[vn]
+            vin.append(vn)
+
+        if tape is not None:
+            tape.append(self, kwargs, din)
+
+        vin = []
+        for an in self.argnames:
+            data = din[an]
+            if an in self.aout and an in self.ain:
+                vn = kwargs.get(an, an)
+                if vn in din:
+                    data = vm.copy(data)
+            vin.append(data)
+
+        out = self.function(vm, *vin)
+
+        # zip the output arguments
+        if len(self.aout) == 1: out = [out]
+        dout = {}
+        for an, value in zip(self.aout, out):
+            dout[an] = value
+
+        r = {}
+        for an in self.aout:
+            vn = kwargs.get(an, an)
+            r[vn] = dout[an]
+
+        if monitor:
+            monitor(self, din, dout, frontier, r)
+        return r
+
 def microcode(ain, aout):
-    class decorator(MicroCode):
-        def __init__(self, function):
-            self.function = function
-            self.instance = None
-            self.ain = ain
-            self.aout = aout
-            self.argnames = function.__code__.co_varnames[1:function.__code__.co_argcount]
-            for an in ain:
-                if not an in self.argnames:
-                    raise ValueError(
-        "argument `%s` of ain in microcode decorator is not declared by function `%s`"
-                           % (an, str(self.function))
-                    )
-            self.gradient = NotImplemented
-            functools.update_wrapper(self, function)
+    """ Declares a VM member function as a 'microcode'.
+        microcode is the building block for Code objects,
+        which can be computed and differentiated.
 
-        def grad(self, function):
-            gout = ['_' + a for a in ain]
-            gin  = ['_' + a for a in aout]
-
-            self.gradient = microcode(gin, gout)(function)
-            # allow the gradient with the same name as the original function.
-            return self
-
-        def __get__(self, instance, owner):
-            """ As a class member, return the microcode,
-                As an instance member of VM, returns the function as a method,
-                As an instance member of Code, returns a method to add to the code.
-            """
-            if instance is not None:
-                if isinstance(instance, Code):
-                    @functools.wraps(self.function)
-                    def method(**kwargs):
-                        instance.append(self, kwargs)
-                    return method
-                return self.function.__get__(instance, owner)
-            return self
-
-        def __repr__(self):
-            return self.function.__name__
-
-        def invoke(self, vm, frontier, kwargs, tape, monitor=None):
-            din = {}
-
-            # copy in all arguments
-            for an in self.argnames:
-                din[an] = kwargs.get(an, an)
-
-            # replace argument with variable name
-            # then fetch it from the frontier.
-            vin = []
-            for an in self.ain:
-                vn = kwargs.get(an, an)
-                din[an] = frontier[vn]
-                vin.append(vn)
-
-            if tape is not None:
-                tape.append(self, kwargs, din)
-
-            vin = []
-            for an in self.argnames:
-                data = din[an]
-                if an in self.aout and an in self.ain:
-                    vn = kwargs.get(an, an)
-                    if vn in din:
-                        data = vm.copy(data)
-                vin.append(data)
-
-            out = self.function(vm, *vin)
-
-            # zip the output arguments
-            if len(self.aout) == 1: out = [out]
-            dout = {}
-            for an, value in zip(self.aout, out):
-                dout[an] = value
-
-            r = {}
-            for an in self.aout:
-                vn = kwargs.get(an, an)
-                r[vn] = dout[an]
-
-            if monitor:
-                monitor(self, din, dout, frontier, r)
-            return r
-
+        See MicroCode. 
+    """
+    def decorator(func):
+        return MicroCode(func, ain, aout)
     return decorator
 
+class VM(object):
+    """ A virtual machine that interprets and runs Code objects
+        consisting of microcodes.
+
+        Subclass VM to add more microcodes.
+        Override `copy` and `add` to support different types of
+        variables.
+
+        Convention for gradient is to prepend `_`, e.g. `_x` is the gradient
+        backtraced to `x`.
+
+        The Each microcode carries a list of input and output arguments (
+        `ain` and `aout`) that can be assigned as variable names (string).
+
+        The rest of arguments in the function signature
+        are external parameters who do not go into gradients.
+
+        Example
+        -------
+
+        >>> vm = VM()
+        >>> code = vm.code()
+        >>> code.add(a='x', b='x', c='y')
+        >>> code.compute('y', {'x' : 10})
+
+    """
+
+    @microcode(ain=['a'], aout=['b'])
+    def copy(self, a): return 1.0 * a
+
+    @copy.grad
+    def gcopy(self, _b): return _b
+
+    @microcode(ain=['a', 'b'], aout=['c'])
+    def add(self, a, b):
+        if a is VM.Zero: return b
+        if b is VM.Zero: return a
+        return a + b
+
+    @add.grad
+    def gadd(self, _c, _a, _b): return _c, _c
+
+    def code(self):
+        """ Creates a Code object for this VM.
+
+            Build model with this.
+        """
+        d = {}
+        for name, method in type(self).__dict__.items():
+            if isinstance(method, MicroCode):
+                d[name] = method
+        MyCode = type("Code%s" % (type(self).__name__), (Code, ), d)
+        return MyCode(self)
+
+    def gradient(self, tape, add=None):
+        """ Create a code object that backtraces the gradient of a previously
+            recorded execution in `tape`.
+
+            The `add` microcode (None means `type(self).add`) reduces partial
+            derivatives.
+
+        """
+        newinst = self.code()
+
+        if add is None:
+            add = type(self).add
+
+        occurances = {}
+
+        def emit_add(a, b, c):
+            din = {}
+            din[add.ain[0]] = a
+            din[add.ain[1]] = b
+            din[add.aout[0]] = c
+            newinst.append(add, din)
+
+        for microcode, kwargs, record in tape[::-1]:
+            din = {}
+
+            din.update(kwargs)
+            din.update(record)
+
+            # inputs
+            for an in microcode.aout:
+                din['_' + an] = '_' + kwargs.get(an, an)
+
+            for an in microcode.ain:
+                # need to rename to avoid accidentally overwrite
+                # a finished gradient
+                din['_' + an] = '#partial#_' + kwargs.get(an, an)
+                value = record[an]
+                if tape.get_refcount(value) == 1:
+                    # direct overwriting is OK. no partials.
+                    din['_' + an] = '_' + kwargs.get(an, an)
+                else:
+                    if an in microcode.aout:
+                        # rename the input.
+                        emit_add("", '_' + kwargs.get(an, an), din['_' + an])
+
+            newinst.append(microcode.gradient, din)
+
+            # outputs
+            for an in microcode.ain:
+                value = record[an]
+                uid = tape.get_uid(value)
+                oc = occurances.get(uid, 0)
+                occurances[uid] = oc + 1
+
+                if tape.get_refcount(value) > 1:
+                    reduceto = '_' + kwargs.get(an, an)
+                    partial = din['_' + an]
+                    if oc > 0:
+                        emit_add(reduceto, partial, reduceto)
+                    else:
+                        # move the partial to reduceto
+                        # OK to use a move because a partial is only used once.
+                        emit_add("", partial, reduceto)
+                else:
+                    # result already in right place
+                    pass
+
+        return newinst
+
+    @microcode(ain=['x'], aout=['y'])
+    def func(self, x, factor):
+        """ this is a function """
+        y = factor * x
+        return y
+
+    @func.grad
+    def gfunc(self, x, factor, _y):
+        _x = factor * _y
+        return _x
+
 class Tape(list):
+    """ A tape records the computation of a code object.
+        The tape object can then be used by the VM to build
+        a gradient code object.
+    """
     def __init__(self):
         list.__init__(self)
         self.init = {}
@@ -129,7 +278,8 @@ class Tape(list):
         list.append(self, (microcode, kwargs, din))
 
 class Code(list):
-
+    """ A code object is a sequence of microcodes with input, output variables and parameters.
+    """
     def __init__(self, vm):
         self.microcodes = []
         self.vm = vm
@@ -228,106 +378,6 @@ class Code(list):
 
 
 
-class VM(object):
-    @microcode(ain=['a'], aout=['b'])
-    def copy(self, a):
-        return 1.0 * a
-
-    @copy.grad
-    def gcopy(self, _b):
-        return _b
-
-    @microcode(ain=['a', 'b'], aout=['c'])
-    def add(self, a, b):
-        if a is VM.Zero: return b
-        if b is VM.Zero: return a
-        return a + b
-
-    @add.grad
-    def gadd(self, _c, _a, _b):
-        return _c, _c
-
-
-    def code(self):
-        d = {}
-        for name, method in type(self).__dict__.items():
-            if isinstance(method, MicroCode):
-                d[name] = method
-        MyCode = type("Code%s" % (type(self).__name__), (Code, ), d)
-        return MyCode(self)
-
-    def gradient(self, tape, add):
-        """ set up the VM as the gradient of the objective VM.
-            with tape and a microcode for adding partial gradients.
-        """
-        newinst = self.code()
-
-        occurances = {}
-
-        def emit_add(a, b, c):
-            din = {}
-            din[add.ain[0]] = a
-            din[add.ain[1]] = b
-            din[add.aout[0]] = c
-            newinst.append(add, din)
-
-        for microcode, kwargs, record in tape[::-1]:
-            din = {}
-
-            din.update(kwargs)
-            din.update(record)
-
-            # inputs
-            for an in microcode.aout:
-                din['_' + an] = '_' + kwargs.get(an, an)
-
-            for an in microcode.ain:
-                # need to rename to avoid accidentally overwrite
-                # a finished gradient
-                din['_' + an] = '#partial#_' + kwargs.get(an, an)
-                value = record[an]
-                if tape.get_refcount(value) == 1:
-                    # direct overwriting is OK. no partials.
-                    din['_' + an] = '_' + kwargs.get(an, an)
-                else:
-                    if an in microcode.aout:
-                        # rename the input.
-                        emit_add("", '_' + kwargs.get(an, an), din['_' + an])
-
-            newinst.append(microcode.gradient, din)
-
-            # outputs
-            for an in microcode.ain:
-                value = record[an]
-                uid = tape.get_uid(value)
-                oc = occurances.get(uid, 0)
-                occurances[uid] = oc + 1
-
-                if tape.get_refcount(value) > 1:
-                    reduceto = '_' + kwargs.get(an, an)
-                    partial = din['_' + an]
-                    if oc > 0:
-                        emit_add(reduceto, partial, reduceto)
-                    else:
-                        # move the partial to reduceto
-                        # OK to use a move because a partial is only used once.
-                        emit_add("", partial, reduceto)
-                else:
-                    # result already in right place
-                    pass
-
-        return newinst
-
-    @microcode(ain=['x'], aout=['y'])
-    def func(self, x, factor):
-        """ this is a function """
-        y = factor * x
-        return y
-
-    @func.grad
-    def gfunc(self, x, factor, _y):
-        _x = factor * _y
-        return _x
 
 #####################
 #
@@ -392,21 +442,3 @@ Zero = ZeroType()
 VM.Zero = Zero
 VM.microcode = staticmethod(microcode)
 
-vm = VM()
-
-if False:
-    vm.func(x='a', y='a1', factor=10)
-    vm.add(a='a1', b='a', c='a')
-    vm.func(x='b', y='b', factor=2)
-    vm.add(a='a', b='b', c='c')
-    vm.func(x='c', y='d', factor=2)
-    tape = Tape()
-    vm.compute('c', init={'a' : numpy.array(10), 'b' : numpy.array(1)}, tape=tape, monitor=print)
-    help(vm.func)
-    print(tape)
-    print(tape._refcount)
-
-    gvm = VM()
-    gvm.gradient_of(tape, add=VM.add)
-    print(gvm.microcodes)
-    print(gvm.compute(['_a', '_b'], init={'_c' : numpy.array(1)}, monitor=print))
