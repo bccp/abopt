@@ -9,10 +9,11 @@ class MicroCode(object):
         Mostly a python function with some additional introspection, marking
         the input and output variables.
     """
-    def __init__(self, function, ain, aout):
+    def __init__(self, function, ain, aout, lin):
         self.function = function
         self.ain = ain
         self.aout = aout
+        self.lin = lin
         self.argnames = function.__code__.co_varnames[1:function.__code__.co_argcount]
         for an in ain:
             if not an in self.argnames:
@@ -58,7 +59,7 @@ class MicroCode(object):
         # replace argument with variable name
         # then fetch it from the frontier.
         vin = []
-        for an in self.ain:
+        for an in self.ain + self.lin:
             vn = kwargs.get(an, an)
             din[an] = frontier[vn]
             vin.append(vn)
@@ -92,7 +93,7 @@ class MicroCode(object):
             monitor(self, din, dout, frontier, r)
         return r
 
-def microcode(ain, aout):
+def microcode(ain, aout, lin=[]):
     """ Declares a VM member function as a 'microcode'.
         microcode is the building block for Code objects,
         which can be computed and differentiated.
@@ -100,7 +101,7 @@ def microcode(ain, aout):
         See MicroCode. 
     """
     def decorator(func):
-        return MicroCode(func, ain, aout)
+        return MicroCode(func, ain, aout, lin)
     return decorator
 
 class VM(object):
@@ -351,8 +352,8 @@ class Code(list):
         """ remove variables that are never used again """
         used = []
         used.extend(vout)
-        for code, kwargs in future:
-            for an in code.ain:
+        for microcode, kwargs in future:
+            for an in microcode.ain + microcode.lin:
                 vn = kwargs.get(an, an)
                 used.append(vn)
 
@@ -366,8 +367,8 @@ class Code(list):
     def _terminate(self, future, vout):
         """ No variables in vout are mentioned in the future, we can terminate. """
         used = []
-        for code, kwargs in future:
-            for an in code.aout:
+        for microcode, kwargs in future:
+            for an in microcode.aout:
                 vn = kwargs.get(an, an)
                 used.append(vn)
 
