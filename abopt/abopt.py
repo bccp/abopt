@@ -13,12 +13,19 @@ def default_dot(a, b):
     except TypeError:
         return float(a * b)
 
-class Parameter(object):
-    def __init__(self, name, default, help, convert):
-        self.name = name
-        self.default = default
-        self.help = help
+class parameter(object):
+    """ The parameter decorator declares a parameter to
+        the optimizer object.
+
+        This class follows the descriptor pattern in Python.
+
+        The return value of the accessor is used to set the attribute.
+    """
+    def __init__(self, convert):
+        self.name = convert.__name__
+        self.default = convert.__defaults__[0]
         self.convert = convert
+        self.__doc__ = convert.__doc__
 
     def __get__(self, instance, owner):
         if isinstance(instance, Optimizer):
@@ -29,22 +36,21 @@ class Parameter(object):
     def __set__(self, instance, value):
         instance.config[self.name] = self.convert(value)
 
-def parameter(default, help):
-    def decorator(function):
-        return Parameter(function.__name__, default, help, function)
-    return decorator
-
 class Optimizer(object):
-    @parameter(default=1e-6, help='Tolerance of objective')
-    def tol(value):
+    @parameter
+    def tol(value=1e-6):
+        """Tolerance of objective"""
         assert value > 0
         return value
-    @parameter(default=1e-6, help='Tolerance of gradient')
-    def gtol(value):
+    @parameter
+    def gtol(value=1e-6):
+        """Tolerance of gradient"""
         assert value >= 0
         return value
-    @parameter(default=1000, help='Maximium  number of iterations')
-    def maxsteps(value): return int(value)
+    @parameter
+    def maxsteps(value=1000):
+        """Maximium  number of iterations"""
+        return int(value)
 
     def copy(self, a):
         return self.addmul(a, a, 0)
@@ -54,7 +60,7 @@ class Optimizer(object):
 
     def __setattr__(self, key, value):
         # only allow setting parameters
-        if hasattr(type(self), key) and isinstance(getattr(type(self), key), Parameter):
+        if hasattr(type(self), key) and isinstance(getattr(type(self), key), parameter):
             return object.__setattr__(self, key, value)
         else:
             raise AttributeError("Setting attribute %s on an Optimizer of type %s is not supported" % (key, type(self)))
@@ -105,8 +111,9 @@ class State(dict):
         return "Iteration %(it)d: y = %(y)g dy = %(dy)s fev = %(fev)d gev = %(gev)d gnorm = %(gnorm)g xnorm = %(xnorm)g" % d
 
 class GradientDescent(Optimizer):
-    @parameter(1e-3, help='descent rate parameter')
-    def gamma(value):
+    @parameter
+    def gamma(value=1e-3):
+        """descent rate parameter"""
         assert value > 0
         return value
 
@@ -136,8 +143,10 @@ class GradientDescent(Optimizer):
         return state
 
 class LBFGS(Optimizer):
-    @parameter(10, help='number of vectors for approximating Hessian')
-    def m(value): return int(value)
+    @parameter
+    def m(value=10):
+        """number of vectors for approximating Hessian"""
+        return int(value)
 
     def minimize(self, objective, gradient, x0, monitor=None):
 
