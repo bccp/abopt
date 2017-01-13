@@ -74,11 +74,14 @@ class Optimizer(object):
             ----------
             addmul : callable
                 addmul(a, b, s) returns a + b * s as a new vector from vector a, b and a Python scalar s.
-                when s is None (not 0.0), it returns a copy of a, serving as a constructor of new vectors.
-                when a is None, it returns b * s
+                when s is 0 (not 0.0), it returns a copy of a, serving as a constructor of new vectors.
+                when a is 0, it returns b * s. The default is simply `a + b * s` with optimizations
+                for zeros.
 
             dot : callable
-                dot(a, b) returns the inner product of vectors a and b as a Python scalar
+                dot(a, b) returns the inner product of vectors a and b as a Python scalar; the default
+                works for most cases by first looking for a `dot` method, then fallback to `sum` of
+                the `*` operator.
         """
         # FIXME: use check the function signature is correct.
         d = self.__dict__
