@@ -297,15 +297,30 @@ class Code(list):
     def __repr__(self):
         r = "--Code---\n"
         def format(code, kwargs):
-            return '%s : %s' % (str(code), str(kwargs))
+            def format(kwargs):
+                r = []
+                for key, value in kwargs.items():
+                    if key not in code.ain + code.aout + code.literals:
+                        value = str(type(value))
+                        io = 'p'
+                    io = ''
+                    if key in code.ain:
+                        io += 'i'
+                    if key in code.aout:
+                        io += 'o'
+                    if key in code.literals:
+                        io += 'l'
+                    r.append("%s (%s) = %s" % (key, io, value))
+                return ' | '.join(r)
+            return '%s : %s' % (str(code), format(kwargs))
 
         r += '\n'.join(format(code, kwargs) for code, kwargs in self.microcodes)
         r += '\n'
         return r
 
-    def _find_inputs(self):
+    def _find_inputs(self, microcodes):
         live = set()
-        for microcode, kwargs in reversed(self.microcodes):
+        for microcode, kwargs in reversed(microcodes):
             for an in microcode.aout:
                 vn = kwargs.get(an, an)
                 if vn in live:
@@ -316,6 +331,25 @@ class Code(list):
                 live.add(vn)
         return list(live)
 
+    def _optimize(self, microcodes, vout):
+        live = set(vout)
+        optimized = []
+        for microcode, kwargs in reversed(self.microcodes):
+            keep = False
+            for an in microcode.aout:
+                vn = kwargs.get(an, an)
+                if vn in live:
+                    keep = True
+                    live.remove(vn)
+            if keep:
+                for an in microcode.ain:
+                    vn = kwargs.get(an, an)
+                    live.add(vn)
+
+                optimized.append((microcode, kwargs))
+
+        return list(reversed(optimized))
+        
     def compute(self, vout, init, tape=None, monitor=None):
         if not isinstance(vout, (tuple, list)):
             vout = [vout]
@@ -323,7 +357,9 @@ class Code(list):
         else:
             squeeze = False
 
-        inputs = self._find_inputs()
+        microcodes = self._optimize(self.microcodes, vout)
+
+        inputs = self._find_inputs(microcodes)
         frontier = {}
         frontier.update(init)
         frontier[""] = VM.Zero
@@ -336,7 +372,7 @@ class Code(list):
             tape.init.update(init)
 
         started = False
-        for i, (microcode, kwargs) in enumerate(self.microcodes):
+        for i, (microcode, kwargs) in enumerate(microcodes):
             try:
                 r = microcode.invoke(self.vm, frontier, kwargs, tape, monitor)
             except Exception as e:
@@ -345,8 +381,6 @@ class Code(list):
             frontier.update(r)
             future = self.microcodes[i+1:]
             self._gc(frontier, future, vout, monitor)
-            if self._terminate(future, vout):
-                break
 
         r = [frontier[vn] for vn in vout]
         if squeeze:
@@ -369,21 +403,6 @@ class Code(list):
                 if monitor:
                     monitor("freeing", vn)
                 frontier.pop(vn)
-
-    def _terminate(self, future, vout):
-        """ No variables in vout are mentioned in the future, we can terminate. """
-        used = []
-        for microcode, kwargs in future:
-            for an in microcode.aout:
-                vn = kwargs.get(an, an)
-                used.append(vn)
-
-        used = set(used)
-        for vn in vout:
-            if vn in used: return False
-        return True
-
-
 
 
 #####################
