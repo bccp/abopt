@@ -21,11 +21,15 @@ def test_gradient_descent_customized():
     def notification(state):
         called[0] = True
 
-    optimizer.configure(maxsteps=1000, tol=1e-6, gtol=1e-6, gamma=0.001)
+    optimizer.maxsteps = 1000
+    optimizer.tol = 1e-6
+    optimizer.gtol = 1e-6
+    optimizer.gamma = 0.001
+
     result = optimizer.minimize(objective=f, gradient=df, x0=6., monitor=notification)
     assert called[0]
     assert_allclose(result['x'], 2.25, rtol=0.05)
-    assert_allclose(result['gradient'], 0.0, atol=0.05)
+    assert_allclose(result['g'], 0.0, atol=0.05)
 
 def test_gradient_descent():
     optimizer = GradientDescent()
@@ -40,17 +44,20 @@ def test_gradient_descent():
     def notification(state):
         called[0] = True
 
-    optimizer.configure(maxsteps=1000, tol=1e-6, gtol=1e-6, gamma=0.001)
+    optimizer.maxsteps = 1000
+    optimizer.tol = 1e-6
+    optimizer.gtol = 1e-6
+    optimizer.gamma = 0.001
+
     result = optimizer.minimize(objective=f, gradient=df, x0=6., monitor=notification)
     assert called[0]
     assert_allclose(result['x'], 2.25, rtol=0.05)
-    assert_allclose(result['gradient'], 0.0, atol=0.05)
+    assert_allclose(result['g'], 0.0, atol=0.05)
 
 def test_lbfgs():
     optimizer = LBFGS(
             addmul=lambda a, b, s: a + b * s,
             dot=lambda dx1, dx2 : dx1 * dx2,
-            mul = lambda a, s: a * s
             )
 
     def df(x):
@@ -65,11 +72,15 @@ def test_lbfgs():
         print(state)
         called[0] = True
 
-    optimizer.configure(maxstep=1000, tol=1e-5, gtol=1e-10, m = 10)
+    optimizer.maxsteps=1000
+    optimizer.tol=1e-5
+    optimizer.gtol=1e-10
+    optimizer.m = 10
+
     result = optimizer.minimize(objective=f, gradient=df, x0=6., monitor=notification)
     assert called[0]
     assert_allclose(result['x'], 2.25, rtol=0.05)
-    assert_allclose(result['gradient'], 0.0, atol=0.05)
+    assert_allclose(result['g'], 0.0, atol=0.05)
 
 
 def test_lbfgs_default():
@@ -87,9 +98,13 @@ def test_lbfgs_default():
         #print(state)
         called[0] = True
 
-    optimizer.configure(maxstep=1000, tol=1e-5, gtol=1e-10, m = 10)
+    optimizer.maxsteps=1000
+    optimizer.tol=1e-5
+    optimizer.gtol=1e-10
+    optimizer.m = 10
+
     result = optimizer.minimize(objective=f, gradient=df, x0=6., monitor=notification)
     assert called[0]
     assert_allclose(result['x'], 2.25, rtol=0.05)
-    assert_allclose(result['gradient'], 0.0, atol=0.05)
+    assert_allclose(result['g'], 0.0, atol=0.05)
 
