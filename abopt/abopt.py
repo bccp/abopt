@@ -44,7 +44,7 @@ class Optimizer(object):
     def configure(self, **kwargs):
         self.config.update(kwargs)
 
-    def minimize(self, objective, gradient, x0):
+    def minimize(self, objective, gradient, x0, monitor=None):
         raise NotImplementedError
 
 class State(dict):
@@ -57,7 +57,6 @@ class GradientDescent(Optimizer):
                 gtol=1e-6,
                 maxsteps=1000,
                 gamma=1e-3,
-                monitor=None,
                 **kwargs):
 
         c = {}
@@ -65,17 +64,15 @@ class GradientDescent(Optimizer):
         c['gtol'] = gtol
         c['maxsteps'] = maxsteps
         c['gamma'] = gamma
-        c['monitor'] = monitor
         c.update(kwargs)
 
         Optimizer.configure(self, **c)
 
-    def minimize(self, objective, gradient, x0):
+    def minimize(self, objective, gradient, x0, monitor=None):
         tol = self.config.get('tol')
         gtol = self.config.get('gtol')
         maxsteps = self.config.get('maxsteps')
         gamma = self.config.get('gamma')
-        monitor = self.config.get('monitor')
 
         # FIXME: line search
         step = 0
@@ -108,7 +105,6 @@ class LBFGS(Optimizer):
                 gtol=1e-6,
                 maxsteps=1000,
                 m = 10,
-                monitor=None,
                 **kwargs):
 
         c = {}
@@ -116,17 +112,15 @@ class LBFGS(Optimizer):
         c['gtol'] = gtol
         c['maxsteps'] = maxsteps
         c['m'] = m
-        c['monitor'] = monitor
         c.update(kwargs)
 
         Optimizer.configure(self, **c)
 
-    def minimize(self, objective, gradient, x0):
+    def minimize(self, objective, gradient, x0, monitor=None):
         tol = self.config.get('tol')
         gtol = self.config.get('gtol')
         maxsteps = self.config.get('maxsteps')
         m = self.config.get('m')
-        monitor = self.config.get('monitor')
 
         assert tol > 0
         assert gtol >= 0

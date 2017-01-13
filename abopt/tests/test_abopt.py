@@ -1,11 +1,11 @@
 from __future__ import print_function
 from abopt import GradientDescent, LBFGS
-from numpy.testing import assert_raises
+from numpy.testing import assert_raises, assert_allclose
 
 def test_nothing():
     pass
 
-def test_gradient_descent():
+def test_gradient_descent_customized():
     optimizer = GradientDescent(
             addmul=lambda a, b, s: a + b * s,
             dot=lambda dx1, dx2 : dx1 * dx2,
@@ -21,14 +21,13 @@ def test_gradient_descent():
     def notification(state):
         called[0] = True
 
-    optimizer.configure(maxstep=1000, tol=1e-2, gtol=1e-2, stepsize=0.01)
-    optimizer.configure(monitor=notification)
-    result = optimizer.minimize(objective=f, gradient=df, x0=6.)
+    optimizer.configure(maxsteps=1000, tol=1e-6, gtol=1e-6, gamma=0.001)
+    result = optimizer.minimize(objective=f, gradient=df, x0=6., monitor=notification)
     assert called[0]
-    assert abs(result['x'] - 2.25) < 0.05
-    assert abs(result['gradient']) < 0.05
+    assert_allclose(result['x'], 2.25, rtol=0.05)
+    assert_allclose(result['gradient'], 0.0, atol=0.05)
 
-def test_gradient_descent_default():
+def test_gradient_descent():
     optimizer = GradientDescent()
 
     def df(x):
@@ -41,15 +40,13 @@ def test_gradient_descent_default():
     def notification(state):
         called[0] = True
 
-    optimizer.configure(maxstep=1000, tol=1e-2, gtol=1e-2, stepsize=0.01)
-    optimizer.configure(monitor=notification)
-    result = optimizer.minimize(objective=f, gradient=df, x0=6.)
+    optimizer.configure(maxsteps=1000, tol=1e-6, gtol=1e-6, gamma=0.001)
+    result = optimizer.minimize(objective=f, gradient=df, x0=6., monitor=notification)
     assert called[0]
-    assert abs(result['x'] - 2.25) < 0.05
-    assert abs(result['gradient']) < 0.05
+    assert_allclose(result['x'], 2.25, rtol=0.05)
+    assert_allclose(result['gradient'], 0.0, atol=0.05)
 
 def test_lbfgs():
-    optimizer = LBFGS()
     optimizer = LBFGS(
             addmul=lambda a, b, s: a + b * s,
             dot=lambda dx1, dx2 : dx1 * dx2,
@@ -69,11 +66,10 @@ def test_lbfgs():
         called[0] = True
 
     optimizer.configure(maxstep=1000, tol=1e-5, gtol=1e-10, m = 10)
-    optimizer.configure(monitor=notification)
-    result = optimizer.minimize(objective=f, gradient=df, x0=6.)
+    result = optimizer.minimize(objective=f, gradient=df, x0=6., monitor=notification)
     assert called[0]
-    assert abs(result['x'] - 2.25) < 0.05
-    assert abs(result['gradient']) < 0.05
+    assert_allclose(result['x'], 2.25, rtol=0.05)
+    assert_allclose(result['gradient'], 0.0, atol=0.05)
 
 
 def test_lbfgs_default():
@@ -92,9 +88,8 @@ def test_lbfgs_default():
         called[0] = True
 
     optimizer.configure(maxstep=1000, tol=1e-5, gtol=1e-10, m = 10)
-    optimizer.configure(monitor=notification)
-    result = optimizer.minimize(objective=f, gradient=df, x0=6.)
+    result = optimizer.minimize(objective=f, gradient=df, x0=6., monitor=notification)
     assert called[0]
-    assert abs(result['x'] - 2.25) < 0.05
-    assert abs(result['gradient']) < 0.05
+    assert_allclose(result['x'], 2.25, rtol=0.05)
+    assert_allclose(result['gradient'], 0.0, atol=0.05)
 
