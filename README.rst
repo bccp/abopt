@@ -1,14 +1,18 @@
 abopt
 =====
 
-Numerical optimiztion on abstract types
+abopt (ABstract OPTimizer) - optimization of generic numerical models
 
 .. image:: https://travis-ci.org/bccp/abopt.svg?branch=master
     :target: https://travis-ci.org/bccp/abopt
 
-This is a translation of the LBFGS and CG optimizer from their C++ version
-in CosmoPP to python.
+The package contains two components:
 
-We want the algorithms to take abstract types because we will apply it on
-vectors distributed via MPI. Locally each chunk is stored as a numpy array.
+- optimize:
+  L-BFGS and Conjugate-Gradient optimizer, translated from Cosmo++.
+
+- model: 
+  vmad (Virtual Machine Automated Differentiation),
+  a differentiable state machine for forward modelling.
+
 
