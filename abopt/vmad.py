@@ -267,8 +267,14 @@ class VM(object):
 
     @staticmethod
     def _add_to_graph(graph, init, list):
-        source = {}
+        """
+            add a list of microcodes to a graph. The init node is duplicated as needed
+            (because it may be used many times and mess up the diagram. It hurts to have
+            very long edges like that.
 
+        """
+        source = {}
+        sans = {}
         for vn in init:
             source[vn] = "#INIT"
 
@@ -284,7 +290,15 @@ class VM(object):
                     if source[vn] == "#INIT":
                         from_init.append(vn)
                     else:
-                        graph.edge(source[vn], str(i) + str(id(microcode)), label=vn)
+                        san = sans[vn]
+                        dan = an
+                        attrs = {}
+                        if san != vn:
+                            attrs['taillabel'] = san + ":"
+                        if dan != vn:
+                            attrs['headlabel'] = ":" + dan
+                        attrs['label'] = vn
+                        graph.edge(source[vn], str(i) + str(id(microcode)), **attrs)
 
                 if len(from_init) > 0:
                     graph.node(str(i) + "#INIT", label="<<b>Init</b>>")
@@ -294,7 +308,7 @@ class VM(object):
             for an in microcode.aout:
                 vn = kwargs.get(an, an)
                 source[vn] = str(i) + str(id(microcode))
-
+                sans[vn] = an
 
     @microcode(ain=['x'], aout=['y'])
     def func(self, x, factor):
@@ -346,8 +360,11 @@ class Tape(list):
         VM._add_to_graph(graph, self.init, self)
         return graph
 
+    def _repr_png_(self):
+        return self.to_graph(engine='dot', graph_attr=dict(rankdir="LR")).pipe(format="png")
+
     def _repr_svg_(self):
-        return self.to_graph(engine='dot', graph_attr=dict(rankdir="LR", size="128, 4"))._repr_svg_()
+        return self.to_graph(engine='dot', graph_attr=dict(rankdir="LR"))._repr_svg_()
 
 class Code(list):
     """ A code object is a sequence of microcodes with input, output variables and parameters.
@@ -460,8 +477,11 @@ class Code(list):
 
         return graph
 
+    def _repr_png_(self):
+        return self.to_graph(engine='dot', graph_attr=dict(rankdir="LR")).pipe(format="png")
+
     def _repr_svg_(self):
-        return self.to_graph(strict=True, engine='dot', graph_attr=dict(rankdir="LR", size="128, 4"))._repr_svg_()
+        return self.to_graph(engine='dot', graph_attr=dict(rankdir="LR"))._repr_svg_()
 
 
 #####################
