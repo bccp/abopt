@@ -49,6 +49,38 @@ class MicroCode(object):
     def __repr__(self):
         return self.function.__name__
 
+    def to_label(self, kwargs, html=False):
+        if html:
+            delim = '<BR ALIGN="CENTER"/>'
+        else:
+            delim = " "
+        def format(kwargs):
+            r = []
+            for an in self.argnames:
+                vn = kwargs.get(an, an)
+                if an not in self.ain + self.aout + self.literals:
+                    vn = "Ext:%s" % type(vn).__name__
+                    io = 'p'
+                else:
+                    io = ''
+                    if an in self.ain:
+                        io += 'i'
+                    if an in self.aout:
+                        io += 'o'
+                    if an in self.literals:
+                        io += 'l'
+                r.append("%s:%s = %s" % (io, an, vn))
+            return delim.join(r)
+        name = str(self)
+        if html:
+            name = "<b>" + name + "</b>"
+
+        s = delim.join([name, format(kwargs)])
+        if html:
+            return "<" + s + ">"
+        else:
+            return s
+
     def invoke(self, vm, frontier, kwargs, tape, monitor=None):
         din = {}
 
@@ -233,6 +265,37 @@ class VM(object):
 
         return newinst
 
+    @staticmethod
+    def _add_to_graph(graph, init, list):
+        source = {}
+
+        for vn in init:
+            source[vn] = "#INIT"
+
+        for i, record in enumerate(list):
+            microcode, kwargs = record[0], record[1]
+
+            graph.node(str(i) + str(id(microcode)), label=microcode.to_label(kwargs, html=True), )
+            for an in microcode.ain:
+                vn = kwargs.get(an, an)
+                from_init = []
+                if vn in source:
+                    if vn == "": continue
+                    if source[vn] == "#INIT":
+                        from_init.append(vn)
+                    else:
+                        graph.edge(source[vn], str(i) + str(id(microcode)), label=vn)
+
+                if len(from_init) > 0:
+                    graph.node(str(i) + "#INIT", label="<<b>Init</b>>")
+                    for vn in from_init:
+                        graph.edge(str(i) + "#INIT", str(i) + str(id(microcode)), label=vn)
+
+            for an in microcode.aout:
+                vn = kwargs.get(an, an)
+                source[vn] = str(i) + str(id(microcode))
+
+
     @microcode(ain=['x'], aout=['y'])
     def func(self, x, factor):
         """ this is a function """
@@ -255,16 +318,8 @@ class Tape(list):
         self._refcount = {}
 
     def __str__(self):
-        def format(microcode, kwargs, d):
-            r = str(microcode)
-            r += ' '
-            r += str(kwargs)
-            r += ' '
-            r += ', '.join([ '%s(%08X) : %s ' % (name, id(value), str(value)[:17])
-                    for name, value in d.items()])
-            return r
         r = '-- Inputs (%08X)----\n' % id(self)
-        r += '\n'.join([format(microcode, kwargs, d) for microcode, kwargs, d in self ])
+        r += '\n'.join([microcode.to_label(kwargs) for microcode, kwargs, d in self ])
         r += '\n'
         r += '-- Refcounts ----\n'
         r += ' '.join(["%08X : %d" % refcount for refcount in self._refcount.items()])
@@ -284,6 +339,16 @@ class Tape(list):
             self._refcount[uid] = self._refcount.get(uid, 0) + 1
         list.append(self, (microcode, kwargs, din))
 
+    def to_graph(self, **kwargs):
+        """ create a graphviz Digraph"""
+        import graphviz
+        graph = graphviz.Digraph(**kwargs)
+        VM._add_to_graph(graph, self.init, self)
+        return graph
+
+    def _repr_svg_(self):
+        return self.to_graph(engine='dot', graph_attr=dict(rankdir="LR", size="128, 4"))._repr_svg_()
+
 class Code(list):
     """ A code object is a sequence of microcodes with input, output variables and parameters.
     """
@@ -296,25 +361,7 @@ class Code(list):
 
     def __repr__(self):
         r = "--Code---\n"
-        def format(code, kwargs):
-            def format(kwargs):
-                r = []
-                for key, value in kwargs.items():
-                    if key not in code.ain + code.aout + code.literals:
-                        value = str(type(value))
-                        io = 'p'
-                    io = ''
-                    if key in code.ain:
-                        io += 'i'
-                    if key in code.aout:
-                        io += 'o'
-                    if key in code.literals:
-                        io += 'l'
-                    r.append("%s (%s) = %s" % (key, io, value))
-                return ' | '.join(r)
-            return '%s : %s' % (str(code), format(kwargs))
-
-        r += '\n'.join(format(code, kwargs) for code, kwargs in self.microcodes)
+        r += '\n'.join(code.to_label(kwargs) for code, kwargs in self.microcodes)
         r += '\n'
         return r
 
@@ -403,6 +450,18 @@ class Code(list):
                 if monitor:
                     monitor("freeing", vn)
                 frontier.pop(vn)
+
+    def to_graph(self, **kwargs):
+        """ create a graphviz Digraph"""
+        import graphviz
+        graph = graphviz.Digraph(**kwargs)
+
+        VM._add_to_graph(graph, self._find_inputs(self.microcodes), self.microcodes)
+
+        return graph
+
+    def _repr_svg_(self):
+        return self.to_graph(strict=True, engine='dot', graph_attr=dict(rankdir="LR", size="128, 4"))._repr_svg_()
 
 
 #####################
