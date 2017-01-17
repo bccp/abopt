@@ -236,6 +236,11 @@ class VM(object):
                 if tape.get_refcount(value) == 1:
                     # direct overwriting is OK. no partials.
                     din['_' + an] = '_' + kwargs.get(an, an)
+                elif occurances.get(tape.get_uid(value), 0) == 0:
+                    # first occurance, OK to overwrite?
+                    # if the tape has extra operations this may overwrite a calculated gradient with
+                    # a incomplete gradient.
+                    din['_' + an] = '_' + kwargs.get(an, an)
                 else:
                     if an in microcode.aout:
                         # rename the input.
@@ -258,11 +263,15 @@ class VM(object):
                     else:
                         # move the partial to reduceto
                         # OK to use a move because a partial is only used once.
-                        emit_add("", partial, reduceto)
+                        # thus we ignore the op if partial is already reduceto.
+                        if partial != reduceto:
+                            emit_add("", partial, reduceto)
                 else:
                     # result already in right place
                     pass
-
+        for id in occurances:
+            if tape._refcount[id] != occurances[id]:
+                raise RuntimeError("FIXME: make this error more informative. Some gradients remain not fully computed.")
         return newinst
 
     @staticmethod
