@@ -103,7 +103,7 @@ def test_integrator():
         gcode = vm.gradient(tape, add=Integrator.add)
         print(gcode)
     #    ginit = {'^chi2' : 1.}
-        ginit = {'_x' : 2 * x, '_a' : VM.Zero}
+        ginit = {'_x' : 2 * x, '_a' : 0}
         r = gcode.compute(['_x', '_v'], ginit, monitor=print)
         return r
 

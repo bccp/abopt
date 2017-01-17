@@ -434,7 +434,13 @@ class Code(list):
 
         inputs = self._find_inputs(microcodes)
         frontier = {}
-        frontier.update(init)
+
+        for key, value in init.items():
+            # up cast 0 to VM.Zero for convenience
+            if value is 0:
+                value = VM.Zero
+            frontier[key] = value
+
         frontier[""] = VM.Zero
 
         for vn in inputs:
