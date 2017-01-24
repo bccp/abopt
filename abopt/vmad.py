@@ -28,6 +28,7 @@ class MicroCode(object):
         gout = ['_' + a for a in self.ain]
         gin  = ['_' + a for a in self.aout]
 
+        function.__name__ = "G:" + self.function.__name__
         self.gradient = microcode(gin, gout)(function)
         # allow the gradient with the same name as the original function.
         return self
@@ -277,6 +278,9 @@ class VM(object):
         for id in occurances:
             if tape._refcount[id] != occurances[id]:
                 raise RuntimeError("FIXME: make this error more informative. Some gradients remain not fully computed.")
+        inputs = newinst._find_inputs()
+        for vin in inputs:
+            newinst.defaults[vin] = VM.Zero
         return newinst
 
     @staticmethod
@@ -386,6 +390,7 @@ class Code(list):
     def __init__(self, vm):
         self.microcodes = []
         self.vm = vm
+        self.defaults = {}
 
     def append(self, microcode, kwargs):
         self.microcodes.append( (microcode, kwargs))
@@ -396,21 +401,22 @@ class Code(list):
         r += '\n'
         return r
 
-    def _find_inputs(self, microcodes):
+    def _find_inputs(self):
+        """ find inputs of a code segment """
         live = set()
-        for microcode, kwargs in reversed(microcodes):
+        for microcode, kwargs in reversed(self.microcodes):
             for an in microcode.aout:
                 vn = kwargs.get(an, an)
                 if vn in live:
                     live.remove(vn)
-
             for an in microcode.ain:
                 vn = kwargs.get(an, an)
                 live.add(vn)
         return list(live)
 
-    def _optimize(self, microcodes, vout):
+    def _optimize(self, vout):
         live = set(vout)
+        code = self.vm.code()
         optimized = []
         for microcode, kwargs in reversed(self.microcodes):
             keep = False
@@ -426,8 +432,13 @@ class Code(list):
 
                 optimized.append((microcode, kwargs))
 
-        return list(reversed(optimized))
-        
+        for microcode, kwargs in reversed(optimized):
+            code.append(microcode, kwargs)
+        return code
+
+    def __iter__(self):
+        return iter(self.microcodes)
+
     def compute(self, vout, init, tape=None, monitor=None):
         if not isinstance(vout, (tuple, list)):
             vout = [vout]
@@ -435,12 +446,16 @@ class Code(list):
         else:
             squeeze = False
 
-        microcodes = self._optimize(self.microcodes, vout)
+        code = self._optimize(vout)
 
-        inputs = self._find_inputs(microcodes)
+        inputs = code._find_inputs()
         frontier = {}
 
-        for key, value in init.items():
+        init2 = {}
+        init2.update(self.defaults)
+        init2.update(init)
+
+        for key, value in init2.items():
             # up cast 0 to VM.Zero for convenience
             if value is 0:
                 value = VM.Zero
@@ -453,18 +468,18 @@ class Code(list):
                 raise ValueError("`%s` not defined in inputs" % vn)
 
         if tape is not None:
-            tape.init.update(init)
+            tape.init.update(init2)
 
         started = False
-        for i, (microcode, kwargs) in enumerate(microcodes):
+        for i, (microcode, kwargs) in enumerate(code):
             try:
                 r = microcode.invoke(self.vm, frontier, kwargs, tape, monitor)
             except Exception as e:
                 print("Failure in running `%s`" % microcode)
                 raise
             frontier.update(r)
-            future = self.microcodes[i+1:]
-            self._gc(frontier, future, vout, monitor)
+            future = code.microcodes[i+1:]
+            code._gc(frontier, future, vout, monitor)
 
         r = [frontier[vn] for vn in vout]
         if squeeze:
@@ -493,7 +508,7 @@ class Code(list):
         import graphviz
         graph = graphviz.Digraph(**kwargs)
 
-        VM._add_to_graph(graph, self._find_inputs(self.microcodes), self.microcodes)
+        VM._add_to_graph(graph, self._find_inputs(), self.microcodes)
 
         return graph
 
