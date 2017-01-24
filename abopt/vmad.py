@@ -86,6 +86,9 @@ class MicroCode(object):
 
         # copy in all arguments
         for an in self.argnames:
+            if self.gradient is not NotImplemented and an not in self.gradient.argnames:
+                # skip if thi is not used in gradient backtracing.
+                pass
             if an in self.ain + self.literals:
                 # replace argument with variable name
                 # then fetch it from the frontier.
@@ -190,7 +193,9 @@ class VM(object):
             Build model with this.
         """
         d = {}
-        for name, method in type(self).__dict__.items():
+        t = type(self)
+        for name in dir(t):
+            method = getattr(t, name)
             if isinstance(method, MicroCode):
                 d[name] = method
         MyCode = type("Code%s" % (type(self).__name__), (Code, ), d)
