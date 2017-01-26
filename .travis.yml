@@ -30,7 +30,7 @@ deploy:
       server: https://pypi.python.org/pypi
       user: "rainwoodman"
       password:
-          secure: "ymvhC9sArTgGROAdqb2bJkkB/szxak/rlSSMVC/mY3FSoees2mJuvlz9Q9sJo6w7yhOodTQe4kTh1j1kAqrLy4CxYqGiyTV9KZ/A6c1Pnj8tRQdOiXGVKdRPpAIqLNHE0RgFDpfDX4NRXo5Wsdd3FzmogLgYeII9Hr0tunoeJXkAnlDL3SWDqs+3Nea6t4F8rGpzHwechhWKMwZV967epR8r83f/3tjnA0L61OByPyl3Va1FhELoVNVobV99M89ApWyf3WhrkDT0HSpFUzAo+eSpo3c4eSqAYRLkvtuHJkZvl0IsMI4yE0jsEubJXpFG1c6X7Md9nZrgod5e1OSW4O/S9mdwdO8kN58k8z/SoDEgMAbkmMeVwxheWUXx+9wEqjvGWnzkQKPdpWlRGzol9Q6PV5VBJD84tE1kAWfYxupioCyKwXslgng1ynr4OsGikwMlWhEKY9MvaWyRXyGyeiBzlhbU7xf2ocaCu60ZeVK5+FY//aAmrGLdJ3LL7AT5M5OP8XSYDITfYzYA10SJ7JqCf3OQw5e6tYIEtRfFsrgmfSWhg8VY9yYxbTlMXImjdHnV6m26H83C/3mx6SFZeG4E8uCy4ovo0PtOIv086tPEEO1bkmDM4u3mNScz6dVHvvFhIDcEn/6EZpLljSv/lSVPCEF3ptHapkkGT4QVtFk="
+        secure: "FB22L78H9kZgru7DBgvSpxTLgrNsSsoavV9QgWdJzu+GSj0kecn6wcRPuUd31i5lIH1vUr9cK83pESiX7P+jhwgd3C3tApid938ARaDbvABLutD9v3eC+zmYfWAHs+wCvnUajfmMJ68bmKF3X07qS/+2qEU1kjL2JGNrMjmkHLd0D5vWL2WAOs2fjZgXya2Qkd4D45Cszx4ZqA7VYL/bhNKW+dNTn6IDjDQkMPVopG6Pj3EysCgYonWUt22brafyJjEBQ6mLmBxbij66vtFSKMqJ8qvsa4Ral74TmS5RvDKN8tFObRfmicNv0ajWeMuV7ivRc7CCp5Payx4iSWQVj0vhpkKfuoUyHI6VUPPw9jSirTaPdRsLw4Yo7JwVPFHGlqtUYfemPjq2u7gwA8wXetSW9HwU8tf2CH8IDP/1gpYFGPJNeaJexdwhE7axrH9xngFkrNRKXlnO7W4XJ1jNgRxPoRUWOnTxiquxkvCfpT3VbB1YwwlAXc6lUKeJfzskiep/IPbOcE/O23/QmQgm39Zr99i0L2mdRIc6lDN7/lT96O2eRsUNQ2A6cqMu39+5MfI8fO/mReu2Ln6HDK3Qen5jX9hCjGM6uO4Jq//EULYm1lPDTog+dtoiAwoyU/flJL9/SS2f7epUpZaixFv84bTFx+upk1SIn1eJLnMx04E="
       on:
         tags   : true
         condition : $TRAVIS_PYTHON_VERSION = "2.7"
