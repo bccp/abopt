@@ -1,5 +1,4 @@
 from __future__ import print_function
-import numpy
 import warnings
 import functools
 
@@ -549,7 +548,9 @@ def ZeroType():
     def __int__(self): return 0
     def __float__(self): return 0.0
     def __round__(self): return 0
-    def __array__(self): return numpy.array(0)
+    def __array__(self):
+        import numpy
+        return numpy.array(0)
     def __repr__(self): return "<ZERO>"
     dict = {}
     for name, value in locals().items():
