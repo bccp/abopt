@@ -30,7 +30,7 @@ class MicroCode(object):
         function.__name__ = "G:" + self.function.__name__
         self.gradient = microcode(gin, gout)(function)
         # allow the gradient with the same name as the original function.
-        return self
+        return self.gradient
 
     def __get__(self, instance, owner):
         """ As a class member, return the microcode,
