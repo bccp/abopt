@@ -394,7 +394,7 @@ class Code(list):
         self.defaults = {}
 
     def copy(self):
-        r = Code(self.vm)
+        r = self.vm.code()
         r.defaults.update(self.defaults)
         for microcode, kwargs in self.microcodes:
             r.append(microcode, kwargs)
