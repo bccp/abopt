@@ -110,8 +110,10 @@ class MicroCode(object):
             data = din[an]
             if an in self.aout and an in self.ain:
                 vn = kwargs.get(an, an)
+                # create a copy because we will taint the values.
+                # FIXME: only needed if we are recording to a tape.
                 if vn in din:
-                    data = vm.copy(data)
+                    data = vm.CopyVariable(data)
             vin.append(data)
 
         out = self.function(vm, *vin)
@@ -147,7 +149,7 @@ class VM(object):
         consisting of microcodes.
 
         Subclass VM to add more microcodes.
-        Override `copy` and `add` to support different types of
+        Override `CopyVariable` and `Add` to support different types of
         variables.
 
         Convention for gradient is to prepend `_`, e.g. `_x` is the gradient
@@ -164,25 +166,25 @@ class VM(object):
 
         >>> vm = VM()
         >>> code = vm.code()
-        >>> code.add(a='x', b='x', c='y')
+        >>> code.Add(a='x', b='x', c='y')
         >>> code.compute('y', {'x' : 10})
 
     """
 
     @microcode(ain=['a'], aout=['b'])
-    def copy(self, a): return 1.0 * a
+    def CopyVariable(self, a): return 1.0 * a
 
-    @copy.grad
-    def gcopy(self, _b): return _b
+    @CopyVariable.grad
+    def _(self, _b): return _b
 
     @microcode(ain=['a', 'b'], aout=['c'])
-    def add(self, a, b):
+    def Add(self, a, b):
         if a is VM.Zero: return b
         if b is VM.Zero: return a
         return a + b
 
-    @add.grad
-    def gadd(self, _c, _a, _b): return _c, _c
+    @Add.grad
+    def _(self, _c, _a, _b): return _c, _c
 
     def tape(self):
         return Tape()
@@ -205,14 +207,14 @@ class VM(object):
         """ Create a code object that backtraces the gradient of a previously
             recorded execution in `tape`.
 
-            The `add` microcode (None means `type(self).add`) reduces partial
+            The `Add` microcode (None means `type(self).Add`) reduces partial
             derivatives.
 
         """
         newinst = self.code()
 
         if add is None:
-            add = type(self).add
+            add = type(self).Add
 
         occurances = {}
 

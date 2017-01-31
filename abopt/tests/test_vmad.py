@@ -24,7 +24,7 @@ def test_booster():
     y = code.compute('y', {'i' : numpy.ones(1), 'q' : 1234}, tape)
     assert_array_equal(y, 6.0)
     print(tape)
-    gcode = vm.gradient(tape, add=Booster.add)
+    gcode = vm.gradient(tape, add=Booster.Add)
     print(gcode)
     _i = gcode.compute('_i', {'_y' : numpy.ones(1)}, monitor=print)
     assert_array_equal(_i, 6.0)
@@ -33,7 +33,7 @@ def test_booster():
     y = code.compute('y', {'i' : 1, 'q' : 1234}, tape)
     assert_array_equal(y, 6.0)
 
-    gcode = vm.gradient(tape, add=Booster.add)
+    gcode = vm.gradient(tape, add=Booster.Add)
     _i = gcode.compute('_i', {'_y' : 1})
     assert_array_equal(_i, 6.0)
 
@@ -100,7 +100,7 @@ def test_integrator():
         tape = vm.tape()
         x = code.compute('x', init, tape, monitor=print)
         print(tape)
-        gcode = vm.gradient(tape, add=Integrator.add)
+        gcode = vm.gradient(tape, add=Integrator.Add)
         print(gcode)
 
     #    ginit = {'^chi2' : 1.}
