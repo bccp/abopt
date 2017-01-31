@@ -18,6 +18,7 @@ def test_booster():
     code.boost(x='i', y='r1', factor=1.0)
     code.boost(x='r1', y='r2', factor=2.0)
     code.boost(x='r2', y='y', factor=3.0)
+    code = code.copy()
     print(code)
 
     tape = vm.tape()
