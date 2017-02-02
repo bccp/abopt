@@ -293,9 +293,11 @@ class VM(object):
 
         """
         source = {}
+        dest = {}
         sans = {}
         for vn in init:
             source[vn] = "#INIT"
+            dest[vn] = "#OUT"
 
         for i, record in enumerate(list):
             microcode, kwargs = record[0], record[1]
@@ -319,8 +321,10 @@ class VM(object):
                         attrs['label'] = vn
                         graph.edge(source[vn], str(i) + str(id(microcode)), **attrs)
 
+                    dest[vn] = str(i) + str(id(microcode))
+
                 if len(from_init) > 0:
-                    graph.node(str(i) + "#INIT", label="<<b>Init</b>>")
+                    graph.node(str(i) + "#INIT", label="<<b>#</b>>")
                     for vn in from_init:
                         graph.edge(str(i) + "#INIT", str(i) + str(id(microcode)), label=vn)
 
@@ -328,6 +332,13 @@ class VM(object):
                 vn = kwargs.get(an, an)
                 source[vn] = str(i) + str(id(microcode))
                 sans[vn] = an
+                dest[vn] = "#OUT"
+
+        # mark the potential output edges.
+        for vn, node in dest.items():
+            if node != "#OUT": continue
+            graph.node(source[vn] + "#OUT", label="<<b>#</b>>")
+            graph.edge(source[vn], source[vn] + "#OUT", label=vn)
 
     @microcode(ain=['x'], aout=['y'])
     def func(self, x, factor):
