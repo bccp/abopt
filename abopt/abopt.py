@@ -96,13 +96,15 @@ class State(dict):
     def __init__(self, optimizer, **kwargs):
         dict.__init__(self)
         self.update(kwargs)
+        if 'xnorm' not in kwargs:
+            self['xnorm'] = optimizer.dot(self['x'], self['x']) ** 0.5
         self.optimizer = optimizer
 
     def __str__(self):
         d = {}
         d['it'] = self['it']
         d['y'] = self['y']
-        d['xnorm'] = self.optimizer.dot(self['x'], self['x']) ** 0.5
+        d['xnorm'] = self['xnorm']
         d['gnorm'] = self['gnorm']
         d['fev'] = self['fev']
         d['gev'] = self['gev']
@@ -177,7 +179,7 @@ class LBFGS(Optimizer):
         use_steepest_descent = False
         converged_state = "NO"
 
-        state = State(self, x=x, y=val, dy=dy, g=g, gnorm=gnorm, xnorm=self.dot(x, x) ** 0.5,
+        state = State(self, x=x, y=val, dy=dy, g=g, gnorm=gnorm,
                       it=it, fev=fev, gev=gev, steepest_descent=use_steepest_descent, converged=converged_state)
         if monitor:
             monitor(state)
