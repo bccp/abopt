@@ -12,12 +12,12 @@ def find_version(path):
     raise RuntimeError("Version not found")
 
 setup(name="abopt", version=find_version("abopt/version.py"),
-      author="Grigor Aslanyan",
-      author_email="gr.aslanyan@gmail.com",
+      author="Grigor Aslanyan, Yu Feng, et al",
       maintainter="Yu Feng",
       maintainter_email="rainwoodman@gmail.com",
       description="Optimization of abstract data types in Python",
       zip_safe=True, # this should be pure python
       packages=["abopt", "abopt.tests"],
+      license='GPLv3',
       install_requires=['numpy'], # maybe not needed by the core, but we need numpy for testing
       )
