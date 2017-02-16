@@ -39,12 +39,19 @@ class parameter(object):
 class Optimizer(object):
     @parameter
     def tol(value=1e-6):
-        """Tolerance of objective"""
+        """Relative tolerance of change in objective. Terminate if dy < tol * y + atol"""
         assert value > 0
         return value
+
+    @parameter
+    def atol(value=0):
+        """Absolute tolerance of change objective. Terminate if dy < tol * y + atol """
+        assert value > 0
+        return value
+
     @parameter
     def gtol(value=1e-6):
-        """Tolerance of gradient"""
+        """Absolute tolerance of gradient. Terminate if gnorm < gtol """
         assert value >= 0
         return value
     @parameter
@@ -135,7 +142,8 @@ class GradientDescent(Optimizer):
                 monitor(state)
 
             if gnorm < self.gtol: break
-            if dy is not None and dy < self.tol: break
+            thresh = self.tol * y0 + self.atol
+            if dy is not None and dy < thresh: break
 
             # move to the next point
             x1 = self.addmul(x0, dx0, -self.gamma)
@@ -223,7 +231,8 @@ class LBFGS(Optimizer):
             fev += 1
             while True:
                 valmax = max(abs(val), abs(newval))
-                if abs(val - newval) / max(valmax, 1.0) < self.tol and val >= newval:
+                thresh = self.tol * max(valmax, 1.0) + self.atol
+                if abs(val - newval) < thresh and val >= newval:
                     break
                 if val - newval >= rate * c * zg:
                     break
@@ -245,10 +254,10 @@ class LBFGS(Optimizer):
             it += 1
             dy = abs(val - oldval)
             valmax = max(abs(val), abs(oldval))
-            ratio = dy / max(valmax, 1.0)
+            thresh = self.tol * max(valmax, 1.0) + self.atol
             min_iter = 10
 
-            if ratio < self.tol and it >= min_iter:
+            if dy < thresh and it >= min_iter:
                 converged_iters += 1
                 if converged_iters >= 3:
                     converged_state = "YES: Tolerance achieved"
