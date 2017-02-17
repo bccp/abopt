@@ -54,9 +54,19 @@ class Optimizer(object):
         """Absolute tolerance of gradient. Terminate if gnorm < gtol """
         assert value >= 0
         return value
+
     @parameter
     def maxsteps(value=1000):
         """Maximium  number of iterations"""
+        return int(value)
+
+    @parameter
+    def csteps(value=3):
+        """ number of iterations dy < threshold before confirming convergence """
+        return int(value)
+    @parameter
+    def minsteps(value=10):
+        """ minimum number of steps """
         return int(value)
 
     def copy(self, a):
@@ -123,6 +133,9 @@ class State(dict):
         return "Iteration %(it)d: y = %(y)g dy = %(dy)s fev = %(fev)d gev = %(gev)d gnorm = %(gnorm)g xnorm = %(xnorm)g" % d
 
 class GradientDescent(Optimizer):
+    """ GradientDescent ignores minsteps, csteps, tol and atol. It always run for maxsteps
+         -- Since there is no linear search we can never know about the convergence.
+    """
     @parameter
     def gamma(value=1e-3):
         """descent rate parameter"""
@@ -134,6 +147,7 @@ class GradientDescent(Optimizer):
         it = 0
         dy = None # initial it
         y0 = objective(x0)
+        cit = 0 # number of contiguous small dy steps
         while it < self.maxsteps:
             dx0 = gradient(x0)
             gnorm = self.dot(dx0, dx0) ** 0.5
@@ -142,8 +156,6 @@ class GradientDescent(Optimizer):
                 monitor(state)
 
             if gnorm < self.gtol: break
-            thresh = self.tol * y0 + self.atol
-            if dy is not None and dy < thresh: break
 
             # move to the next point
             x1 = self.addmul(x0, dx0, -self.gamma)
@@ -255,11 +267,10 @@ class LBFGS(Optimizer):
             dy = abs(val - oldval)
             valmax = max(abs(val), abs(oldval))
             thresh = self.tol * max(valmax, 1.0) + self.atol
-            min_iter = 10
 
-            if dy < thresh and it >= min_iter:
+            if dy < thresh and it >= self.minsteps:
                 converged_iters += 1
-                if converged_iters >= 3:
+                if converged_iters >= self.csteps:
                     converged_state = "YES: Tolerance achieved"
                     break
             else:
