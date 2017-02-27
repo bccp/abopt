@@ -1,6 +1,23 @@
 from __future__ import print_function
 import warnings
 import functools
+class LValue(object):
+    def __init__(self, vn, ns):
+        self.ns = ns
+        self.vn = vn
+
+    def __getattr__(self, attr):
+        return getattr(self[...], attr)
+
+    def __repr__(self):
+        return "LValue:%s" % self.vn
+
+    def __getitem__(self, index):
+        return self.ns[self.vn]
+
+    def __setitem__(self, index, value):
+        assert index in (0, Ellipsis, None)
+        self.ns[self.vn] = value
 
 class MicroCode(object):
     """ An object that represents a microcode.
@@ -23,6 +40,7 @@ class MicroCode(object):
         functools.update_wrapper(self, function)
 
     def grad(self, function):
+        """ Define the back-propagation gradient operator. """
         gout = ['_' + a for a in self.ain]
         gin  = ['_' + a for a in self.aout]
 
@@ -79,56 +97,60 @@ class MicroCode(object):
             return s
 
     def invoke(self, vm, frontier, kwargs, tape, monitor=None):
-        din = {}
+        tapein = {}
+        vin = []
+        dout = {}
+        oldkwargs = kwargs
+        kwargs = kwargs.copy()
 
         # copy in all arguments
         for an in self.argnames:
-            if self.gradient is not NotImplemented and an not in self.gradient.argnames:
-                # skip if thi is not used in gradient backtracing.
-                pass
             if an in self.ain:
                 # replace argument with variable name
                 # then fetch it from the frontier.
-                vn = kwargs.get(an, an)
+                vn = kwargs.pop(an, an)
                 if vn not in frontier:
                     raise ValueError("Argument `%s' of `%s` resolves to an undefined varabile `%s'" % (an, self, vn))
-                din[an] = frontier[vn]
+                data = frontier[vn]
+
+            #    if self.gradient is not NotImplemented and an in self.gradient.argnames:
+                tapein[an] = data
+
+                if an in self.aout:
+                    # create a copy, store to the output dict, for tainting the values.
+                    # FIXME: only needed if we are recording to a tape.
+                    lv = LValue('data', {})
+                    vm.CopyVariable(data, lv)
+                    data = lv.ns['data']
+                    # the value itself must allow inplace operations.
+                    dout[vn] = data
+                vin.append(data)
+            elif an in self.aout:
+                vn = kwargs.pop(an, an)
+                # out args, make a LValue for [...] assignments
+                # mixed inout is handled in above;
+                data = LValue(vn, dout)
+                vin.append(data)
             else:
                 # use the kwargs -- raise error if not found!
                 if an not in kwargs:
                     raise ValueError("Argument `%s' of `%s' could not be bound to a keyword argument" % (an, self))
-                din[an] = kwargs.get(an)
+                data = kwargs.pop(an)
+                tapein[an] = data
+                vin.append(data)
+
+        if len(kwargs) > 0:
+            raise ValueError("Bad keyword arguments : %s" % (','.join(kwargs.keys())))
 
         if tape is not None:
-            tape.append(self, kwargs, din)
+            tape.append(self, oldkwargs, tapein)
 
-        vin = []
-        for an in self.argnames:
-            data = din[an]
-            if an in self.aout and an in self.ain:
-                vn = kwargs.get(an, an)
-                # create a copy because we will taint the values.
-                # FIXME: only needed if we are recording to a tape.
-                if vn in din:
-                    data = vm.CopyVariable(data)
-            vin.append(data)
-
-        out = self.function(vm, *vin)
-
-        # zip the output arguments
-        if len(self.aout) == 1: out = [out]
-        dout = {}
-        for an, value in zip(self.aout, out):
-            dout[an] = value
-
-        r = {}
-        for an in self.aout:
-            vn = kwargs.get(an, an)
-            r[vn] = dout[an]
+        self.function(vm, *vin)
 
         if monitor:
-            monitor(self, din, dout, frontier, r)
-        return r
+            din = dict(zip(self.argnames, vin))
+            monitor(self, din, dout, frontier)
+        return dout
 
 def microcode(ain, aout):
     """ Declares a VM member function as a 'microcode'.
@@ -168,20 +190,24 @@ class VM(object):
 
     """
 
-    @microcode(ain=['a'], aout=['b'])
-    def CopyVariable(self, a): return 1.0 * a
+    @microcode(ain=['x'], aout=['y'])
+    def CopyVariable(self, x, y):
+        y[...] = 1.0 * x
 
     @CopyVariable.grad
-    def _(self, _b): return _b
+    def _(self, _y, _x):
+        _y[...] = _x
 
-    @microcode(ain=['a', 'b'], aout=['c'])
-    def Add(self, a, b):
-        if a is VM.Zero: return b
-        if b is VM.Zero: return a
-        return a + b
+    @microcode(ain=['x1', 'x2'], aout=['y'])
+    def Add(self, x1, x2, y):
+        if x1 is VM.Zero: y[...] = x2
+        if x2 is VM.Zero: y[...] = x1
+        y[...] = x1 + x2
 
     @Add.grad
-    def _(self, _c, _a, _b): return _c, _c
+    def _(self, _y, _x1, _x2):
+        _x1[...] = _y
+        _x2[...] = _y
 
     def tape(self):
         return Tape()
@@ -250,9 +276,13 @@ class VM(object):
                         # rename the input.
                         emit_add("", '_' + kwargs.get(an, an), din['_' + an])
 
+            # remove unused kwargs
+            din = dict([(key, value) for key, value in din.items()
+                        if key in microcode.gradient.argnames])
+
             newinst.append(microcode.gradient, din)
 
-            # outputs
+            # add partial derivatives
             for an in microcode.ain:
                 value = record[an]
                 uid = tape.get_uid(value)
@@ -430,6 +460,15 @@ class Code(list):
                 live.add(vn)
         return list(live)
 
+    def _find_outputs(self):
+        """ find outputs of a code segment; even if they've been used as an input """
+        live = set()
+        for microcode, kwargs in self.microcodes:
+            for an in microcode.aout:
+                vn = kwargs.get(an, an)
+                live.add(vn)
+        return list(live)
+
     def _optimize(self, vout):
         live = set(vout)
         code = self.vm.code()
@@ -463,8 +502,16 @@ class Code(list):
             squeeze = False
 
         code = self._optimize(vout)
+        outputs = code._find_outputs()
+        for vn in vout:
+            if vn not in outputs:
+                # the optimization has killed some outputs
+                # the code has a bug, disable optimization to get an error message.
+                code = self.copy()
+                break
 
         inputs = code._find_inputs()
+
         frontier = {}
 
         init2 = {}

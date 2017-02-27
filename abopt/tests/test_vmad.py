@@ -9,12 +9,12 @@ def test_booster():
             self.q = q
 
         @VM.microcode(ain=['x'], aout=['y'])
-        def boost(self, x, factor):
-            return x * factor * self.q
+        def boost(self, x, y, factor):
+            y[...] = x * factor * self.q
 
         @boost.grad
-        def gboost(self, _y, factor):
-            return _y * factor
+        def gboost(self, _y, _x, factor):
+            _x[...] = _y * factor
 
     vm = Booster(q=1.0)
     code = vm.code()
@@ -22,14 +22,14 @@ def test_booster():
     code.boost(x='r1', y='r2', factor=2.0)
     code.boost(x='r2', y='y', factor=3.0)
     code = code.copy()
-    print(code)
+    print('code', code)
 
     tape = vm.tape()
     y = code.compute('y', {'i' : numpy.ones(1)}, tape)
     assert_array_equal(y, 6.0)
-    print(tape)
+    print('tape', tape)
     gcode = vm.gradient(tape, add=Booster.Add)
-    print(gcode)
+    print('gcode', gcode)
     _i = gcode.compute('_i', {'_y' : numpy.ones(1)}, monitor=print)
     assert_array_equal(_i, 6.0)
 
@@ -46,38 +46,34 @@ def test_integrator():
         @VM.microcode(ain=['v', 'a'], aout=['v'])
         def kick(self, v, a):
             v[...] += a * 0.01
-            return v
+
         @kick.grad
-        def gkick(self, v, a, _v):
-            _a = 0.01 * _v
-            return _v, _a
+        def _(self, _v, _a):
+            _a[...] = 0.01 * _v
 
         @VM.microcode(ain=['x', 'v'], aout=['x'])
         def drift(self, x, v):
             x[...] += v * 0.01
-            return x
 
         @drift.grad
-        def gdrift(self, x, v, _x):
-            _v = 0.01 * _x
-            return _x, _v
+        def _(self, _x, _v):
+            _v[...] = 0.01 * _x
 
         @VM.microcode(ain=['x'], aout=['a'])
-        def force(self, x):
-            return -x
+        def force(self, x, a):
+            a[...] = -x
 
         @force.grad
-        def gforce(self, x, _a):
-            _x = - _a
-            return _x
+        def _(self, _a, _x):
+            _x[...] = - _a
 
         @VM.microcode(ain=['x'], aout=['chi2'])
-        def reduce(self, x):
-            return (x ** 2).sum()
+        def reduce(self, x, chi2):
+            chi2[...] = (x ** 2).sum()
 
         @reduce.grad
-        def greduce(self, x, _chi2):
-            return 2 * x * _chi2
+        def _(self, x, _chi2, _x):
+            _x[...] = 2 * x * _chi2
 
     vm = Integrator()
     tape = vm.tape()
@@ -91,7 +87,7 @@ def test_integrator():
         code.kick()
 
     #vm.push('reduce')
-
+    print(code)
     def objective(x, v):
         init = {'x' : x, 'v' : v}
         tape = vm.tape()
