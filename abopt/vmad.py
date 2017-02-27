@@ -196,7 +196,7 @@ class VM(object):
 
     @CopyVariable.grad
     def _(self, _y, _x):
-        _y[...] = _x
+        _x[...] = _y
 
     @microcode(ain=['x1', 'x2'], aout=['y'])
     def Add(self, x1, x2, y):
