@@ -5,15 +5,18 @@ import numpy
 
 def test_booster():
     class Booster(VM):
-        @VM.microcode(ain=['x'], aout=['y'], literals=['q'])
-        def boost(self, x, q, factor):
-            return x * factor
+        def __init__(self, q):
+            self.q = q
+
+        @VM.microcode(ain=['x'], aout=['y'])
+        def boost(self, x, factor):
+            return x * factor * self.q
 
         @boost.grad
         def gboost(self, _y, factor):
             return _y * factor
 
-    vm = Booster()
+    vm = Booster(q=1.0)
     code = vm.code()
     code.boost(x='i', y='r1', factor=1.0)
     code.boost(x='r1', y='r2', factor=2.0)
@@ -22,7 +25,7 @@ def test_booster():
     print(code)
 
     tape = vm.tape()
-    y = code.compute('y', {'i' : numpy.ones(1), 'q' : 1234}, tape)
+    y = code.compute('y', {'i' : numpy.ones(1)}, tape)
     assert_array_equal(y, 6.0)
     print(tape)
     gcode = vm.gradient(tape, add=Booster.Add)

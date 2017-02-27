@@ -8,11 +8,10 @@ class MicroCode(object):
         Mostly a python function with some additional introspection, marking
         the input and output variables.
     """
-    def __init__(self, function, ain, aout, literals):
+    def __init__(self, function, ain, aout):
         self.function = function
         self.ain = ain
         self.aout = aout
-        self.literals = literals
         self.argnames = function.__code__.co_varnames[1:function.__code__.co_argcount]
         for an in ain:
             if not an in self.argnames:
@@ -58,7 +57,7 @@ class MicroCode(object):
             r = []
             for an in self.argnames:
                 vn = kwargs.get(an, an)
-                if an not in self.ain + self.aout + self.literals:
+                if an not in self.ain + self.aout:
                     vn = "Ext:%s" % type(vn).__name__
                     io = 'p'
                 else:
@@ -67,8 +66,6 @@ class MicroCode(object):
                         io += 'i'
                     if an in self.aout:
                         io += 'o'
-                    if an in self.literals:
-                        io += 'l'
                 r.append("%s:%s = %s" % (io, an, vn))
             return delim.join(r)
         name = str(self)
@@ -89,7 +86,7 @@ class MicroCode(object):
             if self.gradient is not NotImplemented and an not in self.gradient.argnames:
                 # skip if thi is not used in gradient backtracing.
                 pass
-            if an in self.ain + self.literals:
+            if an in self.ain:
                 # replace argument with variable name
                 # then fetch it from the frontier.
                 vn = kwargs.get(an, an)
@@ -133,7 +130,7 @@ class MicroCode(object):
             monitor(self, din, dout, frontier, r)
         return r
 
-def microcode(ain, aout, literals=[]):
+def microcode(ain, aout):
     """ Declares a VM member function as a 'microcode'.
         microcode is the building block for Code objects,
         which can be computed and differentiated.
@@ -141,7 +138,7 @@ def microcode(ain, aout, literals=[]):
         See MicroCode. 
     """
     def decorator(func):
-        return MicroCode(func, ain, aout, literals)
+        return MicroCode(func, ain, aout)
     return decorator
 
 class VM(object):
@@ -511,7 +508,7 @@ class Code(list):
         used = []
         used.extend(vout)
         for microcode, kwargs in future:
-            for an in microcode.ain + microcode.literals:
+            for an in microcode.ain:
                 vn = kwargs.get(an, an)
                 used.append(vn)
 
