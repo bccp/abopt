@@ -16,7 +16,8 @@ class LValue(object):
         return self.ns[self.vn]
 
     def __setitem__(self, index, value):
-        assert index in (0, Ellipsis, None)
+#        assert index in (0, Ellipsis, None)
+        # anything should work -- to support [:]
         self.ns[self.vn] = value
 
 class MicroCode(object):
@@ -25,7 +26,7 @@ class MicroCode(object):
         Mostly a python function with some additional introspection, marking
         the input and output variables.
     """
-    def __init__(self, function, ain, aout):
+    def __init__(self, function, ain, aout, is_programme=False):
         self.function = function
         self.ain = ain
         self.aout = aout
@@ -37,6 +38,7 @@ class MicroCode(object):
                        % (an, str(self.function))
                 )
         self.gradient = NotImplemented
+        self.is_programme = is_programme
         functools.update_wrapper(self, function)
 
     def grad(self, function):
@@ -55,13 +57,25 @@ class MicroCode(object):
             As an instance member of Code, returns a method to add to the code.
         """
         if instance is not None:
-            if isinstance(instance, Code):
+            if self.is_programme:
+                # programme is directly ran.
                 @functools.wraps(self.function)
-                def method(**kwargs):
-                    instance.append(self, kwargs)
-                return method
-            return self.function.__get__(instance, owner)
-        return self
+                def method(_self, *args, **kwargs):
+                    for a in self.ain + self.aout:
+                        kwargs.setdefault(a, a)
+                    return self.function(_self, *args, **kwargs)
+                return method.__get__(instance, owner)
+            else:
+                if isinstance(instance, Code):
+                    @functools.wraps(self.function)
+                    def method(**kwargs):
+                        instance.append(self, kwargs)
+                    return method
+                else:
+                    return self.function.__get__(instance, owner)
+        else:
+            # class member
+            return self
 
     def __repr__(self):
         return self.function.__name__
@@ -136,14 +150,13 @@ class MicroCode(object):
                 if an not in kwargs:
                     raise ValueError("Argument `%s' of `%s' could not be bound to a keyword argument" % (an, self))
                 data = kwargs.pop(an)
-                tapein[an] = data
                 vin.append(data)
 
         if len(kwargs) > 0:
             raise ValueError("Bad keyword arguments : %s" % (','.join(kwargs.keys())))
 
         if tape is not None:
-            tape.append(self, oldkwargs, tapein)
+            tape.record(self, oldkwargs, vin)
 
         self.function(vm, *vin)
 
@@ -152,6 +165,11 @@ class MicroCode(object):
             monitor(self, din, dout, frontier)
         return dout
 
+def programme(ain, aout):
+    def decorator(func):
+        return MicroCode(func, ain, aout, is_programme=True)
+    return decorator
+    
 def microcode(ain, aout):
     """ Declares a VM member function as a 'microcode'.
         microcode is the building block for Code objects,
@@ -646,4 +664,5 @@ Zero = ZeroType()
 
 VM.Zero = Zero
 VM.microcode = staticmethod(microcode)
+VM.programme = staticmethod(programme)
 
