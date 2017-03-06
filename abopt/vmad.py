@@ -80,15 +80,16 @@ class MicroCode(object):
     def __repr__(self):
         return self.function.__name__
 
-    def to_label(self, kwargs, html=False):
+    def to_label(self, kwargs, d={}, html=False):
         if html:
             delim = '<BR ALIGN="CENTER"/>'
         else:
             delim = " "
-        def format(kwargs):
+        def format(kwargs, d):
             r = []
             for an in self.argnames:
                 vn = kwargs.get(an, an)
+                uid, value = d.get(an, (-1, None))
                 if an not in self.ain + self.aout:
                     vn = "Ext:%s" % type(vn).__name__
                     io = 'p'
@@ -98,21 +99,25 @@ class MicroCode(object):
                         io += 'i'
                     if an in self.aout:
                         io += 'o'
-                r.append("%s:%s = %s" % (io, an, vn))
+                if uid == -1:
+                    s = "%s:%s = %s" % (io, an, vn)
+                else:
+                    s = "%s:%s = %s [%08X]" % (io, an, vn, uid)
+                r.append(s)
             return delim.join(r)
         name = str(self)
         if html:
             name = "<b>" + name + "</b>"
 
-        s = delim.join([name, format(kwargs)])
+        s = delim.join([name, format(kwargs, d)])
         if html:
             return "<" + s + ">"
         else:
             return s
 
     def invoke(self, vm, frontier, kwargs, tape, monitor=None):
-        tapein = {}
         vin = []
+        tapein = []
         dout = {}
         oldkwargs = kwargs
         kwargs = kwargs.copy()
@@ -127,8 +132,7 @@ class MicroCode(object):
                     raise ValueError("Argument `%s' of `%s` resolves to an undefined varabile `%s'" % (an, self, vn))
                 data = frontier[vn]
 
-            #    if self.gradient is not NotImplemented and an in self.gradient.argnames:
-                tapein[an] = data
+                tapein.append(data)
 
                 if an in self.aout:
                     # create a copy, store to the output dict, for tainting the values.
@@ -145,18 +149,20 @@ class MicroCode(object):
                 # mixed inout is handled in above;
                 data = LValue(vn, dout)
                 vin.append(data)
+                tapein.append(data)
             else:
                 # use the kwargs -- raise error if not found!
                 if an not in kwargs:
                     raise ValueError("Argument `%s' of `%s' could not be bound to a keyword argument" % (an, self))
                 data = kwargs.pop(an)
                 vin.append(data)
+                tapein.append(data)
 
         if len(kwargs) > 0:
             raise ValueError("Bad keyword arguments : %s" % (','.join(kwargs.keys())))
 
         if tape is not None:
-            tape.record(self, oldkwargs, vin)
+            tape.record(self, oldkwargs, tapein)
 
         self.function(vm, *vin)
 
@@ -270,7 +276,8 @@ class VM(object):
             din = {}
 
             din.update(kwargs)
-            din.update(record)
+            for an, (uid, value) in record.items():
+                din[an] = value
 
             # inputs
             for an in microcode.aout:
@@ -280,18 +287,19 @@ class VM(object):
                 # need to rename to avoid accidentally overwrite
                 # a finished gradient
                 din['_' + an] = '#partial#_' + kwargs.get(an, an)
-                value = record[an]
-                if tape.get_refcount(value) == 1:
+                uid, value = record[an]
+                # print(an, '%0x' % uid, tape.get_refcount(uid), occurances.get(uid, 0))
+                if tape.get_refcount(uid) == 1:
                     # direct overwriting is OK. no partials.
                     din['_' + an] = '_' + kwargs.get(an, an)
-                elif occurances.get(tape.get_uid(value), 0) == 0:
+                elif occurances.get(uid, 0) == 0:
                     # first occurance, OK to overwrite?
                     # if the tape has extra operations this may overwrite a calculated gradient with
                     # a incomplete gradient.
                     din['_' + an] = '_' + kwargs.get(an, an)
                 else:
                     if an in microcode.aout:
-                        # rename the input.
+                        # rename the input for we are looking at a inplace operation.
                         emit_add("", '_' + kwargs.get(an, an), din['_' + an])
 
             # remove unused kwargs
@@ -299,15 +307,14 @@ class VM(object):
                         if key in microcode.gradient.argnames])
 
             newinst.append(microcode.gradient, din)
-
             # add partial derivatives
             for an in microcode.ain:
-                value = record[an]
-                uid = tape.get_uid(value)
+                uid, value = record[an]
+
                 oc = occurances.get(uid, 0)
                 occurances[uid] = oc + 1
 
-                if tape.get_refcount(value) > 1:
+                if tape.get_refcount(uid) > 1:
                     reduceto = '_' + kwargs.get(an, an)
                     partial = din['_' + an]
                     if oc > 0:
@@ -321,8 +328,8 @@ class VM(object):
                 else:
                     # result already in right place
                     pass
-        for id in occurances:
-            if tape._refcount[id] != occurances[id]:
+        for uid in occurances:
+            if tape._refcount[uid] != occurances[uid]:
                 raise RuntimeError("FIXME: make this error more informative. Some gradients remain not fully computed.")
         inputs = newinst._find_inputs()
         for vin in inputs:
@@ -408,23 +415,28 @@ class Tape(list):
 
     def __str__(self):
         r = '-- Inputs (%08X)----\n' % id(self)
-        r += '\n'.join([microcode.to_label(kwargs) for microcode, kwargs, d in self ])
+        r += '\n'.join([microcode.to_label(kwargs, d) for microcode, kwargs, d in self ])
         r += '\n'
         r += '-- Refcounts ----\n'
         r += ' '.join(["%08X : %d" % refcount for refcount in self._refcount.items()])
         return r
 
-    def get_uid(self, value):
-        return id(value)
-
-    def get_refcount(self, value):
-        uid = id(value)
+    def get_refcount(self, uid):
         return self._refcount.get(uid, 0)
 
-    def append(self, microcode, kwargs, din):
+    def record(self, microcode, kwargs, vin):
         """ add a record to the tape. Record is the argument name and the value. """
-        for an, value in din.items():
+        din = {}
+        for an, value in zip(microcode.argnames, vin):
             uid = id(value)
+            if an in microcode.gradient.argnames:
+                # need to store tha value
+                din[an] = (uid, value)
+            else:
+                # only need the uniq id
+                # can't skip the value because if it is skipped python
+                # starts to recycle ids. Need a fix for this.
+                din[an] = (uid, value)
             self._refcount[uid] = self._refcount.get(uid, 0) + 1
         list.append(self, (microcode, kwargs, din))
 

@@ -108,7 +108,7 @@ def test_integrator():
         r = gcode.compute(['_x', '_v'], ginit, monitor=print)
         return r
 
-    x0 = numpy.ones(1024) 
+    x0 = numpy.ones(3) 
     v0 = numpy.zeros_like(x0)
     eps = numpy.zeros_like(x0)
 
