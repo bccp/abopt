@@ -37,19 +37,20 @@ class MicroCode(object):
     "argument `%s` of ain in microcode decorator is not declared by function `%s`"
                        % (an, str(self.function))
                 )
-        self.gradient = NotImplemented
+        self.vjp = NotImplemented
         self.is_programme = is_programme
         functools.update_wrapper(self, function)
 
-    def grad(self, function):
+    def defvjp(self, function):
         """ Define the back-propagation gradient operator. """
         gout = ['_' + a for a in self.ain]
         gin  = ['_' + a for a in self.aout]
 
         function.__name__ = "G:" + self.function.__name__
-        self.gradient = microcode(gin, gout)(function)
+        self.vjp = microcode(gin, gout)(function)
         # allow the gradient with the same name as the original function.
-        return self.gradient
+        return self.vjp
+    grad = defvjp
 
     def __get__(self, instance, owner):
         """ As a class member, return the microcode,
@@ -218,7 +219,7 @@ class VM(object):
     def CopyVariable(self, x, y):
         y[...] = 1.0 * x
 
-    @CopyVariable.grad
+    @CopyVariable.defvjp
     def _(self, _y, _x):
         _x[...] = _y
 
@@ -228,7 +229,7 @@ class VM(object):
         if x2 is VM.Zero: y[...] = x1
         y[...] = x1 + x2
 
-    @Add.grad
+    @Add.defvjp
     def _(self, _y, _x1, _x2):
         _x1[...] = _y
         _x2[...] = _y
@@ -304,9 +305,9 @@ class VM(object):
 
             # remove unused kwargs
             din = dict([(key, value) for key, value in din.items()
-                        if key in microcode.gradient.argnames])
+                        if key in microcode.vjp.argnames])
 
-            newinst.append(microcode.gradient, din)
+            newinst.append(microcode.vjp, din)
             # add partial derivatives
             for an in microcode.ain:
                 uid, value = record[an]
@@ -398,7 +399,7 @@ class VM(object):
         y = factor * x
         return y
 
-    @func.grad
+    @func.defvjp
     def gfunc(self, x, factor, _y):
         _x = factor * _y
         return _x
@@ -429,7 +430,7 @@ class Tape(list):
         din = {}
         for an, value in zip(microcode.argnames, vin):
             uid = id(value)
-            if an in microcode.gradient.argnames:
+            if an in microcode.vjp.argnames:
                 # need to store tha value
                 din[an] = (uid, value)
             else:
