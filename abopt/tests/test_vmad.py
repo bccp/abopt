@@ -1,126 +1,100 @@
 from __future__ import print_function
-from abopt.vmad import VM
+from abopt.vmad import VM, microcode, programme, Zero, Tape
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
 import numpy
 
-def test_booster():
-    class Booster(VM):
-        def __init__(self, q):
-            self.q = q
+class TestVM(VM):
+    @microcode(ain=['x'], aout=['y'])
+    def unitary(self, x, y, factor):
+        y[...] = x * factor
+    @unitary.defvjp
+    def _(self, _x, _y, factor):
+        _x[...] = _y * factor
+    @microcode(ain=['x1', 'x2'], aout=['y'])
+    def binary(self, x1, x2, y):
+        y[...] = x1 + x2
+    @binary.defvjp
+    def _(self, _x1, _x2, _y):
+        _x1[...] = _y
+        _x2[...] = _y
 
-        @VM.microcode(ain=['x'], aout=['y'])
-        def boost(self, x, y, factor):
-            y[...] = x * factor * self.q
+    @programme(ain=['u'], aout=['v'])
+    def batch(self, u, v):
+        self.binary(u, u, v)
 
-        @boost.grad
-        def gboost(self, _y, _x, factor):
-            _x[...] = _y * factor
-
-    vm = Booster(q=1.0)
+def test_single_compute():
+    vm = TestVM()
     code = vm.code()
-    code.boost(x='i', y='r1', factor=1.0)
-    code.boost(x='r1', y='r2', factor=2.0)
-    code.boost(x='r2', y='y', factor=3.0)
-    code = code.copy()
-    print('code', code)
+    code.unitary(x='a', y='b', factor=3.0)
+    b = code.compute('b', {'a' : 1.0})
+    assert_array_equal(b, 3.0)
 
-    tape = vm.tape()
-    y = code.compute('y', {'i' : numpy.ones(1)}, tape)
-    assert_array_equal(y, 6.0)
-    print('tape', tape)
-    gcode = vm.gradient(tape, add=Booster.Add)
-    print('gcode', gcode)
-    _i = gcode.compute('_i', {'_y' : numpy.ones(1)}, monitor=print)
-    assert_array_equal(_i, 6.0)
-
-    tape = vm.tape()
-    y = code.compute('y', {'i' : 1, 'q' : 1234}, tape)
-    assert_array_equal(y, 6.0)
-
-    gcode = vm.gradient(tape, add=Booster.Add)
-    _i = gcode.compute('_i', {'_y' : 1})
-    assert_array_equal(_i, 6.0)
-
-def test_integrator():
-    class Integrator(VM):
-        @VM.microcode(ain=['v', 'a'], aout=['v'])
-        def kick(self, v, a):
-            v[...] += a * 0.01
-
-        @kick.grad
-        def _(self, _v, _a):
-            _a[...] = 0.01 * _v
-
-        @VM.microcode(ain=['x', 'v'], aout=['x'])
-        def drift(self, x, v):
-            x[...] += v * 0.01
-
-        @drift.grad
-        def _(self, _x, _v):
-            _v[...] = 0.01 * _x
-
-        @VM.microcode(ain=['x'], aout=['a'])
-        def force(self, x, a):
-            a[...] = -x
-
-        @force.grad
-        def _(self, _a, _x):
-            _x[...] = - _a
-
-        @VM.microcode(ain=['x'], aout=['chi2'])
-        def reduce(self, x, chi2):
-            chi2[...] = (x ** 2).sum()
-
-        @reduce.grad
-        def _(self, x, _chi2, _x):
-            _x[...] = 2 * x * _chi2
-
-    vm = Integrator()
-    tape = vm.tape()
+def test_single_gradient():
+    vm = TestVM()
     code = vm.code()
-    code.force()
-    for i in range(2):
-        code.kick()
-        code.drift()
-        code.drift()
-        code.force()
-        code.kick()
+    code.unitary(x='a', y='b', factor=3.0)
+    b, _a = code.compute_with_gradient(['b', '_a'], {'a' : 1.0}, {'_b': 1.0})
+    assert_array_equal(b, 3.0)
+    assert_array_equal(_a, 3.0)
 
-    #vm.push('reduce')
-    print(code)
-    def objective(x, v):
-        init = {'x' : x, 'v' : v}
-        tape = vm.tape()
-        x = code.compute('x', init, tape)
-        chi2 = (x ** 2).sum()
-        return chi2
+def test_nested_gradient():
+    vm = TestVM()
+    code = vm.code()
+    code.unitary(x='a', y='b', factor=3.0)
+    code.unitary(x='b', y='c', factor=3.0)
+    c = code.compute('c', {'a' : 1.0})
+    assert_array_equal(c, 9.0)
 
-    def gradient(x, v):
-        init = {'x' : x, 'v' : v}
-        tape = vm.tape()
-        x = code.compute('x', init, tape, monitor=print)
-        print(tape)
-        gcode = vm.gradient(tape, add=Integrator.Add)
-        print(gcode)
+    _a = code.compute_with_gradient('_a', {'a' : 1.0}, {'_c': 1.0})
+    c, _a = code.compute_with_gradient(['c', '_a'], {'a' : 1.0}, {'_c': 1.0})
 
-    #    ginit = {'^chi2' : 1.}
-        ginit = {'_x' : 2 * x}
-        r = gcode.compute(['_x', '_v'], ginit, monitor=print)
-        return r
+    assert_array_equal(c, 9.0)
+    assert_array_equal(_a, 9.0)
 
-    x0 = numpy.ones(3) 
-    v0 = numpy.zeros_like(x0)
-    eps = numpy.zeros_like(x0)
+def test_partial_gradient():
+    vm = TestVM()
+    code = vm.code()
+    code.unitary(x='a', y='b1', factor=3.0)
+    code.unitary(x='a', y='b2', factor=3.0)
+    code.unitary(x='a', y='b3', factor=3.0)
+    code.unitary(x='a', y='b4', factor=3.0)
+    code.binary(x1='b1', x2='b2', y='c1')
+    code.binary(x1='b3', x2='b4', y='c2')
+    code.binary(x1='c1', x2='c2', y='d')
 
-    g_x, g_v = gradient(x0, v0)
+    d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
+    assert_array_equal(d, 12.0)
+    gradient = vm.gradient(tape)
 
-    eps[0] = 1e-7
-    chi0 = objective(x0 - eps, v0)
-    chi1 = objective(x0 + eps, v0)
-    numgx = (chi1 - chi0) / (2 * eps[0])
-    chi0 = objective(x0, v0 - eps)
-    chi1 = objective(x0, v0 + eps)
-    numgv = (chi1 - chi0) / (2 * eps[0])
-    assert_allclose(
-        [g_x[0], g_v[0]],
-        [numgx, numgv], rtol=1e-3)
+    d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})
+
+    assert_array_equal(d, 12.0)
+    assert_array_equal(_a, 12.0)
+
+
+def test_inplace_gradient():
+    vm = TestVM()
+    code = vm.code()
+    code.unitary(x='a', y='a', factor=3.0)
+    code.unitary(x='a', y='b1', factor=3.0)
+    code.unitary(x='a', y='b2', factor=3.0)
+    code.binary(x1='b1', x2='b2', y='b1')
+    code.unitary(x='b1', y='d', factor=3.0)
+
+    d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
+    assert_array_equal(d, 54.0)
+    gradient = vm.gradient(tape)
+
+    d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})
+
+    assert_array_equal(d, 54.0)
+    assert_array_equal(_a, 54.0)
+
+
+def test_programme():
+    vm = TestVM()
+    code = vm.code()
+    code.batch(u='a', v='d')
+    d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
+    assert_array_equal(d, 2.0)
+    print(tape)
