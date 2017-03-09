@@ -7,6 +7,10 @@ logger = logging.getLogger("VMAD")
 _logging_handler = logging.StreamHandler()
 logger.addHandler(_logging_handler)
 
+# TODO:
+# Add visualization
+# Optimization, removing unused instructions from code segment
+
 class LValue(object):
     def __init__(self, name, ns):
         self.ns = ns
@@ -18,11 +22,13 @@ class LValue(object):
     def __setitem__(self, index, value): self.ns[self.name] = value
 
 class Instruction(object):
-    def __init__(self, body, ain, aout):
+    def __init__(self, body, ain, aout, argnames=None):
         self.body = body
         self.ain = ain
         self.aout = aout
-        self.argnames = body.__code__.co_varnames[1:body.__code__.co_argcount]
+        if argnames is None:
+            argnames = body.__code__.co_varnames[1:body.__code__.co_argcount]
+        self.argnames = argnames
         for an in ain:
             if not an in self.argnames:
                 raise ValueError(
@@ -30,6 +36,17 @@ class Instruction(object):
                        % (an, str(self.body))
                 )
         functools.update_wrapper(self, body)
+
+    def defvjp(self, body):
+        """ Define the back-propagation gradient operator. """
+        gout = ['_' + a for a in self.ain]
+        gin  = ['_' + a for a in self.aout]
+
+        body.__name__ = "G:" + self.body.__name__
+        self.vjp = Primitive(body, gin, gout)
+        # allow the gradient with the same name as the original body.
+        return self.vjp
+
 
     def __repr__(self):
         return self.body.__name__
@@ -40,6 +57,9 @@ class Instruction(object):
         return node
 
 class Variable(object):
+    """ if the same variable name is modified we inc version.
+        this happens as Variable mentioned in Code as O/IOArgument.
+    """
     def __init__(self, name, version):
         self.name = name
         self.version = version
@@ -89,6 +109,8 @@ class Node(object):
             self.args.append(var)
         if len(kwargs) > 0:
             raise ValueError("additional kwargs are found: %s" % list(kwargs.keys()))
+    def copy(self):
+        return type(self)(self.engine, self.instr, self.kwargs)
 
     def bind(self, frontier, results):
         """ bind args to objects in frontier, or LValues """
@@ -106,31 +128,46 @@ class Node(object):
     def __repr__(self):
         return "%s(%s)" % (self.instr, self.args)
 
+class CodeSegNode(Node):
+    def __init__(self, engine, instr, kwargs):
+        Node.__init__(self, engine, instr, kwargs)
+
+    def copy(self):
+        return Node.copy(self)
+
+    def _invoke(self, codeseg, frontier, return_tape=False):
+        aout = [ arg.name for arg in self.args
+                if isinstance(arg, (OArgument, IOArgument))]
+        vout = [ arg.value.name for arg in self.args
+                if isinstance(arg, (OArgument, IOArgument))]
+        init = {}
+        if return_tape:
+            print('----', self.args, frontier)
+        for arg in self.args:
+            if isinstance(arg, (IArgument, IOArgument)):
+                init[arg.name] = frontier[arg.value.name]
+
+        out = codeseg.compute(aout, init, return_tape=return_tape)
+        if return_tape:
+            out, tape = out
+            return dict(zip(vout, out)), tape
+        else:
+            return dict(zip(vout, out))
+
 class Primitive(Instruction):
     def __init__(self, body, ain, aout):
         Instruction.__init__(self, body, ain, aout)
-        self.vjp = NotImplemented
-
-    def defvjp(self, body):
-        """ Define the back-propagation gradient operator. """
-        gout = ['_' + a for a in self.ain]
-        gin  = ['_' + a for a in self.aout]
-
-        body.__name__ = "G:" + self.body.__name__
-        self.vjp = Primitive(body, gin, gout)
-        # allow the gradient with the same name as the original body.
-        return self.vjp
 
     class NodeType(Node):
         def __init__(self, engine, instr, kwargs):
             Node.__init__(self, engine, instr, kwargs)
 
         def copy(self):
-            node = NodeType(engine, instr, kwargs)
+            node = Node.copy(self)
             return node
 
         def invoke(self, frontier):
-            logger.info("%s invoked" % (self))
+            logger.info("Invoke %s" % (self))
             out = {}
             bound = self.bind(frontier, out)
             self.instr.body(self.engine, *bound)
@@ -138,29 +175,64 @@ class Primitive(Instruction):
 
 def primitive(ain, aout): return lambda body: Primitive(body, ain, aout)
 
+class ProgrammeVJP(Instruction):
+    def __init__(self, programme):
+        gout = ['_' + a for a in programme.ain]
+        gin  = ['_' + a for a in programme.aout]
+        ex = [a for a in programme.argnames if a not in programme.aout + programme.ain]
+
+        body = lambda : None
+        body.__name__ = "G:" + programme.body.__name__
+        argnames = list(set(gin + gout + programme.ain + ex))
+        Instruction.__init__(self, body, gin, gout, argnames=argnames)
+
+    def create_vjp_node(self, programme_node, d, kwargs):
+        node = self.create_node(programme_node.engine, kwargs)
+        node.create_codeseg = lambda : programme_node.gradient(d)
+        return node
+
+    class NodeType(CodeSegNode):
+        def __init__(self, engine, instr, kwargs):
+            Node.__init__(self, engine, instr, kwargs)
+
+        def copy(self):
+            node = CodeSegNode.copy(self)
+            node.create_codeseg = create_codeseg
+            return
+
+        def invoke(self, frontier):
+            logger.info("Invoke %s" % (self))
+            codeseg = self.create_codeseg()
+            return self._invoke(codeseg, frontier, False)
+
 class Programme(Instruction):
     def __init__(self, body, ain, aout):
         Instruction.__init__(self, body, ain, aout)
+        self.vjp = ProgrammeVJP(self)
 
-    class NodeType(Node):
+    class NodeType(CodeSegNode):
         def __init__(self, engine, instr, kwargs):
             Node.__init__(self, engine, instr, kwargs)
-            codeseg = CodeSegment(engine)
-            self.instr.body(codeseg, *[arg.value for arg in self.args])
+            codeseg = CodeSegment(self.engine)
+            self.instr.body(codeseg, *[arg.name for arg in self.args])
             self.codeseg = codeseg
 
         def copy(self):
-            node = NodeType(engine, instr, kwargs)
+            node = CodeSegNode.copy(self)
             node.codeseg = codeseg
             return node
 
         def invoke(self, frontier):
-            logger.info("%s invoked" % self)
-            vout = [ arg.value.name for arg in self.args
-                    if isinstance(arg, (OArgument, IOArgument))]
-            out = self.codeseg.compute(vout, frontier)
+            logger.info("Invoke %s" % (self))
+            return self._invoke(self.codeseg, frontier, False)
 
-            return dict(zip(vout, out))
+        def gradient(self, d):
+            logger.info("Gradient %s" % (self))
+            r, tape = self._invoke(self.codeseg, d, True)
+            gradient = self.codeseg.gradient(tape)
+            return gradient
+
+
 
 def programme(ain, aout): return lambda body: Programme(body, ain, aout)
 
@@ -312,6 +384,9 @@ class CodeSegment(object):
         return r
 
     def gradient(self, tape):
+        """ Create a code segment that computes the gradient from tape for the current
+            code segment """
+
         code = CodeSegment(self.engine)
 
         if hasattr(self.engine, "Add"):
@@ -349,7 +424,11 @@ class CodeSegment(object):
                 if isinstance(arg, EXArgument):
                     kwargs[arg.name] = arg.value
 
-            node = vjp.create_node(self.engine, kwargs)
+            if isinstance(vjp, ProgrammeVJP):
+                node = vjp.create_vjp_node(node, d, kwargs)
+            else:
+                node = vjp.create_node(self.engine, kwargs)
+
             code.append(node)
             for p, r in partials:
                 kwargs = {}

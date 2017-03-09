@@ -94,3 +94,10 @@ def test_programme():
     code.batch(u='a', v='d')
     d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
     assert_array_equal(d, 2.0)
+    print(tape)
+
+    d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})
+
+    assert_array_equal(d, 2.0)
+    assert_array_equal(_a, 2.0)
+    
