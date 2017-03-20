@@ -312,7 +312,8 @@ class CodeSegment(object):
 
         self.nodes.append(node)
 
-    def _build_free_list(self):
+    @property
+    def freeables(self):
         ocd = {}
         free_list = []
         for node in self.nodes:
@@ -352,7 +353,6 @@ class CodeSegment(object):
             squeeze = False
 
         frontier = {}
-        free_list = self._build_free_list()
 
         for var, value in self.defaults.items():
             frontier[var] = value
@@ -364,7 +364,7 @@ class CodeSegment(object):
         else:
             tape = None
 
-        for i, (node, abandon) in enumerate(zip(self.nodes, free_list)):
+        for i, (node, abandon) in enumerate(zip(self.nodes, self.freeables)):
             if tape:
                 tape.append(node, frontier)
                 for arg in node.args:
