@@ -76,9 +76,13 @@ class Argument(object):
     def __init__(self, name):
         self.name = name
         self.value = None
+        self.ovalue = None
 
     def __repr__(self):
-        return "%s:%s=%s" % (type(self).__name__, self.name, self.value)
+        if isinstance(self, IOArgument):
+            return "%s:%s=%s=>%s" % (type(self).__name__, self.name, self.value, self.ovalue)
+        else:
+            return "%s:%s=%s" % (type(self).__name__, self.name, self.value)
 
 class IArgument(Argument): pass
 class OArgument(Argument): pass
@@ -102,7 +106,7 @@ class Arguments(list):
                     variable = code.get_latest_variable(varname, expired=False)
                 elif isinstance(arg, IOArgument):
                     variable = code.get_latest_variable(varname, expired=True)
-                    dummy = code.create_latest_variable(varname)
+                    arg.ovalue = code.create_latest_variable(varname)
                 elif isinstance(arg, OArgument):
                     variable = code.create_latest_variable(varname)
 
@@ -271,16 +275,30 @@ class CodeSegment(object):
 
         self._liveset = {} # stores the version of variable with the same name
                           # each overwrite will increase this number
-        self.refcounts = {} # stores the numbers a versioned Variable used as input
         self._postfix = 0 # a unique postfix added to every variable.
+
+    def __getattr__(self, name):
+        """ Allow looking up primitives and programmes from the engine namespace """
+        try:
+            item = getattr(self.engine, name)
+        except AttributeError:
+            raise AttributeError("%s is not a declared instruction in %s" % (name, type(self.engine)))
+
+        if isinstance(item, Instruction):
+            instr = item
+            def func(**kwargs):
+                self.append(instr, kwargs)
+            return func
+        else:
+            raise TypeError
 
     def copy(self):
         code = CodeSegment(self.engine)
         code.nodes.extend(self.nodes)
         code.defaults.update(self.defaults)
         code._liveset.update(self._liveset)
-        code.refcounts.update(self.refcounts)
         code._postfix = self._postfix
+        return code
 
     def get_latest_variable(self, varname, expired=False):
         if varname not in self._liveset:
@@ -298,47 +316,63 @@ class CodeSegment(object):
         self._liveset[varname] = variable
         return variable
 
-    def _get_ref(self, var):
-        return self.refcounts.get(var, 0)
-
-    def _inc_ref(self, var):
-        ref = self._get_ref(var) + 1
-        self.refcounts[var] = ref
-        return ref
-
     def append(self, instr, kwargs):
         node = instr.create_node(self.engine)
         node.args.set_values(kwargs, self)
-
         self.nodes.append(node)
 
     @property
+    def refcounts(self):
+        refcounts = {}
+        for node in self.nodes:
+            for arg in node.args:
+                if isinstance(arg, (IArgument, IOArgument)):
+                    refcounts[arg.value] = refcounts.get(arg.value, 0) + 1
+        return refcounts
+
+    @property
     def freeables(self):
-        ocd = {}
+        refcounts = self.refcounts
+
         free_list = []
+
         for node in self.nodes:
             item = []
             for arg in node.args:
                 if isinstance(arg, (IArgument, IOArgument)):
-                    ocd[arg.value] = ocd.get(arg.value, 0) + 1
-                    if ocd[arg.value] == self._get_ref(arg.value):
+                    refcounts[arg.value] = refcounts[arg.value] - 1
+                    if refcounts[arg.value] == 0:
                         item.append(arg.value)
             free_list.append(item)
         return free_list
 
-    def __getattr__(self, name):
-        try:
-            item = getattr(self.engine, name)
-        except AttributeError:
-            raise AttributeError("%s is not a declared instruction in %s" % (name, type(self.engine)))
+    def optimize(self, vout):
+        """ return an optimized codeseg for computing vout. irrelevant nodes are pruned. """
+        deps = []
+        for varname in vout:
+            deps.append(self.get_latest_variable(varname))
 
-        if isinstance(item, Instruction):
-            instr = item
-            def func(**kwargs):
-                self.append(instr, kwargs)
-            return func
-        else:
-            raise TypeError
+        deps = set(deps)
+
+        nodes = []
+        for node in self.nodes[::-1]:
+            keep = False
+            for arg in node.args:
+                if isinstance(arg, OArgument) and arg.value in deps:
+                    keep = True
+                    deps.remove(arg.value)
+                if isinstance(arg, IOArgument) and arg.ovalue in deps:
+                    keep = True
+                    deps.remove(arg.ovalue)
+            if not keep: continue
+            nodes.append(node)
+            for arg in node.args:
+                if isinstance(arg, (IArgument, IOArgument)):
+                    deps.add(arg.value)
+
+        segment = self.copy()
+        segment.nodes = list(reversed(nodes))
+        return segment
 
     def compute(self, vout, init, return_tape=False):
         if hasattr(self.engine, "Copy"):

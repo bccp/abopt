@@ -34,6 +34,19 @@ def test_compute():
     b = code.compute('b', {'a' : 1.0})
     assert_array_equal(b, 3.0)
 
+def test_optimize():
+    engine = TestEngine()
+    code = CodeSegment(engine)
+    code.unitary(x='a', y='d', factor=3.0)
+    code.unitary(x='a', y='b', factor=3.0)
+    code.unitary(x='a', y='c', factor=3.0)
+
+    opt = code.optimize(['b'])
+    assert len(opt.nodes) == 1
+    b = opt.compute('b', {'a' : 1.0})
+    assert_array_equal(b, 3.0)
+
+
 def test_nested_compute():
     engine = TestEngine()
     code = CodeSegment(engine)
