@@ -57,19 +57,19 @@ class Instruction(object):
         return node
 
 class Variable(object):
-    """ if the same variable name is modified we inc version.
+    """ if the same variable name is modified we use a different postifx
         this happens as Variable mentioned in Code as O/IOArgument.
     """
-    def __init__(self, name, version):
+    def __init__(self, name, postfix):
         self.name = name
-        self.version = version
+        self.postfix = postfix
 
-    def __hash__(self): return hash(self.name + '-%s' % self.version)
-    def __eq__(self, other): return self.name == other.name and self.version == other.version
+    def __hash__(self): return hash(self.name + '-%s' % self.postfix)
+    def __eq__(self, other): return self.name == other.name and self.postfix == other.postfix
 
     def __repr__(self):
-        if self.version is not None:
-            return "%s/%d" % (self.name, self.version)
+        if self.postfix is not None:
+            return "%s/%d" % (self.name, self.postfix)
         else:
             return "%s" % (self.name)
 
@@ -246,7 +246,7 @@ class Tape(object):
         d = {}
         for arg in node.args:
             if isinstance(arg, (IArgument, IOArgument)):
-                d[arg.value.name] = (arg.value.version, frontier[arg.value.name])
+                d[arg.value.name] = frontier[arg.value.name]
 
         self.records.append((node, d))
 
@@ -265,6 +265,12 @@ class CodeSegment(object):
         self.liveset = {} # stores the version of variable with the same name
                           # each overwrite will increase this number
         self.refs = {} # stores the numbers a versioned Variable used as input
+        self._postfix = 0 # a unique postfix added to every variable.
+
+    @property
+    def postfix(self):
+        self._postfix = self._postfix + 1
+        return self._postfix
 
     def copy(self):
         code = CodeSegment(self.engine)
@@ -272,14 +278,7 @@ class CodeSegment(object):
         code.defaults.update(self.defaults)
         code.liveset.update(self.liveset)
         code.refs.update(self.refs)
-
-    def _get_version(self, var):
-        return self.liveset.get(var, 0)
-
-    def _inc_version(self, var):
-        version = self._get_version(var) + 1
-        self.liveset[var] = version
-        return version
+        code.postfix = self.postfix
 
     def _get_ref(self, var):
         return self.refs.get(var, 0)
@@ -291,19 +290,20 @@ class CodeSegment(object):
 
     def append(self, node):
         for arg in node.args:
-            version = self._get_version(arg.value)
             if isinstance(arg, IArgument):
-                arg.value = Variable(arg.value, version)
-                self._inc_ref(arg.value)
+                variable = self.liveset.get(arg.value, Variable(arg.value, self.postfix))
+                self.liveset[arg.value] = variable
+                arg.value = variable
             elif isinstance(arg, IOArgument):
-                arg.value = Variable(arg.value, version)
-                self._inc_ref(arg.value)
-                # see the old version, writes the new version.
-                version = self._inc_version(arg.value)
+                # remove the variable from liveset; next time if it becomes a IArgument
+                # it must contains new value.
+                variable = self.liveset.pop(arg.value, Variable(arg.value, self.postfix))
+                self.liveset[arg.value] = variable
+                arg.value = variable
             elif isinstance(arg, OArgument):
-                version = self._inc_version(arg.value)
-                arg.value = Variable(arg.value, version)
-
+                variable = Variable(arg.value, self.postfix)
+                self.liveset[arg.value] = variable
+                arg.value = variable
         self.nodes.append(node)
 
     def _build_free_list(self):
@@ -312,7 +312,6 @@ class CodeSegment(object):
         for node in self.nodes:
             item = []
             for arg in node.args:
-                version = self._get_version(arg.value)
                 if isinstance(arg, (IArgument, IOArgument)):
                     ocd[arg.value] = ocd.get(arg.value, 0) + 1
                     if ocd[arg.value] == self._get_ref(arg.value):
@@ -373,7 +372,8 @@ class CodeSegment(object):
                 raise
             for var in abandon:
                 frontier.pop(var.name)
-            logger.info("Removed from frontier %s, new size %d", abandon, len(frontier))
+            if len(abandon):
+                logger.info("Removed from frontier %s, new size %d", abandon, len(frontier))
             frontier.update(r)
 
         r = [frontier[vn] for vn in vout]
@@ -407,7 +407,7 @@ class CodeSegment(object):
                     kwargs['_' + arg.name] = '_' + arg.value.name
                 if isinstance(arg, (IArgument, IOArgument)) \
                 and arg.name in vjp.argnames:
-                    value, version = d[arg.value.name]
+                    value = d[arg.value.name]
                     kwargs[arg.name] = value
 
                 if isinstance(arg, (IArgument, IOArgument)) \
