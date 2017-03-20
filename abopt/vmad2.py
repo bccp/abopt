@@ -9,7 +9,6 @@ logger.addHandler(_logging_handler)
 
 # TODO:
 # Add visualization
-# Optimization, removing unused instructions from code segment
 
 class LValue(object):
     def __init__(self, name, ns):
