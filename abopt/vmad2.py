@@ -51,10 +51,9 @@ class Instruction(object):
     def __repr__(self):
         return self.body.__name__
 
-    def create_node(self, engine, kwargs):
+    def create_node(self, engine):
         nodetype = type(self).NodeType
-        node = nodetype(engine, self, kwargs)
-        return node
+        return nodetype(engine, self)
 
 class Variable(object):
     """ if the same variable name is modified we use a different postifx
@@ -74,43 +73,65 @@ class Variable(object):
             return "%s" % (self.name)
 
 class Argument(object):
-    def __init__(self, name, value):
+    def __init__(self, name):
         self.name = name
-        self.value = value
+        self.value = None
 
     def __repr__(self):
         return "%s:%s=%s" % (type(self).__name__, self.name, self.value)
 
-class IArgument(Argument):
-    pass
-class OArgument(Argument):
-    pass
-class IOArgument(Argument):
-    pass
-class EXArgument(Argument):
-    pass
+class IArgument(Argument): pass
+class OArgument(Argument): pass
+class IOArgument(Argument): pass
+class EXArgument(Argument): pass
+class Arguments(list):
+    def find(self, argname):
+        for arg in self:
+            if arg.name == argname: return arg
+        else:
+            raise KeyError
 
-class Node(object):
-    def __init__(self, engine, instr, kwargs):
-        self.instr = instr
-        self.engine = engine
-        self.args = []
+    def set_values(self, kwargs, code):
         kwargs = kwargs.copy()
-        for arg in instr.argnames:
-            if arg in instr.ain:
-                if arg in instr.aout:
-                    var = IOArgument(arg, kwargs.pop(arg, arg))
-                else:
-                    var = IArgument(arg, kwargs.pop(arg, arg))
-            elif arg in instr.aout:
-                var = OArgument(arg, kwargs.pop(arg, arg))
+        for arg in self:
+            if isinstance(arg, EXArgument):
+                variable = kwargs.pop(arg.name)
             else:
-                var = EXArgument(arg, kwargs.pop(arg))
-            self.args.append(var)
+                varname = kwargs.pop(arg.name, arg.name)
+                if isinstance(arg, IArgument):
+                    variable = code.get_latest_variable(varname, expired=False)
+                elif isinstance(arg, IOArgument):
+                    variable = code.get_latest_variable(varname, expired=True)
+                    dummy = code.create_latest_variable(varname)
+                elif isinstance(arg, OArgument):
+                    variable = code.create_latest_variable(varname)
+
+            arg.value = variable
+
         if len(kwargs) > 0:
             raise ValueError("additional kwargs are found: %s" % list(kwargs.keys()))
+
+class Node(object):
+    def __init__(self, engine, instr, args=None):
+        self.instr = instr
+        self.engine = engine
+        if args is None:
+            args = Arguments()
+        self.args = args
+        for argname in instr.argnames:
+            if argname in instr.ain:
+                if argname in instr.aout:
+                    arg = IOArgument(argname)
+                else:
+                    arg = IArgument(argname)
+            elif argname in instr.aout:
+                arg = OArgument(argname)
+            else:
+                arg = EXArgument(argname)
+            self.args.append(arg)
+
     def copy(self):
-        return type(self)(self.engine, self.instr, self.kwargs)
+        return type(self)(self.engine, self.instr, self.args)
 
     def bind(self, frontier, results):
         """ bind args to objects in frontier, or LValues """
@@ -129,11 +150,12 @@ class Node(object):
         return "%s(%s)" % (self.instr, self.args)
 
 class CodeSegNode(Node):
-    def __init__(self, engine, instr, kwargs):
-        Node.__init__(self, engine, instr, kwargs)
-
     def copy(self):
         return Node.copy(self)
+
+    @property
+    def codeseg(self):
+        raise NotImplementedError
 
     def _invoke(self, codeseg, frontier, return_tape=False):
         aout = [ arg.name for arg in self.args
@@ -154,14 +176,19 @@ class CodeSegNode(Node):
         else:
             return dict(zip(vout, out))
 
+    def invoke(self, frontier):
+        logger.info("Invoke %s" % (self))
+        return self._invoke(self.codeseg, frontier, False)
+
+    def gradient(self, d):
+        logger.info("Gradient %s" % (self))
+        return gradient
+
 class Primitive(Instruction):
     def __init__(self, body, ain, aout):
         Instruction.__init__(self, body, ain, aout)
 
     class NodeType(Node):
-        def __init__(self, engine, instr, kwargs):
-            Node.__init__(self, engine, instr, kwargs)
-
         def copy(self):
             node = Node.copy(self)
             return node
@@ -180,30 +207,26 @@ class ProgrammeVJP(Instruction):
         gout = ['_' + a for a in programme.ain]
         gin  = ['_' + a for a in programme.aout]
         ex = [a for a in programme.argnames if a not in programme.aout + programme.ain]
-
+        extra = ['#programme_node', '#frontier']
         body = lambda : None
         body.__name__ = "G:" + programme.body.__name__
-        argnames = list(set(gin + gout + programme.ain + ex))
+        argnames = list(set(gin + gout + programme.ain + ex + extra))
         Instruction.__init__(self, body, gin, gout, argnames=argnames)
 
-    def create_vjp_node(self, programme_node, d, kwargs):
-        node = self.create_node(programme_node.engine, kwargs)
-        node.create_codeseg = lambda : programme_node.gradient(d)
-        return node
-
     class NodeType(CodeSegNode):
-        def __init__(self, engine, instr, kwargs):
-            Node.__init__(self, engine, instr, kwargs)
+        @property
+        def codeseg(self):
+            node = self.args.find('#programme_node').value
+            d = self.args.find('#frontier').value
+            codeseg = node.codeseg
+            r, tape = node._invoke(codeseg, d, True)
+            gradient = codeseg.gradient(tape)
+            return gradient
 
         def copy(self):
             node = CodeSegNode.copy(self)
-            node.create_codeseg = create_codeseg
+            node.vjp_args = vjp_args
             return
-
-        def invoke(self, frontier):
-            logger.info("Invoke %s" % (self))
-            codeseg = self.create_codeseg()
-            return self._invoke(codeseg, frontier, False)
 
 class Programme(Instruction):
     def __init__(self, body, ain, aout):
@@ -211,27 +234,11 @@ class Programme(Instruction):
         self.vjp = ProgrammeVJP(self)
 
     class NodeType(CodeSegNode):
-        def __init__(self, engine, instr, kwargs):
-            Node.__init__(self, engine, instr, kwargs)
+        @property
+        def codeseg(self):
             codeseg = CodeSegment(self.engine)
             self.instr.body(codeseg, *[arg.name for arg in self.args])
-            self.codeseg = codeseg
-
-        def copy(self):
-            node = CodeSegNode.copy(self)
-            node.codeseg = codeseg
-            return node
-
-        def invoke(self, frontier):
-            logger.info("Invoke %s" % (self))
-            return self._invoke(self.codeseg, frontier, False)
-
-        def gradient(self, d):
-            logger.info("Gradient %s" % (self))
-            r, tape = self._invoke(self.codeseg, d, True)
-            gradient = self.codeseg.gradient(tape)
-            return gradient
-
+            return codeseg
 
 
 def programme(ain, aout): return lambda body: Programme(body, ain, aout)
@@ -262,48 +269,47 @@ class CodeSegment(object):
         self.nodes = []
         self.defaults = {} # use these if not provided in init
 
-        self.liveset = {} # stores the version of variable with the same name
+        self._liveset = {} # stores the version of variable with the same name
                           # each overwrite will increase this number
-        self.refs = {} # stores the numbers a versioned Variable used as input
+        self.refcounts = {} # stores the numbers a versioned Variable used as input
         self._postfix = 0 # a unique postfix added to every variable.
-
-    @property
-    def postfix(self):
-        self._postfix = self._postfix + 1
-        return self._postfix
 
     def copy(self):
         code = CodeSegment(self.engine)
         code.nodes.extend(self.nodes)
         code.defaults.update(self.defaults)
-        code.liveset.update(self.liveset)
-        code.refs.update(self.refs)
-        code.postfix = self.postfix
+        code._liveset.update(self._liveset)
+        code.refcounts.update(self.refcounts)
+        code._postfix = self._postfix
+
+    def get_latest_variable(self, varname, expired=False):
+        if varname not in self._liveset:
+            self._postfix = self._postfix + 1
+            variable = Variable(varname, self._postfix)
+        else:
+            variable = self._liveset.pop(varname)
+        if not expired:
+            self._liveset[varname] = variable
+        return variable
+
+    def create_latest_variable(self, varname):
+        self._postfix = self._postfix + 1
+        variable = Variable(varname, self._postfix)
+        self._liveset[varname] = variable
+        return variable
 
     def _get_ref(self, var):
-        return self.refs.get(var, 0)
+        return self.refcounts.get(var, 0)
 
     def _inc_ref(self, var):
         ref = self._get_ref(var) + 1
-        self.refs[var] = ref
+        self.refcounts[var] = ref
         return ref
 
-    def append(self, node):
-        for arg in node.args:
-            if isinstance(arg, IArgument):
-                variable = self.liveset.get(arg.value, Variable(arg.value, self.postfix))
-                self.liveset[arg.value] = variable
-                arg.value = variable
-            elif isinstance(arg, IOArgument):
-                # remove the variable from liveset; next time if it becomes a IArgument
-                # it must contains new value.
-                variable = self.liveset.pop(arg.value, Variable(arg.value, self.postfix))
-                self.liveset[arg.value] = variable
-                arg.value = variable
-            elif isinstance(arg, OArgument):
-                variable = Variable(arg.value, self.postfix)
-                self.liveset[arg.value] = variable
-                arg.value = variable
+    def append(self, instr, kwargs):
+        node = instr.create_node(self.engine)
+        node.args.set_values(kwargs, self)
+
         self.nodes.append(node)
 
     def _build_free_list(self):
@@ -328,7 +334,7 @@ class CodeSegment(object):
         if isinstance(item, Instruction):
             instr = item
             def func(**kwargs):
-                self.append(instr.create_node(self.engine, kwargs))
+                self.append(instr, kwargs)
             return func
         else:
             raise TypeError
@@ -424,19 +430,19 @@ class CodeSegment(object):
                 if isinstance(arg, EXArgument):
                     kwargs[arg.name] = arg.value
 
-            if isinstance(vjp, ProgrammeVJP):
-                node = vjp.create_vjp_node(node, d, kwargs)
-            else:
-                node = vjp.create_node(self.engine, kwargs)
+            if isinstance(node.instr, Programme):
+                # the vjp of a Programme requires more arguments
+                # to build the gradient codesegment on the fly
+                kwargs['#programme_node'] = node
+                kwargs['#frontier'] = d
 
-            code.append(node)
+            code.append(vjp, kwargs)
             for p, r in partials:
                 kwargs = {}
                 kwargs['x1'] = p
                 kwargs['x2'] = r
                 kwargs['y'] = r
-                node = add.create_node(self.engine, kwargs)
-                code.append(node)
+                code.append(add, kwargs)
         return code
 
     def compute_with_gradient(self, vout, init, ginit, return_tape=False):
@@ -472,6 +478,6 @@ class CodeSegment(object):
 
     def __repr__(self):
         nodes = '\n'.join('%s' % node for node in self.nodes)
-        refs = '%s' % self.refs
+        refs = '%s' % self.refcounts
         return '\n'.join([nodes, refs])
 from .zero import ZERO
