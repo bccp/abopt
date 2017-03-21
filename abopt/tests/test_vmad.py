@@ -18,10 +18,6 @@ class TestVM(VM):
         _x1[...] = _y
         _x2[...] = _y
 
-    @programme(ain=['u'], aout=['v'])
-    def batch(self, u, v):
-        self.binary(u, u, v)
-
 def test_single_compute():
     vm = TestVM()
     code = vm.code()
@@ -90,11 +86,3 @@ def test_inplace_gradient():
     assert_array_equal(d, 54.0)
     assert_array_equal(_a, 54.0)
 
-
-def test_programme():
-    vm = TestVM()
-    code = vm.code()
-    code.batch(u='a', v='d')
-    d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
-    assert_array_equal(d, 2.0)
-    print(tape)

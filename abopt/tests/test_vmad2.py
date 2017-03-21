@@ -1,8 +1,12 @@
 from __future__ import print_function
 from abopt.vmad2 import CodeSegment, Engine, primitive, programme, ZERO, logger
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
+from numpy.testing.decorators import skipif
 import numpy
 import logging
+
+try: import graphviz
+except ImportError: graphviz = None
 
 logger.setLevel(level=logging.INFO)
 class TestSubEngine(Engine):
@@ -119,6 +123,7 @@ def test_inplace():
     assert_array_equal(d, 54.0)
     assert_array_equal(_a, 54.0)
 
+@skipif(graphviz == None, "graphviz is not properly installed")
 def test_to_graph():
     engine = TestEngine()
     code = CodeSegment(engine)
@@ -132,11 +137,9 @@ def test_to_graph():
 
     d, tape = code.compute(('e', 'a', 'f', 'd'), {'a' : 1.0}, return_tape=True)
     gradient = code.gradient(tape)
-    print('----')
-    print(gradient)
     graph1 = code.to_graph()
     graph2 = gradient.to_graph()
-    graph2.render('temp.png', view=True)
+#    graph2.render('temp.png', view=True)
 
 def test_programme():
     engine = TestEngine()
