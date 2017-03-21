@@ -50,6 +50,7 @@ class Instruction(object):
             args.append(arg)
 
         self.args = args
+        body.args = args
 
     def __repr__(self):
         return self.body.__name__
@@ -140,7 +141,6 @@ class Arguments(list):
 
         if len(kwargs) > 0:
             raise ValueError("additional kwargs are found: %s" % list(kwargs.keys()))
-
 class Node(object):
     def __init__(self, engine, instr):
         self.instr = instr
@@ -163,39 +163,62 @@ class Node(object):
                 bound.append(arg.value)
         return bound
 
+    def call_zero_bypass(self, bound):
+        zeros = [value is ZERO
+                for arg, value in zip(self.args, bound)
+                if isinstance(arg, (IArgument, IOArgument))]
+        if all(zeros):
+            for arg, value in zip(self.args, bound):
+                if isinstance(arg, OArgument):
+                    value[...] = ZERO
+            logger.info("Body skipped because all input gradients are zero: %s " % (self))
+            return True
+        return False
+
     def __repr__(self):
         return "%s(%s)" % (self.instr, self.args)
+
+    def call(self, bound):
+        raise NotImplementedError
+
+    def invoke(self, frontier):
+        logger.info("Invoke %s" % (self))
+        out = {}
+        bound = self.bind(frontier, out)
+        self.call(bound)
+        return out
 
 class CodeSegNode(Node):
     @property
     def codeseg(self):
         raise NotImplementedError
 
-    def _invoke(self, codeseg, frontier, return_tape=False):
+    def invoke_for_tape(self, codeseg, frontier):
+        bound = self.bind(frontier, {})
+        return self.call(bound, return_tape=True)
+
+    def call(self, bound, return_tape=False):
+        init = {}
+        for arg, value in zip(self.args, bound):
+            # this will populate init with the LValues as well
+            # we use them later to write back the return value
+            init[arg.name] = value
+
         aout = [ arg.name for arg in self.args
                 if isinstance(arg, (OArgument, IOArgument))]
-        vout = [ arg.value.name for arg in self.args
-                if isinstance(arg, (OArgument, IOArgument))]
-        init = {}
-        #if return_tape:
-        #    print('----', self.args, frontier)
-        for arg in self.args:
-            if isinstance(arg, (IArgument, IOArgument)):
-                init[arg.name] = frontier[arg.value.name]
-        out = codeseg.compute(aout, init, return_tape=return_tape)
+
+        # compute doesn't taint init.
+        out = self.codeseg.compute(aout, init, return_tape=return_tape)
+
         if return_tape:
             out, tape = out
-            return dict(zip(vout, out)), tape
         else:
-            return dict(zip(vout, out))
+            tape = None
 
-    def invoke(self, frontier):
-        logger.info("Invoke %s" % (self))
-        return self._invoke(self.codeseg, frontier, False)
+        for argname, value in zip(aout, out):
+            init[argname][...] = value
 
-    def gradient(self, d):
-        logger.info("Gradient %s" % (self))
-        return gradient
+        return tape
 
 class Primitive(Instruction):
     def __init__(self, body, ain, aout):
@@ -208,42 +231,33 @@ class Primitive(Instruction):
 
         body.__name__ = "G:" + self.body.__name__
         self.vjp = PrimitiveVJP(body, gin, gout)
+
         # allow the gradient with the same name as the original body.
         return self.vjp
 
     class NodeType(Node):
-        def invoke(self, frontier):
-            logger.info("Invoke %s" % (self))
-            out = {}
-            bound = self.bind(frontier, out)
+        def call(self, bound):
             self.instr.body(self.engine, *bound)
-            return out
 
 class PrimitiveVJP(Instruction):
-    def __init__(self, body, ain, aout):
-        Instruction.__init__(self, body, ain, aout)
-
     class NodeType(Node):
-        def invoke(self, frontier):
-            logger.info("Invoke %s" % (self))
-            out = {}
-            bound = self.bind(frontier, out)
-            all_zeros = True
-            for arg, value in zip(self.args, bound):
-                if isinstance(arg, (IArgument, IOArgument)):
-                    if value is not ZERO:
-                        all_zeros = False
-                        break
-            if all_zeros:
-                for arg, value in zip(self.args, bound):
-                    if isinstance(arg, OArgument):
-                        value[...] = ZERO
-                logger.info("Body skipped because all input gradients are zero: %s " % (self))
-            else:
+        def call(self, bound):
+            if not Node.call_zero_bypass(self, bound):
                 self.instr.body(self.engine, *bound)
-            return out
 
 def primitive(ain, aout): return lambda body: Primitive(body, ain, aout)
+
+class Programme(Instruction):
+    def __init__(self, body, ain, aout):
+        Instruction.__init__(self, body, ain, aout)
+        self.vjp = ProgrammeVJP(self)
+
+    class NodeType(CodeSegNode):
+        @property
+        def codeseg(self):
+            return self.instr.body(self.engine,
+                *[arg.value if isinstance(arg, EXArgument)
+                else arg.name for arg in self.args])
 
 class ProgrammeVJP(Instruction):
     def __init__(self, programme):
@@ -262,7 +276,7 @@ class ProgrammeVJP(Instruction):
             node = self.args.find('#programme_node').value
             d = self.args.find('#frontier').value
             codeseg = node.codeseg
-            r, tape = node._invoke(codeseg, d, True)
+            tape = node.invoke_for_tape(codeseg, d)
             gradient = codeseg.gradient(tape)
             return gradient
 
@@ -271,16 +285,11 @@ class ProgrammeVJP(Instruction):
             node.vjp_args = vjp_args
             return
 
-class Programme(Instruction):
-    def __init__(self, body, ain, aout):
-        Instruction.__init__(self, body, ain, aout)
-        self.vjp = ProgrammeVJP(self)
-
-    class NodeType(CodeSegNode):
-        @property
-        def codeseg(self):
-            return self.instr.body(self.engine,
-        *[arg.value if isinstance(arg, EXArgument) else arg.name for arg in self.args])
+        def call(self, bound, return_tape=False):
+            if return_tape:
+                return CodeSegNode.call(self, bound, return_tape)
+            if not CodeSegNode.call_zero_bypass(self, bound):
+                return CodeSegNode.call(self, bound, return_tape)
 
 def programme(ain, aout): return lambda body: Programme(body, ain, aout)
 
