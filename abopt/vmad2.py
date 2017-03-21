@@ -328,18 +328,19 @@ class CodeSegment(object):
         node.args.set_values(kwargs, self)
         self.nodes.append(node)
 
-    @property
-    def refcounts(self):
+    def get_refcounts(self, vout):
         refcounts = {}
+        for varname in vout:
+            var = self.get_latest_variable(varname)
+            refcounts[var] = refcounts.get(var, 0) + 1
         for node in self.nodes:
             for arg in node.args:
                 if isinstance(arg, (IArgument, IOArgument)):
                     refcounts[arg.value] = refcounts.get(arg.value, 0) + 1
         return refcounts
 
-    @property
-    def freeables(self):
-        refcounts = self.refcounts
+    def get_freeables(self, vout):
+        refcounts = self.get_refcounts(vout)
 
         free_list = []
 
@@ -405,7 +406,7 @@ class CodeSegment(object):
         else:
             tape = None
 
-        for i, (node, abandon) in enumerate(zip(self.nodes, self.freeables)):
+        for i, (node, abandon) in enumerate(zip(self.nodes, self.get_freeables(vout))):
             if tape:
                 tape.append(node, frontier)
                 for arg in node.args:
@@ -519,8 +520,7 @@ class CodeSegment(object):
 
     def __repr__(self):
         nodes = '\n'.join('%s' % node for node in self.nodes)
-        refs = '%s' % self.refcounts
-        return '\n'.join([nodes, refs])
+        return '\n'.join([nodes])
 
     def to_graph(self, **kwargs):
         return nodes_to_graph(self.nodes, **kwargs)[0]
