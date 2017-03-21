@@ -147,6 +147,28 @@ def test_to_graph():
     graph2 = gradient.to_graph()
 #    graph2.render('temp.png', view=True)
 
+def test_zeros():
+    engine = TestEngine()
+    code = CodeSegment(engine)
+    code.unitary(x='a', y='a', factor=3.0)
+    code.unitary(x='a', y='b1', factor=3.0)
+    code.unitary(x='a', y='b2', factor=3.0)
+    a, b1, b2, _a = code.compute_with_gradient(['a', 'b1', 'b2', '_a'], {'a' : 1.0}, {'_b1': ZERO, '_b2' : ZERO, '_a' : ZERO})
+    assert _a is ZERO
+
+def test_copy():
+    engine = TestEngine()
+    code = CodeSegment(engine)
+    code.batch_with_sub(u='a', v='e')
+    code.unitary(x='a', y='a', factor=3.0)
+    code.unitary(x='a', y='b1', factor=3.0)
+    code.unitary(x='a', y='b2', factor=3.0)
+    code.binary(x1='b1', x2='b2', y='b1')
+    code.unitary(x='b1', y='d', factor=3.0)
+    code.batch(u='b2', v='f')
+
+    code2 = code.copy()
+
 def test_programme():
     engine = TestEngine()
     code = CodeSegment(engine)

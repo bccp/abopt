@@ -36,16 +36,20 @@ class Instruction(object):
                 )
         functools.update_wrapper(self, body)
 
-    def defvjp(self, body):
-        """ Define the back-propagation gradient operator. """
-        gout = ['_' + a for a in self.ain]
-        gin  = ['_' + a for a in self.aout]
+        args = Arguments()
+        for argname in argnames:
+            if argname in ain:
+                if argname in aout:
+                    arg = IOArgument(argname)
+                else:
+                    arg = IArgument(argname)
+            elif argname in aout:
+                arg = OArgument(argname)
+            else:
+                arg = EXArgument(argname)
+            args.append(arg)
 
-        body.__name__ = "G:" + self.body.__name__
-        self.vjp = Primitive(body, gin, gout)
-        # allow the gradient with the same name as the original body.
-        return self.vjp
-
+        self.args = args
 
     def __repr__(self):
         return self.body.__name__
@@ -81,6 +85,12 @@ class Argument(object):
         self.value = None
         self.ovalue = None
 
+    def copy(self):
+        arg = type(self)(self.name)
+        arg.value = self.value
+        arg.ovalue = self.ovalue
+        return arg
+
     def __repr__(self):
         if isinstance(self, IOArgument):
             return "%s:%s=%s=>%s" % (type(self).__name__, self.name, self.value, self.ovalue)
@@ -92,6 +102,12 @@ class OArgument(Argument): pass
 class IOArgument(Argument): pass
 class EXArgument(Argument): pass
 class Arguments(list):
+    def copy(self):
+        args = Arguments()
+        for arg in self:
+            args.append(arg.copy())
+        return args
+
     def find(self, argname):
         for arg in self:
             if arg.name == argname: return arg
@@ -126,26 +142,13 @@ class Arguments(list):
             raise ValueError("additional kwargs are found: %s" % list(kwargs.keys()))
 
 class Node(object):
-    def __init__(self, engine, instr, args=None):
+    def __init__(self, engine, instr):
         self.instr = instr
         self.engine = engine
-        if args is None:
-            args = Arguments()
-        self.args = args
-        for argname in instr.argnames:
-            if argname in instr.ain:
-                if argname in instr.aout:
-                    arg = IOArgument(argname)
-                else:
-                    arg = IArgument(argname)
-            elif argname in instr.aout:
-                arg = OArgument(argname)
-            else:
-                arg = EXArgument(argname)
-            self.args.append(arg)
+        self.args = instr.args.copy()
 
     def copy(self):
-        return type(self)(self.engine, self.instr, self.args)
+        return type(self)(self.engine, self.instr)
 
     def bind(self, frontier, results):
         """ bind args to objects in frontier, or LValues """
@@ -164,9 +167,6 @@ class Node(object):
         return "%s(%s)" % (self.instr, self.args)
 
 class CodeSegNode(Node):
-    def copy(self):
-        return Node.copy(self)
-
     @property
     def codeseg(self):
         raise NotImplementedError
@@ -201,16 +201,46 @@ class Primitive(Instruction):
     def __init__(self, body, ain, aout):
         Instruction.__init__(self, body, ain, aout)
 
-    class NodeType(Node):
-        def copy(self):
-            node = Node.copy(self)
-            return node
+    def defvjp(self, body):
+        """ Define the back-propagation gradient operator. """
+        gout = ['_' + a for a in self.ain]
+        gin  = ['_' + a for a in self.aout]
 
+        body.__name__ = "G:" + self.body.__name__
+        self.vjp = PrimitiveVJP(body, gin, gout)
+        # allow the gradient with the same name as the original body.
+        return self.vjp
+
+    class NodeType(Node):
         def invoke(self, frontier):
             logger.info("Invoke %s" % (self))
             out = {}
             bound = self.bind(frontier, out)
             self.instr.body(self.engine, *bound)
+            return out
+
+class PrimitiveVJP(Instruction):
+    def __init__(self, body, ain, aout):
+        Instruction.__init__(self, body, ain, aout)
+
+    class NodeType(Node):
+        def invoke(self, frontier):
+            logger.info("Invoke %s" % (self))
+            out = {}
+            bound = self.bind(frontier, out)
+            all_zeros = True
+            for arg, value in zip(self.args, bound):
+                if isinstance(arg, (IArgument, IOArgument)):
+                    if value is not ZERO:
+                        all_zeros = False
+                        break
+            if all_zeros:
+                for arg, value in zip(self.args, bound):
+                    if isinstance(arg, OArgument):
+                        value[...] = ZERO
+                logger.info("Body skipped because all input gradients are zero: %s " % (self))
+            else:
+                self.instr.body(self.engine, *bound)
             return out
 
 def primitive(ain, aout): return lambda body: Primitive(body, ain, aout)
