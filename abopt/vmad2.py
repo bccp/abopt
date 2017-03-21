@@ -62,6 +62,10 @@ class Variable(object):
         self.name = name
         self.postfix = postfix
 
+    @property
+    def gradname(self):
+        return '_' + self.name
+
     def __hash__(self): return hash(self.name + '-%s' % self.postfix)
     def __eq__(self, other): return self.name == other.name and self.postfix == other.postfix
 
@@ -99,17 +103,24 @@ class Arguments(list):
         for arg in self:
             if isinstance(arg, EXArgument):
                 variable = kwargs.pop(arg.name)
-            else:
+                arg.value = variable
+        for arg in self:
+            if isinstance(arg, IArgument):
                 varname = kwargs.pop(arg.name, arg.name)
-                if isinstance(arg, IArgument):
-                    variable = code.get_latest_variable(varname, expired=False)
-                elif isinstance(arg, IOArgument):
-                    variable = code.get_latest_variable(varname, expired=True)
-                    arg.ovalue = code.create_latest_variable(varname)
-                elif isinstance(arg, OArgument):
-                    variable = code.create_latest_variable(varname)
-
-            arg.value = variable
+                variable = code.get_latest_variable(varname, expired=False)
+                arg.value = variable
+        for arg in self:
+            if isinstance(arg, IOArgument):
+                varname = kwargs.pop(arg.name, arg.name)
+                variable = code.get_latest_variable(varname, expired=True)
+                arg.value = variable
+                arg.ovalue = code.create_latest_variable(varname)
+        for arg in self:
+            if isinstance(arg, OArgument):
+                varname = kwargs.pop(arg.name, arg.name)
+                variable = code.create_latest_variable(varname)
+                arg.ovalue = variable
+                arg.value = variable
 
         if len(kwargs) > 0:
             raise ValueError("additional kwargs are found: %s" % list(kwargs.keys()))
@@ -166,8 +177,8 @@ class CodeSegNode(Node):
         vout = [ arg.value.name for arg in self.args
                 if isinstance(arg, (OArgument, IOArgument))]
         init = {}
-        if return_tape:
-            print('----', self.args, frontier)
+        #if return_tape:
+        #    print('----', self.args, frontier)
         for arg in self.args:
             if isinstance(arg, (IArgument, IOArgument)):
                 init[arg.name] = frontier[arg.value.name]
@@ -443,7 +454,7 @@ class CodeSegment(object):
             for arg in node.args:
                 if isinstance(arg, OArgument) \
                 and '_' + arg.name in vjp.argnames:
-                    kwargs['_' + arg.name] = '_' + arg.value.name
+                    kwargs['_' + arg.name] = arg.value.gradname
                 if isinstance(arg, (IArgument, IOArgument)) \
                 and arg.name in vjp.argnames:
                     value = d[arg.value.name]
@@ -455,11 +466,11 @@ class CodeSegment(object):
                     ocd[arg.value] = occ + 1
                     if occ == 0:
                         # directly write to the gradient, it is used
-                        kwargs['_' + arg.name] = '_' + arg.value.name
+                        kwargs['_' + arg.name] = arg.value.gradname
                     else:
-                        newname = '_' + arg.value.name + '#partial'
+                        newname = arg.value.gradname + '#partial'
                         kwargs['_' + arg.name] = newname
-                        partials.append((newname, '_' + arg.value.name))
+                        partials.append((newname, arg.value.gradname))
                 if isinstance(arg, EXArgument):
                     kwargs[arg.name] = arg.value
 
@@ -513,4 +524,92 @@ class CodeSegment(object):
         nodes = '\n'.join('%s' % node for node in self.nodes)
         refs = '%s' % self.refcounts
         return '\n'.join([nodes, refs])
+
+    def to_graph(self, **kwargs):
+        return nodes_to_graph(self.nodes, **kwargs)[0]
+
 from .zero import ZERO
+
+def nodes_to_graph(nodes, **kwargs):
+    """
+        add a list of microcodes to a graph. The init node is duplicated as needed
+        (because it may be used many times and mess up the diagram. It hurts to have
+        very long edges like that.
+
+    """
+    import graphviz
+    graph = graphviz.Digraph(**kwargs)
+
+    def unique(obj):
+        return '%08X%08X' % (id(nodes), id(obj))
+
+    dests = {}
+    source = {}
+    subgraphs = {}
+    for i, node in enumerate(nodes):
+        for arg in node.args:
+            if isinstance(arg, (OArgument, IOArgument)):
+                source[arg.ovalue] = (node, arg)
+            if isinstance(arg, (IArgument, IOArgument)):
+                l = dests.pop(arg.value, [])
+                l.append((node, arg))
+                dests[arg.value] = l
+
+    for i, node in enumerate(nodes):
+        label = '%s<BR/>' % str(node.instr)
+        ex = []
+        for arg in node.args:
+            if isinstance(arg, EXArgument):
+                # bypass aux arguments starting with sharp
+                if not arg.name.startswith('#'):
+                    ex.append(str(arg))
+        label = label + '<BR/>'.join(ex)
+        label = '<' + label + '>'
+
+        if not isinstance(node, CodeSegNode):
+            graph.node(unique(node), label=label, shape='box')
+        else:
+            codeseg = node.codeseg
+            subgraph, inputs, outputs = nodes_to_graph(codeseg.nodes)
+            subgraph.name = 'cluster_' + unique(node)
+            subgraph.attr('graph', label=label)
+            subgraph.attr('graph', color='blue')
+            subgraph.attr('graph', style='dotted')
+            graph.subgraph(subgraph)
+            subgraphs[node] = (inputs, outputs)
+
+    inputs = {}
+    outputs = {}
+    for var in set(list(source.keys()) + list(dests.keys())):
+        attrs = {}
+        attrs['label'] = '<' + str(var) + '>'
+
+        if var in source:
+            from_node, from_arg = source[var]
+            if from_node not in subgraphs:
+                from_node = unique(from_node)
+            else:
+                from_node = subgraphs[from_node][1][from_arg.name]
+
+            attrs['taillabel'] = '<' + str(from_arg.name) + '>'
+            attrs['tail_lp'] = "12"
+        else:
+            from_node = unique(var)
+            graph.node(from_node, label=str(var))
+            inputs[var.name] = from_node
+        if var in dests:
+            for to_node, to_arg in dests[var]:
+                if to_node not in subgraphs:
+                    to_node = unique(to_node)
+                else:
+                    to_node = subgraphs[to_node][0][to_arg.name]
+                attrs['headlabel'] = '<' + str(to_arg.name) + '>'
+                attrs['head_lp'] = "12"
+                graph.edge(from_node, to_node, **attrs)
+        else:
+            to_node = unique(var)
+            graph.node(to_node, label=str(var))
+            outputs[var.name] = to_node
+            graph.edge(from_node, to_node, **attrs)
+
+    return graph, inputs, outputs

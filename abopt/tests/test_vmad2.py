@@ -24,6 +24,7 @@ class TestEngine(Engine):
 
     @programme(ain=['u'], aout=['v'])
     def batch(code, u, v):
+    #    code.unitary(x=u, y=u, factor=factor)
         code.binary(x1=u, x2=u, y=v)
 
 
@@ -100,6 +101,25 @@ def test_inplace():
 
     assert_array_equal(d, 54.0)
     assert_array_equal(_a, 54.0)
+
+def test_to_graph():
+    engine = TestEngine()
+    code = CodeSegment(engine)
+#    code.batch(u='a', v='e')
+    code.unitary(x='a', y='a', factor=3.0)
+#    code.unitary(x='a', y='b1', factor=3.0)
+#    code.unitary(x='a', y='b2', factor=3.0)
+#    code.binary(x1='b1', x2='b2', y='b1')
+#    code.unitary(x='b1', y='d', factor=3.0)
+#    code.batch(u='b2', v='f')
+
+    d, tape = code.compute(('a'), {'a' : 1.0}, return_tape=True)
+    gradient = code.gradient(tape)
+    print('----')
+    print(gradient)
+    graph1 = code.to_graph()
+    graph2 = gradient.to_graph()
+    graph2.render('temp.png', view=True)
 
 def test_programme():
     engine = TestEngine()
