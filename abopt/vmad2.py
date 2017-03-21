@@ -250,10 +250,7 @@ class Programme(Instruction):
     class NodeType(CodeSegNode):
         @property
         def codeseg(self):
-            codeseg = CodeSegment(self.engine)
-            self.instr.body(codeseg, *[arg.name for arg in self.args])
-            return codeseg
-
+            return self.instr.body(self.engine, *[arg.name for arg in self.args])
 
 def programme(ain, aout): return lambda body: Programme(body, ain, aout)
 

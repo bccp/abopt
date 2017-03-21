@@ -5,8 +5,17 @@ import numpy
 import logging
 
 logger.setLevel(level=logging.INFO)
+class TestSubEngine(Engine):
+    @primitive(ain=['x'], aout=['y'])
+    def unitary(engine, x, y, factor):
+        y[...] = x * factor
+    @unitary.defvjp
+    def _(engine, _x, _y, factor):
+        _x[...] = _y * factor
 
 class TestEngine(Engine):
+    def __init__(self):
+        self.subengine = TestSubEngine()
 
     @primitive(ain=['x'], aout=['y'])
     def unitary(engine, x, y, factor):
@@ -23,9 +32,17 @@ class TestEngine(Engine):
         _x2[...] = _y
 
     @programme(ain=['u'], aout=['v'])
-    def batch(code, u, v):
-    #    code.unitary(x=u, y=u, factor=factor)
+    def batch(engine, u, v):
+        code = CodeSegment(engine)
+        code.unitary(x=u, y=u, factor=1.0)
         code.binary(x1=u, x2=u, y=v)
+        return code
+
+    @programme(ain=['u'], aout=['v'])
+    def batch_with_sub(engine, u, v):
+        code = CodeSegment(engine.subengine)
+        code.unitary(x=u, y=v, factor=2.0)
+        return code
 
 
 def test_compute():
@@ -105,15 +122,15 @@ def test_inplace():
 def test_to_graph():
     engine = TestEngine()
     code = CodeSegment(engine)
-#    code.batch(u='a', v='e')
     code.unitary(x='a', y='a', factor=3.0)
+    code.batch_with_sub(u='a', v='e')
 #    code.unitary(x='a', y='b1', factor=3.0)
 #    code.unitary(x='a', y='b2', factor=3.0)
 #    code.binary(x1='b1', x2='b2', y='b1')
 #    code.unitary(x='b1', y='d', factor=3.0)
 #    code.batch(u='b2', v='f')
 
-    d, tape = code.compute(('a'), {'a' : 1.0}, return_tape=True)
+    d, tape = code.compute(('e'), {'a' : 1.0}, return_tape=True)
     gradient = code.gradient(tape)
     print('----')
     print(gradient)
