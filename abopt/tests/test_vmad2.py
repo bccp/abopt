@@ -1,5 +1,5 @@
 from __future__ import print_function
-from abopt.vmad2 import CodeSegment, Engine, primitive, programme, ZERO, logger
+from abopt.vmad2 import CodeSegment, Engine, statement, programme, ZERO, logger
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
 from numpy.testing.decorators import skipif
 import numpy
@@ -10,7 +10,7 @@ except ImportError: graphviz = None
 
 logger.setLevel(level=logging.INFO)
 class TestSubEngine(Engine):
-    @primitive(ain=['x'], aout=['y'])
+    @statement(ain=['x'], aout=['y'])
     def unitary(engine, x, y, factor):
         y[...] = x * factor
     @unitary.defvjp
@@ -21,13 +21,13 @@ class TestEngine(Engine):
     def __init__(self):
         self.subengine = TestSubEngine()
 
-    @primitive(ain=['x'], aout=['y'])
+    @statement(ain=['x'], aout=['y'])
     def unitary(engine, x, y, factor):
         y[...] = x * factor
     @unitary.defvjp
     def _(engine, _x, _y, factor):
         _x[...] = _y * factor
-    @primitive(ain=['x1', 'x2'], aout=['y'])
+    @statement(ain=['x1', 'x2'], aout=['y'])
     def binary(engine, x1, x2, y):
         y[...] = x1 + x2
     @binary.defvjp

@@ -10,6 +10,18 @@ logger.addHandler(_logging_handler)
 # TODO:
 # Add visualization
 
+from .zero import ZERO
+
+# decorators
+def statement(ain, aout): return lambda body: Statement(body, ain, aout)
+def programme(ain, aout): return lambda body: Programme(body, ain, aout)
+
+# an optional base class for computing engines
+class Engine(object): pass
+
+# create a model using a given computing engine
+def model(engine): return CodeSegment(engine)
+
 class LValue(object):
     def __init__(self, name, ns):
         self.ns = ns
@@ -20,7 +32,7 @@ class LValue(object):
     def __getitem__(self, index): return self.ns[self.name]
     def __setitem__(self, index, value): self.ns[self.name] = value
 
-class Instruction(object):
+class Primitive(object):
     def __init__(self, body, ain, aout, argnames=None):
         self.body = body
         self.ain = ain
@@ -141,19 +153,20 @@ class Arguments(list):
 
         if len(kwargs) > 0:
             raise ValueError("additional kwargs are found: %s" % list(kwargs.keys()))
+
 class Node(object):
-    def __init__(self, engine, instr):
-        self.instr = instr
+    def __init__(self, engine, primitive):
+        self.primitive = primitive
         self.engine = engine
-        self.args = instr.args.copy()
+        self.args = primitive.args.copy()
 
     def copy(self):
-        return type(self)(self.engine, self.instr)
+        return type(self)(self.engine, self.primitive)
 
     def bind(self, frontier, results):
         """ bind args to objects in frontier, or LValues """
         bound = []
-        instr = self.instr
+        primitive = self.primitive
         for arg in self.args:
             if isinstance(arg, (IArgument, IOArgument)):
                 bound.append(frontier[arg.value.name])
@@ -176,7 +189,7 @@ class Node(object):
         return False
 
     def __repr__(self):
-        return "%s(%s)" % (self.instr, self.args)
+        return "%s(%s)" % (self.primitive, self.args)
 
     def call(self, bound):
         raise NotImplementedError
@@ -220,9 +233,9 @@ class CodeSegNode(Node):
 
         return tape
 
-class Primitive(Instruction):
+class Statement(Primitive):
     def __init__(self, body, ain, aout):
-        Instruction.__init__(self, body, ain, aout)
+        Primitive.__init__(self, body, ain, aout)
 
     def defvjp(self, body):
         """ Define the back-propagation gradient operator. """
@@ -230,36 +243,34 @@ class Primitive(Instruction):
         gin  = ['_' + a for a in self.aout]
 
         body.__name__ = "G:" + self.body.__name__
-        self.vjp = PrimitiveVJP(body, gin, gout)
+        self.vjp = StatementVJP(body, gin, gout)
 
         # allow the gradient with the same name as the original body.
         return self.vjp
 
     class NodeType(Node):
         def call(self, bound):
-            self.instr.body(self.engine, *bound)
+            self.primitive.body(self.engine, *bound)
 
-class PrimitiveVJP(Instruction):
+class StatementVJP(Primitive):
     class NodeType(Node):
         def call(self, bound):
             if not Node.call_zero_bypass(self, bound):
-                self.instr.body(self.engine, *bound)
+                self.primitive.body(self.engine, *bound)
 
-def primitive(ain, aout): return lambda body: Primitive(body, ain, aout)
-
-class Programme(Instruction):
+class Programme(Primitive):
     def __init__(self, body, ain, aout):
-        Instruction.__init__(self, body, ain, aout)
+        Primitive.__init__(self, body, ain, aout)
         self.vjp = ProgrammeVJP(self)
 
     class NodeType(CodeSegNode):
         @property
         def codeseg(self):
-            return self.instr.body(self.engine,
+            return self.primitive.body(self.engine,
                 *[arg.value if isinstance(arg, EXArgument)
                 else arg.name for arg in self.args])
 
-class ProgrammeVJP(Instruction):
+class ProgrammeVJP(Primitive):
     def __init__(self, programme):
         gout = ['_' + a for a in programme.ain]
         gin  = ['_' + a for a in programme.aout]
@@ -268,7 +279,7 @@ class ProgrammeVJP(Instruction):
         body = lambda : None
         body.__name__ = "G:" + programme.body.__name__
         argnames = list(set(gin + gout + programme.ain + ex + extra))
-        Instruction.__init__(self, body, gin, gout, argnames=argnames)
+        Primitive.__init__(self, body, gin, gout, argnames=argnames)
 
     class NodeType(CodeSegNode):
         @property
@@ -291,8 +302,6 @@ class ProgrammeVJP(Instruction):
             if not CodeSegNode.call_zero_bypass(self, bound):
                 return CodeSegNode.call(self, bound, return_tape)
 
-def programme(ain, aout): return lambda body: Programme(body, ain, aout)
-
 class Tape(object):
     def __init__(self, init):
         self.records = []
@@ -310,9 +319,6 @@ class Tape(object):
     def __repr__(self):
         return '\n'.join('%s | %s' % (node, list(d.keys())) for node, d in self.records)
 
-class Engine(object):
-    pass
-
 class CodeSegment(object):
     def __init__(self, engine):
         self.engine = engine
@@ -328,12 +334,12 @@ class CodeSegment(object):
         try:
             item = getattr(self.engine, name)
         except AttributeError:
-            raise AttributeError("%s is not a declared instruction in %s" % (name, type(self.engine)))
+            raise AttributeError("%s is not a declared primitiveuction in %s" % (name, type(self.engine)))
 
-        if isinstance(item, Instruction):
-            instr = item
+        if isinstance(item, Primitive):
+            primitive = item
             def func(**kwargs):
-                self.append(instr, kwargs)
+                self.append(primitive, kwargs)
             return func
         else:
             raise TypeError
@@ -362,8 +368,8 @@ class CodeSegment(object):
         self._liveset[varname] = variable
         return variable
 
-    def append(self, instr, kwargs):
-        node = instr.create_node(self.engine)
+    def append(self, primitive, kwargs):
+        node = primitive.create_node(self.engine)
         node.args.set_values(kwargs, self)
         self.nodes.append(node)
 
@@ -479,13 +485,13 @@ class CodeSegment(object):
         if hasattr(self.engine, "Add"):
             add = self.engine.Add
         else:
-            @primitive(ain=['x1', 'x2'], aout=['y'])
+            @statement(ain=['x1', 'x2'], aout=['y'])
             def add(engine, x1, x2, y):
                 y[...] = x1 + x2
 
         ocd = {} # number of times seen
         for node, d in tape.records[::-1]:
-            vjp = node.instr.vjp
+            vjp = node.primitive.vjp
             kwargs = {}
             partials = []
             for arg in node.args:
@@ -511,7 +517,7 @@ class CodeSegment(object):
                 if isinstance(arg, EXArgument):
                     kwargs[arg.name] = arg.value
 
-            if isinstance(node.instr, Programme):
+            if isinstance(node.primitive, Programme):
                 # the vjp of a Programme requires more arguments
                 # to build the gradient codesegment on the fly
                 kwargs['#programme_node'] = node
@@ -564,8 +570,6 @@ class CodeSegment(object):
     def to_graph(self, **kwargs):
         return nodes_to_graph(self.nodes, **kwargs)[0]
 
-from .zero import ZERO
-
 def nodes_to_graph(nodes, **kwargs):
     """
         add a list of microcodes to a graph. The init node is duplicated as needed
@@ -592,7 +596,7 @@ def nodes_to_graph(nodes, **kwargs):
                 dests[arg.value] = l
 
     for i, node in enumerate(nodes):
-        label = '%s<BR/>' % str(node.instr)
+        label = '%s<BR/>' % str(node.primitive)
         ex = []
         for arg in node.args:
             if isinstance(arg, EXArgument):
