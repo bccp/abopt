@@ -48,6 +48,12 @@ class TestEngine(Engine):
         code.unitary(x=u, y=v, factor=2.0)
         return code
 
+    @programme(ain=['u'], aout=['v'])
+    def batch_with_exarg(engine, u, v, factor):
+        code = CodeSegment(engine)
+        code.unitary(x=u, y=u, factor=factor)
+        code.binary(x1=u, x2=u, y=v)
+        return code
 
 def test_compute():
     engine = TestEngine()
@@ -145,12 +151,15 @@ def test_programme():
     engine = TestEngine()
     code = CodeSegment(engine)
     code.batch(u='a', v='d')
-    d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
+    code.batch_with_exarg(u='a', v='e', factor=3.0)
+    (d, e), tape = code.compute(('d', 'e'), {'a' : 1.0}, return_tape=True)
     assert_array_equal(d, 2.0)
-    print(tape)
-
-    d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})
-
+    assert_array_equal(e, 6.0)
+    e, d, _a = code.compute_with_gradient(['e', 'd', '_a'], {'a' : 1.0}, {'_d': 1.0, '_e' : 0.0})
     assert_array_equal(d, 2.0)
+    assert_array_equal(e, 6.0)
     assert_array_equal(_a, 2.0)
-    
+    e, d, _a = code.compute_with_gradient(['e', 'd', '_a'], {'a' : 1.0}, {'_d': 0.0, '_e' : 1.0})
+    assert_array_equal(d, 2.0)
+    assert_array_equal(e, 6.0)
+    assert_array_equal(_a, 6.0)

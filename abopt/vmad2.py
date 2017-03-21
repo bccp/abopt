@@ -182,7 +182,6 @@ class CodeSegNode(Node):
         for arg in self.args:
             if isinstance(arg, (IArgument, IOArgument)):
                 init[arg.name] = frontier[arg.value.name]
-
         out = codeseg.compute(aout, init, return_tape=return_tape)
         if return_tape:
             out, tape = out
@@ -250,7 +249,8 @@ class Programme(Instruction):
     class NodeType(CodeSegNode):
         @property
         def codeseg(self):
-            return self.instr.body(self.engine, *[arg.name for arg in self.args])
+            return self.instr.body(self.engine,
+        *[arg.value if isinstance(arg, EXArgument) else arg.name for arg in self.args])
 
 def programme(ain, aout): return lambda body: Programme(body, ain, aout)
 
