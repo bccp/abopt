@@ -178,6 +178,14 @@ class ParticleMeshEngine(Engine):
         _x1[...] = _y
         _x2[...] = _y
 
+    @statement(aout=[], ain=['x'])
+    def inspect(engine, x):
+        print('inspect', x)
+
+    @inspect.defvjp
+    def _(engine):
+        pass
+
     @statement(aout=['y'], ain=['x1', 'x2'])
     def multiply(engine, x1, x2, y):
         y[...] = x1 * x2
@@ -195,7 +203,7 @@ class ParticleMeshEngine(Engine):
     def _(engine, _y, _x, x):
         _x[...] = (2 * _y) * x
 
-def check_grad(code, yname, xname, init, eps, rtol):
+def check_grad(code, yname, xname, init, eps, rtol, verbose=False):
     from numpy.testing import assert_allclose
     engine = code.engine
     comm = engine.pm.comm
@@ -217,6 +225,7 @@ def check_grad(code, yname, xname, init, eps, rtol):
             return pos
 
         def cget(pos, ind):
+            if pos is ZERO: return 0
             start = sum(comm.allgather(pos.shape[0])[:comm.rank])
             end = sum(comm.allgather(pos.shape[0])[:comm.rank + 1])
             if ind[0] >= start and ind[0] < end:
@@ -228,6 +237,7 @@ def check_grad(code, yname, xname, init, eps, rtol):
     elif isinstance(init[xname], RealField):
         cshape = init[xname].cshape
         def cget(real, index):
+            if real is ZERO: return 0
             return real.cgetitem(index)
 
         def cperturb(real, index, eps):
@@ -235,7 +245,6 @@ def check_grad(code, yname, xname, init, eps, rtol):
             r1 = real.copy()
             r1.csetitem(index, old + eps)
             return r1
-
     code = code.copy()
     code.to_scalar(x=yname, y='y')
 
@@ -253,5 +262,7 @@ def check_grad(code, yname, xname, init, eps, rtol):
         y1 = code.compute('y', init2)
         init2[xname] = x0
         y0 = code.compute('y', init2)
-        #print(y1, y0, y1 - y0, get_pos(code.engine, _x, index) * 2 * eps)
+        #logger.DEBUG("CHECKGRAD: %s" % (y1, y0, y1 - y0, get_pos(code.engine, _x, index) * 2 * eps))
+        if verbose:
+            print(index, (x1 - x0)[...].max(), y1, y0, y, y1 - y0, cget(_x, index) * 2 * eps)
         assert_allclose(y1 - y0, cget(_x, index) * 2 * eps, rtol=rtol)
