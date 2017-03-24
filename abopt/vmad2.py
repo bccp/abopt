@@ -299,6 +299,12 @@ class ProgrammeVJP(Primitive):
             codeseg = node.codeseg
             tape = node.invoke_for_tape(codeseg, d)
             gradient = codeseg.gradient(tape)
+            # if a variable is not mentioned in the code
+            # then the gradient object doesn't set the default to ZERO
+            # we fix it here.
+            for arg in self.args:
+                if isinstance(arg, OArgument):
+                    gradient.defaults[arg.name] = ZERO
             return gradient
 
         def copy(self):

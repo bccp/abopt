@@ -55,6 +55,12 @@ class TestEngine(Engine):
         code.binary(x1=u, x2=u, y=v)
         return code
 
+    @programme(ain=['u'], aout=['v'])
+    def batch_unused(engine, u, v):
+        code = CodeSegment(engine)
+        code.unitary(x=Literal(1.0), y=v, factor=1.0)
+        return code
+
 def test_compute():
     engine = TestEngine()
     code = CodeSegment(engine)
@@ -194,3 +200,11 @@ def test_programme():
     assert_array_equal(d, 2.0)
     assert_array_equal(e, 6.0)
     assert_array_equal(_a, 6.0)
+
+def test_programme_unused():
+    engine = TestEngine()
+    code = CodeSegment(engine)
+    code.batch_unused(u='a', v='d')
+    d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})
+    assert_array_equal(d, 1.0)
+    assert_array_equal(_a, 0.0)
