@@ -6,8 +6,6 @@ from numpy.testing.decorators import skipif
 import numpy
 import logging
 
-from abopt.engines.pmesh import ParticleMeshEngine, ParticleMesh, RealField, ComplexField
-
 logger.setLevel(level=logging.WARNING)
 
 try:
