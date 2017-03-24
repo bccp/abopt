@@ -1,5 +1,5 @@
 import numpy
-from abopt.vmad2 import ZERO, Engine, statement, programme, CodeSegment
+from abopt.vmad2 import ZERO, Engine, statement, programme, CodeSegment, Literal
 from pmesh.pm import ParticleMesh, RealField, ComplexField
 
 def create_grid(basepm, shift=0, dtype='f4'):

@@ -520,8 +520,11 @@ class CodeSegment(object):
                     kwargs['_' + arg.name] = arg.value.gradname
                 if isinstance(arg, (IArgument, IOArgument)) \
                 and arg.name in vjp.argnames:
-                    value = d[arg.value.name]
-                    kwargs[arg.name] = value
+                    if isinstance(arg.value, Literal):
+                        kwargs[arg.name] = arg.value.value
+                    else:
+                        value = d[arg.value.name]
+                        kwargs[arg.name] = value
 
                 if isinstance(arg, (IArgument, IOArgument)) and \
                 '_' + arg.name in vjp.argnames:

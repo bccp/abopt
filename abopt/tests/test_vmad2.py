@@ -160,7 +160,8 @@ def test_literal():
     engine = TestEngine()
     code = CodeSegment(engine)
     code.binary(x1='a', x2=Literal(2.0), y='a')
-    a, _a = code.compute_with_gradient(['a', '_a'], {'a' : 1.0}, {'_a': 1.0})
+    code.batch(u=Literal(2.0), v='d')
+    d, a, _a = code.compute_with_gradient(['d', 'a', '_a'], {'a' : 1.0}, {'_a': 1.0, '_d' : 0.0})
     assert_array_equal(a, 3.0)
     assert_array_equal(_a, 1.0)
 
