@@ -169,23 +169,23 @@ class ParticleMeshEngine(Engine):
     def _(engine, _y, _x):
         _x[...] = _y
 
-    @programme(aout=['force'], ain=['density', 's'])
-    def force(engine, force, density, s):
-        code = CodeSegment(engine)
-        code.defaults['force'] = numpy.zeros_like(engine.q)
-        code.decompose(s=s, layout='layout')
-        for d in range(engine.pm.ndim):
-            def tf(k):
-                k2 = sum(ki ** 2 for ki in k)
-                mask = k2 == 0
-                k2[mask] = 1.0
-                return 1j * k[d] / k2 * ~mask
-            code.assign(x='density', y='complex')
-            code.transfer(complex='complex', tf=tf)
-            code.c2r(complex='complex', real='real')
-            code.readout(value='force1', mesh='real', s=s, layout='layout')
-            code.assign_component(attribute='force', dim=d, value='force1')
-        return code
+    @statement(ain=['x1', 'x2'], aout=['y'])
+    def add(engine, x1, x2, y):
+        y[...] = x1 + x2
+
+    @add.defvjp
+    def _(engine, _y, _x1, _x2):
+        _x1[...] = _y
+        _x2[...] = _y
+
+    @statement(aout=['y'], ain=['x1', 'x2'])
+    def multiply(engine, x1, x2, y):
+        y[...] = x1 * x2
+
+    @multiply.defvjp
+    def _(engine, _x1, _x2, _y, x1, x2):
+        _x1[...] = _y * x2
+        _x2[...] = _y * x1
 
     @statement(ain=['x'], aout=['y'])
     def to_scalar(engine, x, y):
@@ -195,3 +195,63 @@ class ParticleMeshEngine(Engine):
     def _(engine, _y, _x, x):
         _x[...] = (2 * _y) * x
 
+def check_grad(code, yname, xname, init, eps, rtol):
+    from numpy.testing import assert_allclose
+    engine = code.engine
+    comm = engine.pm.comm
+    if isinstance(init[xname], numpy.ndarray) and init[xname].shape == engine.q.shape:
+        cshape = engine.pm.comm.allreduce(engine.q.shape[0]), engine.q.shape[1]
+
+        def cperturb(pos, ind, eps):
+            pos = pos.copy()
+            start = sum(comm.allgather(pos.shape[0])[:comm.rank])
+            end = sum(comm.allgather(pos.shape[0])[:comm.rank + 1])
+            if ind[0] >= start and ind[0] < end:
+                old = pos[ind[0] - start, ind[1]]
+                coord = pos[ind[0]-start].copy()
+                pos[ind[0] - start, ind[1]] = old + eps
+                new = pos[ind[0] - start, ind[1]]
+            else:
+                old, new, coord = 0, 0, 0
+            diff = comm.allreduce(new - old)
+            return pos
+
+        def cget(pos, ind):
+            start = sum(comm.allgather(pos.shape[0])[:comm.rank])
+            end = sum(comm.allgather(pos.shape[0])[:comm.rank + 1])
+            if ind[0] >= start and ind[0] < end:
+                old = pos[ind[0] - start, ind[1]]
+            else:
+                old = 0
+            return comm.allreduce(old)
+
+    elif isinstance(init[xname], RealField):
+        cshape = init[xname].cshape
+        def cget(real, index):
+            return real.cgetitem(index)
+
+        def cperturb(real, index, eps):
+            old = real.cgetitem(index)
+            r1 = real.copy()
+            r1.csetitem(index, old + eps)
+            return r1
+
+    code = code.copy()
+    code.to_scalar(x=yname, y='y')
+
+    y, tape = code.compute('y', init=init, return_tape=True)
+    gradient = code.gradient(tape)
+    _x = gradient.compute('_' + xname, init={'_y' : 1.0})
+
+    center = init[xname]
+    init2 = init.copy()
+    for index in numpy.ndindex(*cshape):
+        x1 = cperturb(center, index, eps)
+        x0 = cperturb(center, index, -eps)
+        analytic = cget(_x, index)
+        init2[xname] = x1
+        y1 = code.compute('y', init2)
+        init2[xname] = x0
+        y0 = code.compute('y', init2)
+        #print(y1, y0, y1 - y0, get_pos(code.engine, _x, index) * 2 * eps)
+        assert_allclose(y1 - y0, cget(_x, index) * 2 * eps, rtol=rtol)

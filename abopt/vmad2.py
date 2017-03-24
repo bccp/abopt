@@ -590,7 +590,6 @@ class Engine(object):
     def assign(engine, x, y):
         y[...] = x * 1.0
 
-
 def nodes_to_graph(nodes, **kwargs):
     """
         add a list of microcodes to a graph. The init node is duplicated as needed
