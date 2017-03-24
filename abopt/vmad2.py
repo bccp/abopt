@@ -16,9 +16,6 @@ from .zero import ZERO
 def statement(ain, aout): return lambda body: Statement(body, ain, aout)
 def programme(ain, aout): return lambda body: Programme(body, ain, aout)
 
-# an optional base class for computing engines
-class Engine(object): pass
-
 # create a model using a given computing engine
 def model(engine): return CodeSegment(engine)
 
@@ -108,7 +105,7 @@ class Argument(object):
         if isinstance(self, IOArgument):
             return "%s:%s=%s=>%s" % (type(self).__name__, self.name, self.value, self.ovalue)
         else:
-            return "%s:%s=%s" % (type(self).__name__, self.name, self.value)
+            return "%s:%s=%s" % (type(self).__name__, self.name, _short_repr(self.value))
 
 class IArgument(Argument): pass
 class OArgument(Argument): pass
@@ -199,6 +196,9 @@ class Node(object):
         out = {}
         bound = self.bind(frontier, out)
         self.call(bound)
+        for arg, value in zip(self.args, bound):
+            if isinstance(arg, IOArgument):
+                out[arg.value.name] = value
         return out
 
 class CodeSegNode(Node):
@@ -212,24 +212,26 @@ class CodeSegNode(Node):
 
     def call(self, bound, return_tape=False):
         init = {}
+        lvalues = {}
         for arg, value in zip(self.args, bound):
-            # this will populate init with the LValues as well
-            # we use them later to write back the return value
-            init[arg.name] = value
+            if isinstance(arg, (IArgument, IOArgument)):
+                init[arg.name] = value
+            else:
+                lvalues[arg.name] = value
 
         aout = [ arg.name for arg in self.args
                 if isinstance(arg, (OArgument, IOArgument))]
 
         # compute doesn't taint init.
         out = self.codeseg.compute(aout, init, return_tape=return_tape)
-
+        logger.info("CodeSegment results %s %s" % (aout, _short_repr(out)))
         if return_tape:
             out, tape = out
         else:
             tape = None
 
         for argname, value in zip(aout, out):
-            init[argname][...] = value
+            lvalues[argname][...] = value
 
         return tape
 
@@ -325,9 +327,13 @@ class CodeSegment(object):
         self.nodes = []
         self.defaults = {} # use these if not provided in init
 
-        self._liveset = {} # stores the version of variable with the same name
-                          # each overwrite will increase this number
-        self._postfix = 0 # a unique postfix added to every variable.
+        self._liveset = {} # the set of variables ready to be used as input (latest variables).
+                           # If a variable is destroyed the value replaced with None.
+
+        self._postfix = 0 # a unique postfix added to every variable;
+
+        # if a variable is used as input but not yet been mentioned on the liveset.
+        self._input_variables = {} # input variables
 
     def __getattr__(self, name):
         """ Allow looking up primitives and programmes from the engine namespace """
@@ -350,16 +356,25 @@ class CodeSegment(object):
         code.defaults.update(self.defaults)
         code._liveset.update(self._liveset)
         code._postfix = self._postfix
+        code._input_variables = self._input_variables
         return code
 
     def get_latest_variable(self, varname, expired=False):
         if varname not in self._liveset:
             self._postfix = self._postfix + 1
             variable = Variable(varname, self._postfix)
+            self._input_variables[varname] = variable
         else:
-            variable = self._liveset.pop(varname)
+            variable = self._liveset.get(varname)
+            if variable is None:
+                self._postfix = self._postfix + 1
+                variable = Variable(varname, self._postfix)
+
         if not expired:
             self._liveset[varname] = variable
+        else:
+            self._liveset[varname] = None
+
         return variable
 
     def create_latest_variable(self, varname):
@@ -428,10 +443,7 @@ class CodeSegment(object):
         return segment
 
     def compute(self, vout, init, return_tape=False):
-        if hasattr(self.engine, "Copy"):
-            copy = self.engine.Copy.body
-        else:
-            copy = lambda x: x * 1.0
+        assign = self.engine.assign.body
 
         if not isinstance(vout, (tuple, list, set)):
             vout = [vout]
@@ -457,7 +469,7 @@ class CodeSegment(object):
                 for arg in node.args:
                     if not isinstance(arg, IOArgument): continue
                     # FIXME: use copy
-                    frontier[arg.value.name] = copy(frontier[arg.value.name])
+                    assign(self.engine, x=frontier[arg.value.name], y=LValue(arg.value.name, frontier))
             try:
                 r = node.invoke(frontier)
             except Exception as e:
@@ -466,8 +478,9 @@ class CodeSegment(object):
             for var in abandon:
                 frontier.pop(var.name)
             if len(abandon):
-                logger.info("Removed from frontier %s, new size %d", abandon, len(frontier))
+                logger.info("Removed from frontier %s", abandon)
             frontier.update(r)
+            logger.info("Frontier %s", list(frontier.keys()))
 
         r = [frontier[vn] for vn in vout]
         if squeeze:
@@ -482,12 +495,7 @@ class CodeSegment(object):
 
         code = CodeSegment(self.engine)
 
-        if hasattr(self.engine, "Add"):
-            add = self.engine.Add
-        else:
-            @statement(ain=['x1', 'x2'], aout=['y'])
-            def add(engine, x1, x2, y):
-                y[...] = x1 + x2
+        add = self.engine.add
 
         ocd = {} # number of times seen
         for node, d in tape.records[::-1]:
@@ -530,6 +538,11 @@ class CodeSegment(object):
                 kwargs['x2'] = r
                 kwargs['y'] = r
                 code.append(add, kwargs)
+
+            for variable in code._input_variables.values():
+                code.defaults[variable.name] = ZERO
+
+            logger.info("GRADIENT code.defaults: %s " % code.defaults)
         return code
 
     def compute_with_gradient(self, vout, init, ginit, return_tape=False):
@@ -550,10 +563,7 @@ class CodeSegment(object):
 
         gradient = self.gradient(tape)
 
-        _init = init.copy()
-        _init.update(ginit)
-
-        gout = gradient.compute(gnout, _init)
+        gout = gradient.compute(gnout, ginit)
         d = {}
         d.update(zip(cnout, cout))
         d.update(zip(gnout, gout))
@@ -569,6 +579,17 @@ class CodeSegment(object):
 
     def to_graph(self, **kwargs):
         return nodes_to_graph(self.nodes, **kwargs)[0]
+
+# an optional base class for computing engines
+class Engine(object):
+    @statement(ain=['x1', 'x2'], aout=['y'])
+    def add(engine, x1, x2, y):
+        y[...] = x1 + x2
+
+    @statement(ain=['x'], aout=['y'])
+    def assign(engine, x, y):
+        y[...] = x * 1.0
+
 
 def nodes_to_graph(nodes, **kwargs):
     """
@@ -653,3 +674,13 @@ def nodes_to_graph(nodes, **kwargs):
             graph.edge(from_node, to_node, **attrs)
 
     return graph, inputs, outputs
+
+
+def _short_repr(obj):
+    if isinstance(obj, (list, tuple)):
+        return [_short_repr(i) for i in obj]
+    else:
+        s = '%s' % obj
+        if len(s) > 30:
+            s = '<%s>' % type(obj).__name__
+        return s
