@@ -1,5 +1,5 @@
 from __future__ import print_function
-from abopt.vmad2 import CodeSegment, Engine, statement, programme, ZERO, logger
+from abopt.vmad2 import CodeSegment, Engine, statement, programme, ZERO, logger, Literal
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
 from numpy.testing.decorators import skipif
 import numpy
@@ -155,6 +155,14 @@ def test_zeros():
     code.unitary(x='a', y='b2', factor=3.0)
     a, b1, b2, _a = code.compute_with_gradient(['a', 'b1', 'b2', '_a'], {'a' : 1.0}, {'_b1': ZERO, '_b2' : ZERO, '_a' : ZERO})
     assert _a is ZERO
+
+def test_literal():
+    engine = TestEngine()
+    code = CodeSegment(engine)
+    code.binary(x1='a', x2=Literal(2.0), y='a')
+    a, _a = code.compute_with_gradient(['a', '_a'], {'a' : 1.0}, {'_a': 1.0})
+    assert_array_equal(a, 3.0)
+    assert_array_equal(_a, 1.0)
 
 def test_copy():
     engine = TestEngine()

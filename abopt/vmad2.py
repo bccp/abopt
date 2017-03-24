@@ -29,6 +29,11 @@ class LValue(object):
     def __getitem__(self, index): return self.ns[self.name]
     def __setitem__(self, index, value): self.ns[self.name] = value
 
+class Literal(object):
+    def __init__(self, value):
+        self.value = value
+    def __repr__(self): return "Literal:%s" % _short_repr(self.value)
+
 class Primitive(object):
     def __init__(self, body, ain, aout, argnames=None):
         self.body = body
@@ -166,7 +171,10 @@ class Node(object):
         primitive = self.primitive
         for arg in self.args:
             if isinstance(arg, (IArgument, IOArgument)):
-                bound.append(frontier[arg.value.name])
+                if isinstance(arg.value, Literal):
+                    bound.append(arg.value.value)
+                else:
+                    bound.append(frontier[arg.value.name])
             elif isinstance(arg, OArgument):
                 bound.append(LValue(arg.value.name, results))
             else:
@@ -314,6 +322,7 @@ class Tape(object):
         d = {}
         for arg in node.args:
             if isinstance(arg, (IArgument, IOArgument)):
+                if isinstance(arg.value, Literal): continue
                 d[arg.value.name] = frontier[arg.value.name]
 
         self.records.append((node, d))
@@ -360,6 +369,8 @@ class CodeSegment(object):
         return code
 
     def get_latest_variable(self, varname, expired=False):
+        if isinstance(varname, Literal):
+            return varname
         if varname not in self._liveset:
             self._postfix = self._postfix + 1
             variable = Variable(varname, self._postfix)
@@ -408,6 +419,7 @@ class CodeSegment(object):
             item = []
             for arg in node.args:
                 if isinstance(arg, (IArgument, IOArgument)):
+                    if isinstance(arg.value, Literal): continue
                     refcounts[arg.value] = refcounts[arg.value] - 1
                     if refcounts[arg.value] == 0:
                         item.append(arg.value)
@@ -511,17 +523,21 @@ class CodeSegment(object):
                     value = d[arg.value.name]
                     kwargs[arg.name] = value
 
-                if isinstance(arg, (IArgument, IOArgument)) \
-                and '_' + arg.name in vjp.argnames:
-                    occ = ocd.get(arg.value, 0)
-                    ocd[arg.value] = occ + 1
-                    if occ == 0:
-                        # directly write to the gradient, it is used
-                        kwargs['_' + arg.name] = arg.value.gradname
+                if isinstance(arg, (IArgument, IOArgument)) and \
+                '_' + arg.name in vjp.argnames:
+                    if isinstance(arg.value, Literal):
+                        kwargs['_' + arg.name] = '###abandon###'
                     else:
-                        newname = arg.value.gradname + '#partial'
-                        kwargs['_' + arg.name] = newname
-                        partials.append((newname, arg.value.gradname))
+                        occ = ocd.get(arg.value, 0)
+                        ocd[arg.value] = occ + 1
+                        if occ == 0:
+                            # directly write to the gradient, it is used
+                            kwargs['_' + arg.name] = arg.value.gradname
+                        else:
+                            newname = arg.value.gradname + '#partial'
+                            kwargs['_' + arg.name] = newname
+                            partials.append((newname, arg.value.gradname))
+
                 if isinstance(arg, EXArgument):
                     kwargs[arg.name] = arg.value
 
