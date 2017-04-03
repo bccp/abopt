@@ -41,6 +41,14 @@ class Primitive(object):
         self.aout = aout
         if argnames is None:
             argnames = body.__code__.co_varnames[1:body.__code__.co_argcount]
+
+        if getattr(body, '__kwdefaults__', None) is not None:
+            self.defaults = dict(body.__kwdefaults__)
+        elif getattr(body, '__defaults__', None) is not None:
+            self.defaults = dict(zip(argnames[-len(body.__defaults__):], body.__defaults__))
+        else:
+            self.defaults = {}
+
         self.argnames = argnames
         for an in ain:
             if not an in self.argnames:
@@ -129,8 +137,11 @@ class Arguments(list):
         else:
             raise KeyError
 
-    def set_values(self, kwargs, code):
-        kwargs = kwargs.copy()
+    def set_values(self, kwargs, defaults, code):
+        _kwargs = defaults.copy()
+        _kwargs.update(kwargs)
+        kwargs = _kwargs
+
         for arg in self:
             if isinstance(arg, EXArgument):
                 variable = kwargs.pop(arg.name)
@@ -268,6 +279,32 @@ class StatementVJP(Primitive):
             if not Node.call_zero_bypass(self, bound):
                 self.primitive.body(self.engine, *bound)
 
+class Inspect(Primitive):
+    @staticmethod
+    def inspect(engine, inspector=None, vjp_inspector=None):
+        pass
+
+    def __init__(self, is_vjp=False):
+        Primitive.__init__(self, Inspect.inspect, ain=[], aout=[])
+        self.is_vjp = is_vjp
+        if not is_vjp:
+            self.vjp = Inspect(is_vjp=True)
+
+    class NodeType(Node):
+        def bind(self, frontier, results):
+            if self.primitive.is_vjp:
+                inspector = self.args.find('vjp_inspector').value
+            else:
+                inspector = self.args.find('inspector').value
+
+            if inspector: inspector(self.engine, frontier)
+
+            bound = Node.bind(self, frontier, results)
+            return bound
+
+        def call(self, bound):
+            pass
+
 class Programme(Primitive):
     def __init__(self, body, ain, aout):
         Primitive.__init__(self, body, ain, aout)
@@ -402,7 +439,7 @@ class CodeSegment(object):
 
     def append(self, primitive, kwargs):
         node = primitive.create_node(self.engine)
-        node.args.set_values(kwargs, self)
+        node.args.set_values(kwargs, node.primitive.defaults, self)
         self.nodes.append(node)
 
     def get_refcounts(self, vout):
@@ -614,6 +651,8 @@ class Engine(object):
     @statement(ain=['x'], aout=['y'])
     def assign(engine, x, y):
         y[...] = x * 1.0
+
+    inspect = Inspect()
 
 def nodes_to_graph(nodes, **kwargs):
     """
