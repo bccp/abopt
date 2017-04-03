@@ -21,6 +21,7 @@ install:
     - python setup.py install
 
 script:
+    - pip install runtests
     - python ./runtests.py
     - bash check_tag.sh abopt/version.py
 
