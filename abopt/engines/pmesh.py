@@ -178,14 +178,6 @@ class ParticleMeshEngine(Engine):
         _x1[...] = _y
         _x2[...] = _y
 
-    @statement(aout=[], ain=['x'])
-    def inspect(engine, x):
-        print('inspect', x)
-
-    @inspect.defvjp
-    def _(engine):
-        pass
-
     @statement(aout=['y'], ain=['x1', 'x2'])
     def multiply(engine, x1, x2, y):
         y[...] = x1 * x2
@@ -254,6 +246,7 @@ def check_grad(code, yname, xname, init, eps, rtol, verbose=False):
 
     center = init[xname]
     init2 = init.copy()
+    poor = []
     for index in numpy.ndindex(*cshape):
         x1 = cperturb(center, index, eps)
         x0 = cperturb(center, index, -eps)
@@ -265,4 +258,11 @@ def check_grad(code, yname, xname, init, eps, rtol, verbose=False):
         #logger.DEBUG("CHECKGRAD: %s" % (y1, y0, y1 - y0, get_pos(code.engine, _x, index) * 2 * eps))
         if verbose:
             print(index, (x1 - x0)[...].max(), y1, y0, y, y1 - y0, cget(_x, index) * 2 * eps)
-        assert_allclose(y1 - y0, cget(_x, index) * 2 * eps, rtol=rtol)
+
+        if not numpy.allclose(y1 - y0, cget(_x, index) * 2 * eps, rtol=rtol):
+            poor.append([index, y1 - y0, cget(_x, index) * 2 * eps])
+
+    if len(poor) != 0:
+        print('\n'.join(['%s' % a for a in poor]))
+        raise AssertionError("gradient of %d / %d parameters are bad." % (len(poor), numpy.prod(cshape)))
+
