@@ -20,51 +20,66 @@ class LValue(object):
         # anything should work -- to support [:]
         self.ns[self.vn] = value
 
-class Node(object):
-    def __init__(self, body, ain, aout):
-        self.body = body
+class MicroCode(object):
+    """ An object that represents a microcode.
+
+        Mostly a python function with some additional introspection, marking
+        the input and output variables.
+    """
+    def __init__(self, function, ain, aout, is_programme=False):
+        self.function = function
         self.ain = ain
         self.aout = aout
-        self.argnames = body.__code__.co_varnames[1:body.__code__.co_argcount]
+        self.argnames = function.__code__.co_varnames[1:function.__code__.co_argcount]
         for an in ain:
             if not an in self.argnames:
                 raise ValueError(
     "argument `%s` of ain in microcode decorator is not declared by function `%s`"
-                       % (an, str(self.body))
+                       % (an, str(self.function))
                 )
         self.vjp = NotImplemented
-        functools.update_wrapper(self, body)
+        self.is_programme = is_programme
+        functools.update_wrapper(self, function)
 
-    def defvjp(self, body):
+    def defvjp(self, function):
         """ Define the back-propagation gradient operator. """
         gout = ['_' + a for a in self.ain]
         gin  = ['_' + a for a in self.aout]
 
-        body.__name__ = "G:" + self.body.__name__
-        self.vjp = microcode(gin, gout)(body)
-        # allow the gradient with the same name as the original body.
+        function.__name__ = "G:" + self.function.__name__
+        self.vjp = microcode(gin, gout)(function)
+        # allow the gradient with the same name as the original function.
         return self.vjp
     grad = defvjp
 
     def __get__(self, instance, owner):
         """ As a class member, return the microcode,
-            As an instance member of VM, returns the body as a method,
+            As an instance member of VM, returns the function as a method,
             As an instance member of Code, returns a method to add to the code.
         """
         if instance is not None:
-            if isinstance(instance, Code):
-                @functools.wraps(self.body)
-                def method(**kwargs):
-                    instance.append(self, kwargs)
-                return method
+            if self.is_programme:
+                # programme is directly ran.
+                @functools.wraps(self.function)
+                def method(_self, *args, **kwargs):
+                    for a in self.ain + self.aout:
+                        kwargs.setdefault(a, a)
+                    return self.function(_self, *args, **kwargs)
+                return method.__get__(instance, owner)
             else:
-                return self.body.__get__(instance, owner)
+                if isinstance(instance, Code):
+                    @functools.wraps(self.function)
+                    def method(**kwargs):
+                        instance.append(self, kwargs)
+                    return method
+                else:
+                    return self.function.__get__(instance, owner)
         else:
             # class member
             return self
 
     def __repr__(self):
-        return self.body.__name__
+        return self.function.__name__
 
     def to_label(self, kwargs, d={}, html=False):
         if html:
@@ -101,9 +116,11 @@ class Node(object):
         else:
             return s
 
-    def bind_tape(self, frontier, kwargs):
-        taperecord = []
-
+    def invoke(self, vm, frontier, kwargs, tape, monitor=None):
+        vin = []
+        tapein = []
+        dout = {}
+        oldkwargs = kwargs
         kwargs = kwargs.copy()
 
         # copy in all arguments
@@ -116,58 +133,7 @@ class Node(object):
                     raise ValueError("Argument `%s' of `%s` resolves to an undefined varabile `%s'" % (an, self, vn))
                 data = frontier[vn]
 
-                taperecord.append(data)
-
-            elif an in self.aout:
-                vn = kwargs.pop(an, an)
-                taperecord.append(vn)
-            else:
-                # use the kwargs -- raise error if not found!
-                if an not in kwargs:
-                    raise ValueError("Argument `%s' of `%s' could not be bound to a keyword argument" % (an, self))
-                data = kwargs.pop(an)
-                taperecord.append(data)
-
-        if len(kwargs) > 0:
-            raise ValueError("Bad keyword arguments : %s" % (','.join(kwargs.keys())))
-
-        return taperecord
-
-    def invoke(self, vm, frontier, kwargs, tape, monitor=None):
-        if tape is not None:
-            record = self.bind_tape(frontier, kwargs)
-            tape.record(self, kwargs, record)
-
-        vin, dout = self._invoke(vm, frontier, kwargs)
-
-        if monitor:
-            din = dict(zip(self.argnames, vin))
-            monitor(self, din, dout, frontier)
-
-        return dout
-        
-class MicroCode(Node):
-    """ An object that represents a microcode.
-
-        Mostly a python function body with some additional introspection, marking
-        the input and output variables.
-    """
-    def __init__(self, body, ain, aout):
-        Node.__init__(self, body, ain, aout)
-
-    def bind_args(self, vm, frontier, kwargs):
-        dout = {}
-        vin = []
-
-        kwargs = kwargs.copy()
-
-        # copy in all arguments
-        for an in self.argnames:
-            if an in self.ain:
-                # replace argument with variable name
-                # then fetch it from the frontier.
-                vn = kwargs.pop(an, an)
-                data = frontier[vn]
+                tapein.append(data)
 
                 if an in self.aout:
                     # create a copy, store to the output dict, for tainting the values.
@@ -184,55 +150,31 @@ class MicroCode(Node):
                 # mixed inout is handled in above;
                 data = LValue(vn, dout)
                 vin.append(data)
+                tapein.append(data)
             else:
                 # use the kwargs -- raise error if not found!
+                if an not in kwargs:
+                    raise ValueError("Argument `%s' of `%s' could not be bound to a keyword argument" % (an, self))
                 data = kwargs.pop(an)
                 vin.append(data)
+                tapein.append(data)
 
-        return vin, dout
+        if len(kwargs) > 0:
+            raise ValueError("Bad keyword arguments : %s" % (','.join(kwargs.keys())))
 
-    def _invoke(self, vm, frontier, kwargs):
-        vin, dout = self.bind_args(vm, frontier, kwargs)
+        if tape is not None:
+            tape.record(self, oldkwargs, tapein)
 
-        self.body(vm, *vin)
+        self.function(vm, *vin)
 
-        return vin, dout
-
-class Programme(Node):
-    def __init__(self, body, ain, aout):
-        Node.__init__(self, body, ain, aout)
-
-        self.vjp = NotImplemented
-
-    def _invoke(self, vm, frontier, kwargs, with_gradient=False):
-
-        # create the code object, binding argnames to variable names
-        code = vm.code()
-        vin = []
-        for an in self.argnames:
-            if an in self.ain or an in self.aout:
-                vin.append(kwargs.get(an, an))
-            else:
-                vin.append(kwargs.get(an))
-
-        self.body(code, *vin)
-
-        # bind the output argnames, and run with the current frontier
-        vout = [kwargs.get(an, an) for an in self.aout]
-
-        if with_gradient:
-            tape = code.tape()
-        else:
-            tape = None
-        out = code.compute(vout, frontier, tape=tape)
-
-        dout = dict(zip(vout, out))
-
-        return vin, dout
+        if monitor:
+            din = dict(zip(self.argnames, vin))
+            monitor(self, din, dout, frontier)
+        return dout
 
 def programme(ain, aout):
     def decorator(func):
-        return Programme(func, ain, aout)
+        return MicroCode(func, ain, aout, is_programme=True)
     return decorator
     
 def microcode(ain, aout):
@@ -292,6 +234,9 @@ class VM(object):
         _x1[...] = _y
         _x2[...] = _y
 
+    def tape(self):
+        return Tape()
+
     def code(self):
         """ Creates a Code object for this VM.
 
@@ -301,7 +246,7 @@ class VM(object):
         t = type(self)
         for name in dir(t):
             method = getattr(t, name)
-            if isinstance(method, Node):
+            if isinstance(method, MicroCode):
                 d[name] = method
         MyCode = type("Code%s" % (type(self).__name__), (Code, ), d)
         return MyCode(self)
@@ -470,7 +415,7 @@ class Tape(list):
         self._refcount = {}
 
     def __str__(self):
-        r = '-- Tape: Inputs (%08X)----\n' % id(self)
+        r = '-- Inputs (%08X)----\n' % id(self)
         r += '\n'.join([microcode.to_label(kwargs, d) for microcode, kwargs, d in self ])
         r += '\n'
         r += '-- Refcounts ----\n'
@@ -581,7 +526,7 @@ class Code(list):
         return iter(self.microcodes)
 
     def compute(self, vout, init, return_tape=False, monitor=None):
-        if not isinstance(vout, (tuple, list, set)):
+        if not isinstance(vout, (tuple, list)):
             vout = [vout]
             squeeze = True
         else:
