@@ -335,7 +335,7 @@ class ProgrammeVJP(Primitive):
             d = self.args.find('#frontier').value
             codeseg = node.codeseg
             tape = node.invoke_for_tape(codeseg, d)
-            gradient = codeseg.gradient(tape)
+            gradient = tape.gradient()
             # if a variable is not mentioned in the code
             # then the gradient object doesn't set the default to ZERO
             # we fix it here.
@@ -356,10 +356,11 @@ class ProgrammeVJP(Primitive):
                 return CodeSegNode.call(self, bound, return_tape)
 
 class Tape(object):
-    def __init__(self, init):
+    def __init__(self, engine, init):
         self.records = []
         self.init = {}
         self.init.update(init)
+        self.engine = engine
 
     def append(self, node, frontier):
         d = {}
@@ -372,6 +373,70 @@ class Tape(object):
 
     def __repr__(self):
         return '\n'.join('%s | %s' % (node, list(d.keys())) for node, d in self.records)
+
+    def gradient(self):
+        """ Create a code segment that computes the gradient from tape for the current
+            code segment """
+
+        code = CodeSegment(self.engine)
+
+        add = self.engine.add
+
+        ocd = {} # number of times seen
+        for node, d in self.records[::-1]:
+            vjp = node.primitive.vjp
+            kwargs = {}
+            partials = []
+            for arg in node.args:
+                if isinstance(arg, OArgument) \
+                and '_' + arg.name in vjp.argnames:
+                    kwargs['_' + arg.name] = arg.value.gradname
+                if isinstance(arg, (IArgument, IOArgument)) \
+                and arg.name in vjp.argnames:
+                    if isinstance(arg.value, Literal):
+                        kwargs[arg.name] = arg.value.value
+                    else:
+                        value = d[arg.value.name]
+                        kwargs[arg.name] = value
+
+                if isinstance(arg, (IArgument, IOArgument)) and \
+                '_' + arg.name in vjp.argnames:
+                    if isinstance(arg.value, Literal):
+                        kwargs['_' + arg.name] = '###abandon###'
+                    else:
+                        occ = ocd.get(arg.value, 0)
+                        ocd[arg.value] = occ + 1
+                        if occ == 0:
+                            # directly write to the gradient, it is used
+                            kwargs['_' + arg.name] = arg.value.gradname
+                        else:
+                            newname = arg.value.gradname + '#partial'
+                            kwargs['_' + arg.name] = newname
+                            partials.append((newname, arg.value.gradname))
+
+                if isinstance(arg, EXArgument):
+                    kwargs[arg.name] = arg.value
+
+            if isinstance(node.primitive, Programme):
+                # the vjp of a Programme requires more arguments
+                # to build the gradient codesegment on the fly
+                kwargs['#programme_node'] = node
+                kwargs['#frontier'] = d
+
+            code.append(vjp, kwargs)
+            for p, r in partials:
+                kwargs = {}
+                kwargs['x1'] = p
+                kwargs['x2'] = r
+                kwargs['y'] = r
+                code.append(add, kwargs)
+
+            for variable in code._input_variables.values():
+                code.defaults[variable.name] = ZERO
+
+            logger.info("GRADIENT code.defaults: %s " % code.defaults)
+        return code
+
 
 class CodeSegment(object):
     def __init__(self, engine):
@@ -487,6 +552,8 @@ class CodeSegment(object):
                 if isinstance(arg, IOArgument) and arg.ovalue in deps:
                     keep = True
                     deps.remove(arg.ovalue)
+            if isinstance(node.primitive, Inspect):
+                keep = True
             if not keep: continue
             nodes.append(node)
             for arg in node.args:
@@ -514,9 +581,11 @@ class CodeSegment(object):
             frontier[var] = value
 
         if return_tape:
-            tape = Tape(frontier)
+            tape = Tape(self.engine, frontier)
         else:
             tape = None
+
+        self = self.optimize(vout)
 
         for i, (node, abandon) in enumerate(zip(self.nodes, self.get_freeables(vout))):
             if tape:
@@ -544,69 +613,6 @@ class CodeSegment(object):
             r = r, tape
         return r
 
-    def gradient(self, tape):
-        """ Create a code segment that computes the gradient from tape for the current
-            code segment """
-
-        code = CodeSegment(self.engine)
-
-        add = self.engine.add
-
-        ocd = {} # number of times seen
-        for node, d in tape.records[::-1]:
-            vjp = node.primitive.vjp
-            kwargs = {}
-            partials = []
-            for arg in node.args:
-                if isinstance(arg, OArgument) \
-                and '_' + arg.name in vjp.argnames:
-                    kwargs['_' + arg.name] = arg.value.gradname
-                if isinstance(arg, (IArgument, IOArgument)) \
-                and arg.name in vjp.argnames:
-                    if isinstance(arg.value, Literal):
-                        kwargs[arg.name] = arg.value.value
-                    else:
-                        value = d[arg.value.name]
-                        kwargs[arg.name] = value
-
-                if isinstance(arg, (IArgument, IOArgument)) and \
-                '_' + arg.name in vjp.argnames:
-                    if isinstance(arg.value, Literal):
-                        kwargs['_' + arg.name] = '###abandon###'
-                    else:
-                        occ = ocd.get(arg.value, 0)
-                        ocd[arg.value] = occ + 1
-                        if occ == 0:
-                            # directly write to the gradient, it is used
-                            kwargs['_' + arg.name] = arg.value.gradname
-                        else:
-                            newname = arg.value.gradname + '#partial'
-                            kwargs['_' + arg.name] = newname
-                            partials.append((newname, arg.value.gradname))
-
-                if isinstance(arg, EXArgument):
-                    kwargs[arg.name] = arg.value
-
-            if isinstance(node.primitive, Programme):
-                # the vjp of a Programme requires more arguments
-                # to build the gradient codesegment on the fly
-                kwargs['#programme_node'] = node
-                kwargs['#frontier'] = d
-
-            code.append(vjp, kwargs)
-            for p, r in partials:
-                kwargs = {}
-                kwargs['x1'] = p
-                kwargs['x2'] = r
-                kwargs['y'] = r
-                code.append(add, kwargs)
-
-            for variable in code._input_variables.values():
-                code.defaults[variable.name] = ZERO
-
-            logger.info("GRADIENT code.defaults: %s " % code.defaults)
-        return code
-
     def compute_with_gradient(self, vout, init, ginit, return_tape=False):
         if not isinstance(vout, (tuple, list, set)):
             vout = [vout]
@@ -623,7 +629,7 @@ class CodeSegment(object):
         cout, tape = self.compute(cnout + cnout_g, init, return_tape=True)
         cout = cout[:len(cnout)]
 
-        gradient = self.gradient(tape)
+        gradient = tape.gradient()
 
         gout = gradient.compute(gnout, ginit)
         d = {}

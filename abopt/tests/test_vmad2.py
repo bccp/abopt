@@ -80,6 +80,18 @@ def test_optimize():
     b = opt.compute('b', {'a' : 1.0})
     assert_array_equal(b, 3.0)
 
+def test_optimized_execution():
+    engine = TestEngine()
+    code = CodeSegment(engine)
+    code.unitary(x='a', y='d', factor=3.0)
+    code.unitary(x='a', y='b', factor=3.0)
+    code.unitary(x='a', y='c', factor=3.0)
+
+    opt = code.optimize(['b'])
+    assert len(opt.nodes) == 1
+    
+    b, tape = code.compute('b', {'a' : 1.0}, return_tape=True)
+    print(tape)
 
 def test_nested_compute():
     engine = TestEngine()
@@ -109,7 +121,7 @@ def test_partial_gradient():
     d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
     assert_array_equal(d, 12.0)
 
-    gradient = code.gradient(tape)
+    gradient = tape.gradient()
     _a  = gradient.compute(['_a'], {'_d': 1.0})
     assert_array_equal(_a, 12.0)
 
@@ -148,7 +160,7 @@ def test_to_graph():
     code.batch(u='b2', v='f')
 
     d, tape = code.compute(('e', 'a', 'f', 'd'), {'a' : 1.0}, return_tape=True)
-    gradient = code.gradient(tape)
+    gradient = tape.gradient()
     graph1 = code.to_graph()
     graph2 = gradient.to_graph()
 #    graph2.render('temp.png', view=True)
@@ -221,29 +233,16 @@ def test_inspect():
 
     engine = TestEngine()
     code = CodeSegment(engine)
-    code.unitary(x='a', y='b1', factor=3.0)
+    code.unitary(x='a', y='d', factor=3.0)
     code.inspect(inspector=inspect)
     code.inspect(vjp_inspector=vjp_inspect)
-    code.unitary(x='a', y='b2', factor=3.0)
-    code.unitary(x='a', y='b3', factor=3.0)
-    code.unitary(x='a', y='b4', factor=3.0)
-    code.binary(x1='b1', x2='b2', y='c1')
-    code.binary(x1='b3', x2='b4', y='c2')
-    code.binary(x1='c1', x2='c2', y='d')
 
     d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
-    assert_array_equal(d, 12.0)
 
     assert inspect_called[0] == True
     assert vjp_inspect_called[0] == False
 
-    gradient = code.gradient(tape)
+    gradient = tape.gradient()
     _a  = gradient.compute(['_a'], {'_d': 1.0})
     assert inspect_called[0] == True
     assert vjp_inspect_called[0] == True
-    assert_array_equal(_a, 12.0)
-
-    d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})
-
-    assert_array_equal(d, 12.0)
-    assert_array_equal(_a, 12.0)

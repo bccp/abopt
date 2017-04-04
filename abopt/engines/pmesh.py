@@ -241,7 +241,7 @@ def check_grad(code, yname, xname, init, eps, rtol, verbose=False):
     code.to_scalar(x=yname, y='y')
 
     y, tape = code.compute('y', init=init, return_tape=True)
-    gradient = code.gradient(tape)
+    gradient = tape.gradient()
     _x = gradient.compute('_' + xname, init={'_y' : 1.0})
 
     center = init[xname]
