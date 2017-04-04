@@ -25,7 +25,7 @@ def create_grid(basepm, shift=0, dtype='f4'):
 def nyquist_mask(factor, v):
     # any nyquist modes are set to 0 if the transfer function is complex
     mask = (numpy.imag(factor) == 0) | \
-    numpy.bitwise_and.reduce(list(ii != (ni // 2) for ii, ni in zip(v.i, v.Nmesh)))
+            ~numpy.bitwise_and.reduce([(ii == 0) | (ii == ni // 2) for ii, ni in zip(v.i, v.Nmesh)])
     return factor * mask
 
 class ParticleMeshEngine(Engine):
