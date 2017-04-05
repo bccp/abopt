@@ -507,61 +507,11 @@ class CodeSegment(object):
         node.args.set_values(kwargs, node.primitive.defaults, self)
         self.nodes.append(node)
 
-    def get_refcounts(self, vout):
-        refcounts = {}
-        for varname in vout:
-            var = self.get_latest_variable(varname)
-            refcounts[var] = refcounts.get(var, 0) + 1
-        for node in self.nodes:
-            for arg in node.args:
-                if isinstance(arg, (IArgument, IOArgument)):
-                    refcounts[arg.value] = refcounts.get(arg.value, 0) + 1
-        return refcounts
-
-    def get_freeables(self, vout):
-        refcounts = self.get_refcounts(vout)
-
-        free_list = []
-
-        for node in self.nodes:
-            item = []
-            for arg in node.args:
-                if isinstance(arg, (IArgument, IOArgument)):
-                    if isinstance(arg.value, Literal): continue
-                    refcounts[arg.value] = refcounts[arg.value] - 1
-                    if refcounts[arg.value] == 0:
-                        item.append(arg.value)
-            free_list.append(item)
-        return free_list
-
     def optimize(self, vout):
-        """ return an optimized codeseg for computing vout. irrelevant nodes are pruned. """
-        deps = []
-        for varname in vout:
-            deps.append(self.get_latest_variable(varname))
-
-        deps = set(deps)
-
-        nodes = []
-        for node in self.nodes[::-1]:
-            keep = False
-            for arg in node.args:
-                if isinstance(arg, OArgument) and arg.value in deps:
-                    keep = True
-                    deps.remove(arg.value)
-                if isinstance(arg, IOArgument) and arg.ovalue in deps:
-                    keep = True
-                    deps.remove(arg.ovalue)
-            if isinstance(node.primitive, Inspect):
-                keep = True
-            if not keep: continue
-            nodes.append(node)
-            for arg in node.args:
-                if isinstance(arg, (IArgument, IOArgument)):
-                    deps.add(arg.value)
-
+        out = [ self.get_latest_variable(varname) for varname in vout]
+        nodes = _optimize(self.nodes, out)
         segment = self.copy()
-        segment.nodes = list(reversed(nodes))
+        segment.nodes = nodes
         return segment
 
     def compute(self, vout, init, return_tape=False):
@@ -585,9 +535,12 @@ class CodeSegment(object):
         else:
             tape = None
 
-        self = self.optimize(vout)
+        out = [ self.get_latest_variable(varname) for varname in vout]
 
-        for i, (node, abandon) in enumerate(zip(self.nodes, self.get_freeables(vout))):
+        nodes = _optimize(self.nodes, out)
+        freeables = _get_freeables(nodes, out)
+
+        for i, (node, abandon) in enumerate(zip(nodes, freeables)):
             if tape:
                 tape.append(node, frontier)
                 for arg in node.args:
@@ -659,6 +612,55 @@ class Engine(object):
         y[...] = x * 1.0
 
     inspect = Inspect()
+
+def _optimize(nodes, out):
+    """ return an optimized codeseg for computing vout. irrelevant nodes are pruned. """
+
+    deps = set(out)
+
+    newnodes = []
+    for node in nodes[::-1]:
+        keep = False
+        for arg in node.args:
+            if isinstance(arg, OArgument) and arg.value in deps:
+                keep = True
+                deps.remove(arg.value)
+            if isinstance(arg, IOArgument) and arg.ovalue in deps:
+                keep = True
+                deps.remove(arg.ovalue)
+        if isinstance(node.primitive, Inspect):
+            keep = True
+        if not keep: continue
+        newnodes.append(node)
+        for arg in node.args:
+            if isinstance(arg, (IArgument, IOArgument)):
+                deps.add(arg.value)
+
+    return list(reversed(newnodes))
+
+def _get_freeables(nodes, out):
+    refcounts = {}
+    for var in out:
+        refcounts[var] = refcounts.get(var, 0) + 1
+
+    for node in nodes:
+        for arg in node.args:
+            if isinstance(arg, (IArgument, IOArgument)):
+                refcounts[arg.value] = refcounts.get(arg.value, 0) + 1
+
+    free_list = []
+
+    for node in nodes:
+        item = []
+        for arg in node.args:
+            if isinstance(arg, (IArgument, IOArgument)):
+                if isinstance(arg.value, Literal): continue
+                refcounts[arg.value] = refcounts[arg.value] - 1
+                if refcounts[arg.value] == 0:
+                    item.append(arg.value)
+        free_list.append(item)
+    return free_list
+
 
 def nodes_to_graph(nodes, **kwargs):
     """
