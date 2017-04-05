@@ -504,7 +504,7 @@ class CodeSegment(object):
 
     def append(self, primitive, kwargs):
         node = primitive.create_node(self.engine)
-        node.args.set_values(kwargs, node.primitive.defaults, self)
+        node.args.set_values(kwargs, primitive.defaults, self)
         self.nodes.append(node)
 
     def optimize(self, vout):
@@ -660,7 +660,6 @@ def _get_freeables(nodes, out):
                     item.append(arg.value)
         free_list.append(item)
     return free_list
-
 
 def nodes_to_graph(nodes, **kwargs):
     """
