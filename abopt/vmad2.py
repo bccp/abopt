@@ -532,6 +532,20 @@ class CodeSegment(object):
 
         if return_tape:
             tape = Tape(self.engine, frontier)
+
+            # XXX This is not nice. But requires too much 
+            # refactoring to get it right.
+            self = self.copy()
+            # we need to connect the outputs to a 'terminal'
+            # node such that their input gradients are not
+            # overwritten by the partial gradients of
+            # subsequential operations.
+            @statement(ain=['x'], aout=['x'])
+            def mark(engine, x): pass
+            @mark.defvjp
+            def _(engine, _x): pass
+            for varname in vout:
+                self.append(mark, {'x' : varname})
         else:
             tape = None
 
