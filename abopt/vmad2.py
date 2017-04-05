@@ -29,6 +29,13 @@ class LValue(object):
     def __getitem__(self, index): return self.ns[self.name]
     def __setitem__(self, index, value): self.ns[self.name] = value
 
+class UnusedType(LValue):
+    def __init__(self, name):
+        LValue.__init__(self, name, {})
+    def __repr__(self): return "Unused:%s" % self.name
+
+Unused = UnusedType("UNUSED")
+
 class Literal(object):
     def __init__(self, value):
         self.value = value
@@ -187,7 +194,10 @@ class Node(object):
                 else:
                     bound.append(frontier[arg.value.name])
             elif isinstance(arg, OArgument):
-                bound.append(LValue(arg.value.name, results))
+                if isinstance(arg.value, UnusedType):
+                    bound.append(UnusedType(arg.value.name))
+                else:
+                    bound.append(LValue(arg.value.name, results))
             else:
                 bound.append(arg.value)
         return bound
@@ -239,7 +249,8 @@ class CodeSegNode(Node):
                 lvalues[arg.name] = value
 
         aout = [ arg.name for arg in self.args
-                if isinstance(arg, (OArgument, IOArgument))]
+                if isinstance(arg, (OArgument, IOArgument))
+                and not isinstance(lvalues[arg.name], UnusedType) ]
 
         # compute doesn't taint init.
         out = self.codeseg.compute(aout, init, return_tape=return_tape)

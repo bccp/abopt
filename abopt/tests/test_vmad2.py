@@ -56,7 +56,7 @@ class TestEngine(Engine):
         return code
 
     @programme(ain=['u'], aout=['v'])
-    def batch_unused(engine, u, v):
+    def batch_independent(engine, u, v):
         code = CodeSegment(engine)
         code.unitary(x=Literal(1.0), y=v, factor=1.0)
         return code
@@ -216,7 +216,7 @@ def test_programme():
 def test_programme_unused():
     engine = TestEngine()
     code = CodeSegment(engine)
-    code.batch_unused(u='a', v='d')
+    code.batch_independent(u='a', v='d')
     d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})
     assert_array_equal(d, 1.0)
     assert_array_equal(_a, 0.0)
