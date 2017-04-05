@@ -130,6 +130,14 @@ def test_partial_gradient():
     assert_array_equal(d, 12.0)
     assert_array_equal(_a, 12.0)
 
+    (c1, d), tape = code.compute(['c1', 'd'], {'a' : 1.0}, return_tape=True)
+    gradient = tape.gradient()
+    assert_array_equal(d, 12.0)
+    assert_array_equal(c1, 6.0)
+    _a  = gradient.compute(['_a'], {'_c1': 1.0})
+    assert_array_equal(_a, 6.0)
+
+
 def test_inplace():
     engine = TestEngine()
     code = CodeSegment(engine)
