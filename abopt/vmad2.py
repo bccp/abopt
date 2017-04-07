@@ -557,10 +557,11 @@ class CodeSegment(object):
         for i, (node, abandon) in enumerate(zip(nodes, freeables)):
             if tape:
                 tape.append(node, frontier)
-                for arg in node.args:
-                    if not isinstance(arg, IOArgument): continue
-                    # FIXME: use copy
-                    assign(self.engine, x=frontier[arg.value.name], y=LValue(arg.value.name, frontier))
+                if node.primitive is not mark:
+                    for arg in node.args:
+                        if not isinstance(arg, IOArgument): continue
+                        # FIXME: use copy
+                        assign(self.engine, x=frontier[arg.value.name], y=LValue(arg.value.name, frontier))
             try:
                 r = node.invoke(frontier)
             except Exception as e:
