@@ -441,6 +441,9 @@ class Tape(object):
             logger.info("GRADIENT code.defaults: %s " % code.defaults)
         return code
 
+    def to_graph(self, **kwargs):
+        nodes = [node for node, kwargs in self.records]
+        return nodes_to_graph(nodes, **kwargs)[0]
 
 class CodeSegment(object):
     def __init__(self, engine):
@@ -689,12 +692,12 @@ def _get_freeables(nodes, out):
         free_list.append(item)
     return free_list
 
-def nodes_to_graph(nodes, **kwargs):
+def nodes_to_graph(nodes, depth=0, **kwargs):
     """
-        add a list of microcodes to a graph. The init node is duplicated as needed
-        (because it may be used many times and mess up the diagram. It hurts to have
-        very long edges like that.
+        Graph representation of nodes, kwargs are sent to graphviz
 
+        depth controls the behavior of programme nodes. only 
+        depth level of sub graphs are made.
     """
     import graphviz
     graph = graphviz.Digraph(**kwargs)
@@ -702,17 +705,7 @@ def nodes_to_graph(nodes, **kwargs):
     def unique(obj):
         return '%08X%08X' % (id(nodes), id(obj))
 
-    dests = {}
-    source = {}
     subgraphs = {}
-    for i, node in enumerate(nodes):
-        for arg in node.args:
-            if isinstance(arg, (OArgument, IOArgument)):
-                source[arg.ovalue] = (node, arg)
-            if isinstance(arg, (IArgument, IOArgument)):
-                l = dests.pop(arg.value, [])
-                l.append((node, arg))
-                dests[arg.value] = l
 
     for i, node in enumerate(nodes):
         label = '%s<BR/>' % str(node.primitive)
@@ -725,51 +718,57 @@ def nodes_to_graph(nodes, **kwargs):
         label = label + '<BR/>'.join(ex)
         label = '<' + label + '>'
 
-        if not isinstance(node, CodeSegNode):
-            graph.node(unique(node), label=label, shape='box')
-        else:
+        if depth > 0 and isinstance(node, CodeSegNode):
+            # render the programme nodes as subgraphs
             codeseg = node.codeseg
-            subgraph, inputs, outputs = nodes_to_graph(codeseg.nodes)
-            subgraph.name = 'cluster_' + unique(node)
+            subgraph, inputs, outputs = nodes_to_graph(codeseg.nodes, depth - 1)
+            subgraph.name = 'cluster_' + str(node.primitive)
             subgraph.attr('graph', label=label)
             subgraph.attr('graph', color='blue')
             subgraph.attr('graph', style='dotted')
             graph.subgraph(subgraph)
-            subgraphs[node] = (inputs, outputs)
+            subgraphs[unique(node)] = (inputs, outputs)
+        else:
+            graph.node(unique(node), label=label, shape='box')
 
-    inputs = {}
-    outputs = {}
-    for var in set(list(source.keys()) + list(dests.keys())):
+    source = {}
+
+    inputs, outputs = {}, {}
+
+    def process_in_arg(arg, node):
         attrs = {}
-        attrs['label'] = '<' + str(var) + '>'
-
-        if var in source:
-            from_node, from_arg = source[var]
-            if from_node not in subgraphs:
-                from_node = unique(from_node)
+        attrs['label'] = '<' + str(arg.value) + '>'
+        nodeid = unique(node)
+        if isinstance(arg, (IArgument, IOArgument)):
+            if arg.value in source:
+                from_nodeid, from_arg = source[arg.value]
+                attrs['taillabel'] = '<' + str(from_arg.name) + '>'
+                attrs['tail_lp'] = "12"
             else:
-                from_node = subgraphs[from_node][1][from_arg.name]
+                from_nodeid = nodeid + str(arg.value)
+                graph.node(from_nodeid, label=str(arg.value))
+                inputs[arg.value.name] = from_nodeid
 
-            attrs['taillabel'] = '<' + str(from_arg.name) + '>'
-            attrs['tail_lp'] = "12"
-        else:
-            from_node = unique(var)
-            graph.node(from_node, label=str(var))
-            inputs[var.name] = from_node
-        if var in dests:
-            for to_node, to_arg in dests[var]:
-                if to_node not in subgraphs:
-                    to_node = unique(to_node)
-                else:
-                    to_node = subgraphs[to_node][0][to_arg.name]
-                attrs['headlabel'] = '<' + str(to_arg.name) + '>'
-                attrs['head_lp'] = "12"
-                graph.edge(from_node, to_node, **attrs)
-        else:
-            to_node = unique(var)
-            graph.node(to_node, label=str(var))
-            outputs[var.name] = to_node
-            graph.edge(from_node, to_node, **attrs)
+            if nodeid in subgraphs:
+                nodeid = subgraphs[nodeid][0][arg.name]
+
+            attrs['headlabel'] = '<' + str(arg.name) + '>'
+            attrs['head_lp'] = "12"
+            graph.edge(from_nodeid, nodeid, **attrs)
+
+    def process_out_arg(arg, node):
+        if isinstance(arg, (OArgument, IOArgument)):
+            nodeid = unique(node)
+            if nodeid in subgraphs:
+                nodeid = subgraphs[nodeid][1][arg.name]
+
+            source[arg.ovalue] = (nodeid, arg)
+            outputs[arg.value.name] = nodeid
+
+    for i, node in enumerate(nodes):
+        for arg in node.args:
+            process_in_arg(arg, node)
+            process_out_arg(arg, node)
 
     return graph, inputs, outputs
 
@@ -780,5 +779,5 @@ def _short_repr(obj):
     else:
         s = '%s' % obj
         if len(s) > 30:
-            s = '<%s>' % type(obj).__name__
+            s = '[%s]' % type(obj).__name__
         return s
