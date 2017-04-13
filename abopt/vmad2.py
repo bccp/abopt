@@ -331,6 +331,9 @@ class ProgrammeVJP(Primitive):
     class NodeType(CodeSegNode):
         @property
         def codeseg(self):
+            if hasattr(self, '_codeseg'):
+                return self._codeseg
+            # replay then obtain the gradient codeseg
             node = self.args.find('#programme_node').value
             d = self.args.find('#frontier').value
             codeseg = node.codeseg
@@ -342,12 +345,13 @@ class ProgrammeVJP(Primitive):
             for arg in self.args:
                 if isinstance(arg, OArgument):
                     gradient.defaults[arg.name] = ZERO
+            self._codeseg = gradient
             return gradient
-
         def copy(self):
             node = CodeSegNode.copy(self)
-            node.vjp_args = vjp_args
-            return
+            if hasattr(self, '_codeseg'):
+                node._codeseg = self._codeseg
+            return node
 
         def call(self, bound, return_tape=False):
             if return_tape:
