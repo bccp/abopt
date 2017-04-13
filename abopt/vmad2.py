@@ -467,9 +467,18 @@ class CodeSegment(object):
             primitive = item
             def func(**kwargs):
                 self.append(primitive, kwargs)
+            functools.update_wrapper(func, item)
             return func
         else:
             raise TypeError
+
+    def __dir__(self):
+        l = []
+        for name in dir(self.engine):
+            item = getattr(self.engine, name)
+            if isinstance(item, Primitive):
+                l.append(name)
+        return l + dir(type(self))
 
     def copy(self):
         code = CodeSegment(self.engine)
