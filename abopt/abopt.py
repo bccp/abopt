@@ -36,6 +36,11 @@ class parameter(object):
     def __set__(self, instance, value):
         instance.config[self.name] = self.convert(value)
 
+class ConvergenceStatus(BaseException): pass 
+class TooManySteps(ConvergenceStatus): pass
+class BadDirection(ConvergenceStatus): pass
+class Converged(ConvergenceStatus): pass
+
 class Optimizer(object):
     @parameter
     def tol(value=1e-6):
@@ -109,13 +114,43 @@ class Optimizer(object):
     def minimize(self, objective, gradient, x0, monitor=None):
         raise NotImplementedError
 
-class State(dict):
-    def __init__(self, optimizer, **kwargs):
-        dict.__init__(self)
-        self.update(kwargs)
-        if 'xnorm' not in kwargs:
-            self['xnorm'] = optimizer.dot(self['x'], self['x']) ** 0.5
-        self.optimizer = optimizer
+def simpleproperty(varname, mode):
+    def fget(self): return getattr(self, varname)
+    def fset(self, value): return setattr(self, varname, value)
+    if 'w' in mode:
+        r = property(fget, fset)
+    else:
+        r = property(fget)
+    return r
+
+class BaseState(object):
+    __slots__ = []
+
+    x = simpleproperty('_x', mode='r')
+    xnorm = simpleproperty('_xnorm', mode='r')
+    @x.setter
+    def x(self, value):
+        self._x = value
+        self._xnorm = self.optimizer.dot(value, value) ** 0.5
+
+    g = simpleproperty('_g', mode='r')
+    gnorm = simpleproperty('_gnorm', mode='r')
+    @g.setter
+    def g(self, value):
+        self._g = value
+        self._gnorm = self.optimizer.dot(value, value) ** 0.5
+
+    it = simpleproperty('_it', mode='rw')
+    fev = simpleproperty('_fev', mode='rw')
+    gev = simpleproperty('_gev', mode='rw')
+    dy = simpleproperty('_dy', mode='rw')
+    status = simpleproperty('_status', mode='rw')
+
+    def __getitem__(self, name):
+        return getattr(self, name)
+
+    def __init__(self, optimizer):
+        self.__dict__['optimizer'] = optimizer
 
     def __str__(self):
         d = {}
@@ -142,28 +177,45 @@ class GradientDescent(Optimizer):
         assert value > 0
         return value
 
+    class State(BaseState):
+        cit = simpleproperty('_cit', mode='rw')
+        pass
+
     def minimize(self, objective, gradient, x0, monitor=None):
-        # FIXME: line search
-        it = 0
-        dy = None # initial it
-        y0 = objective(x0)
-        cit = 0 # number of contiguous small dy steps
-        while it < self.maxsteps:
-            dx0 = gradient(x0)
-            gnorm = self.dot(dx0, dx0) ** 0.5
-            state = State(self, x=x0, y=y0, dy=dy, fev=it+1, gev=it+1, g=dx0, gnorm=gnorm, it=it)
+        if isinstance(x0, GradientDescent.State):
+            state = x0
+        else:
+            state = GradientDescent.State(self)
+
+            # FIXME: line search
+            state.dy = None # initial it
+            state.x = x0
+            state.y = objective(x0)
+            state.fev = 1
+            state.gev = 0
+            state.cit = 0 # number of contiguous small dy steps
+            state.status = None
+
+        state.it = 0
+
+        while state.it < self.maxsteps:
+            state.g = gradient(state.x)
+            state.gev = state.gev + 1
+
             if monitor:
                 monitor(state)
 
-            if gnorm < self.gtol: break
+            if state.gnorm < self.gtol: break
 
             # move to the next point
-            x1 = self.addmul(x0, dx0, -self.gamma)
+            x1 = self.addmul(state.x, state.g, -self.gamma)
             y1 = objective(x1)
-            dy = abs(y0 - y1)
-            x0 = x1
-            y0 = y1
-            it = it + 1
+            state.fev = state.fev + 1
+
+            state.dy = abs(y1 - state.y)
+            state.x = x1
+            state.y = y1
+            state.it = state.it + 1
 
         return state
 
@@ -173,150 +225,153 @@ class LBFGS(Optimizer):
         """number of vectors for approximating Hessian"""
         return int(value)
 
+    class State(BaseState):
+        H0k = simpleproperty('_H0k', mode='rw')
+        rho = simpleproperty('_rho', mode='rw')
+        S = simpleproperty('_S', mode='rw')
+        Y = simpleproperty('_Y', mode='rw')
+
+    def linesearch(self, objective, state, z, zg, rate):
+        # doing only backtracking line search
+        # FIXME: implement more-thuente
+        tau = 0.5
+        c = 1e-5
+        x1 = self.addmul(state.x, z, -rate)
+        y1 = objective(x1)
+        state.fev = state.fev + 1
+        while True:
+            valmax = max(abs(y1), abs(state.y))
+            thresh = self.tol * max(valmax, 1.0) + self.atol
+
+            #print(rate, state.y, y1, state.x, x1)
+            if self.converged(state, y1): break
+
+            # sufficient descent
+            if state.y - y1 >= rate * c * zg:
+                break
+
+            rate *= tau
+            x1 = self.addmul(state.x, z, -rate)
+            y1 = objective(x1)
+            #print('new point ', x1, y1, state.x, state.y)
+            state.fev = state.fev + 1
+
+        return x1, y1
+
+    def converged(self, state, y1):
+        valmax = max(abs(y1), abs(state.y))
+        thresh = self.tol * max(valmax, 1.0) + self.atol
+        return abs(y1 - state.y) < thresh and state.y >= y1
+
     def minimize(self, objective, gradient, x0, monitor=None):
+        if isinstance(x0, LBFGS.State):
+            state = x0
+        else:
+            state = LBFGS.State(self)
 
-        it = 0
-        x = self.copy(x0)
-        val = objective(x)
-        g = gradient(x)
-        gnorm = self.dot(g, g) ** 0.5
+            state.x = self.copy(x0)
+            state.y = objective(x0)
+            state.g = gradient(x0)
+            state.rho = []
+            state.S = []
+            state.Y = []
+            state.dy = None
 
-        rho = []
-        S = []
-        Y = []
+            state.H0k = 1.0
 
-        xprev = self.copy(x)
-        gprev = self.copy(g)
-        H0k = 1.0
-        it = 0
-        rate = 1.0
-
-        fev, gev = 0, 0
+            state.fev, state.gev = 1, 1
 
         converged_iters = 0
 
         dy = None
         use_steepest_descent = False
-        converged_state = "NO"
 
-        state = State(self, x=x, y=val, dy=dy, g=g, gnorm=gnorm,
-                      it=it, fev=fev, gev=gev, steepest_descent=use_steepest_descent, converged=converged_state)
-        if monitor:
-            monitor(state)
+        state.it = 0
+        if monitor: monitor(state)
+
 
         while True:
-            q = self.copy(g)
-
+            q = self.copy(state.g)
             alpha = []
-            for i in range(len(S)):
-                dotproduct = self.dot(S[i], q)
-                alpha.append(rho[i] * dotproduct)
-                q = self.addmul(q, Y[i], -alpha[i])
+            for i in range(len(state.S)):
+                dotproduct = self.dot(state.S[i], q)
+                alpha.append(state.rho[i] * dotproduct)
+                q = self.addmul(q, state.Y[i], -alpha[i])
 
-            z = self.mul(q, H0k)
+            z = self.mul(q, state.H0k)
 
-            for i in reversed(list(range(len(S)))):
-                dotproduct = self.dot(Y[i], z)
-                beta = rho[i] * dotproduct
-                z = self.addmul(z, S[i], alpha[i] - beta)
+            for i in reversed(list(range(len(state.S)))):
+                dotproduct = self.dot(state.Y[i], z)
+                beta = state.rho[i] * dotproduct
+                z = self.addmul(z, state.S[i], alpha[i] - beta)
 
             use_steepest_descent = False
             znorm = self.dot(z, z) ** 0.5
-            zg = 0.0 if znorm == 0 else self.dot(z, g) / znorm
-            zg_grannorm = 0.0 if gnorm == 0 else zg / gnorm
+            zg = 0.0 if znorm == 0 else self.dot(z, state.g) / znorm
+            zg_grannorm = 0.0 if state.gnorm == 0 else zg / state.gnorm
 
             if zg_grannorm < 0.01:
-                z = self.copy(g)
+                # L-BFGS gave a bad direction.
+                z = self.copy(state.g)
                 zg = 1.0
                 use_steepest_descent = True
 
-            oldval = val
+            rate = 1.0 / state.gnorm if (state.it == 0 or use_steepest_descent) else 1.0
 
-            rate = 1.0 / gnorm if (it == 0 or use_steepest_descent) else 1.0
+            x1, y1 = self.linesearch(objective, state, z, zg, rate)
 
-            # doing only backtracking line search
-            # FIXME: implement more-thuente
-            tau = 0.5
-            c = 1e-5
-            search_x = self.addmul(x, z, -rate)
-            newval = objective(search_x)
-            fev += 1
-            while True:
-                valmax = max(abs(val), abs(newval))
-                thresh = self.tol * max(valmax, 1.0) + self.atol
-                if abs(val - newval) < thresh and val >= newval:
-                    break
-                if val - newval >= rate * c * zg:
-                    break
-
-                rate *= tau
-                search_x = self.addmul(x, z, -rate)
-                newval = objective(search_x)
-                fev += 1
-
-            # now move
-            x = self.copy(search_x)
-            val = newval
-            g = gradient(x)
-            gev = gev + 1
-            gnorm = self.dot(g, g) ** 0.5
-
-            # end of backtracking line search
-
-            it += 1
-            dy = abs(val - oldval)
-            valmax = max(abs(val), abs(oldval))
-            thresh = self.tol * max(valmax, 1.0) + self.atol
-
-            if dy < thresh and it >= self.minsteps:
+            if self.converged(state, y1) and state.it >= self.minsteps:
                 converged_iters += 1
-                if converged_iters >= self.csteps:
-                    converged_state = "YES: Tolerance achieved"
-                    break
             else:
                 converged_iters = 0
 
-            if gnorm < self.gtol:
-                converged_state = "YES: Gradient tolerance achieved"
-                break
+            g1 = gradient(x1)
+            state.gev = state.gev + 1
 
-            # move everything down
-            S.insert(0, self.addmul(x, xprev, -1))
-            Y.insert(0, self.addmul(g, gprev, -1))
-            ys = self.dot(S[0], Y[0])
-            yy = self.dot(Y[0], Y[0])
+            # hessian update
+            # XXX: shall we do this when use_steepest_descent is true?
+            state.S.insert(0, self.addmul(x1, state.x, -1))
+            state.Y.insert(0, self.addmul(g1, state.g, -1))
+            ys = self.dot(state.S[0], state.Y[0])
+            yy = self.dot(state.Y[0], state.Y[0])
 
             if ys == 0.0:
-                converged_state = "NO: LBFGS didn't move for some reason ys is 0, QUITTING"
+                state.status = BadDirection("LBFGS didn't move for some reason ys is 0, QUITTING")
                 break
             if yy == 0.0:
-                converged_state = "NO: LBFGS didn't move for some reason yy is 0, QUITTING"
+                state.status = BadDirection("LBFGS didn't move for some reason yy is 0, QUITTING")
                 break
 
-            rho.insert(0, 1.0 / ys)
+            state.rho.insert(0, 1.0 / ys)
 
-            if len(S) > self.m:
-                del S[-1]
-                del Y[-1]
-                del rho[-1]
+            if len(state.S) > self.m:
+                del state.S[-1]
+                del state.Y[-1]
+                del state.rho[-1]
 
-            H0k = ys / yy
+            state.H0k = ys / yy
 
-            xprev = self.copy(x)
-            gprev = self.copy(g)
+            state.dy = abs(y1 - state.y)
+            state.x = x1
+            state.y = y1
+            state.g = g1
 
-            if it > self.maxsteps:
-                converged_state = "NO: but maximum number of iterations reached. QUITTING."
-                break
+            state.it = state.it + 1
 
-            state = State(self, x=x, y=val, dy=dy, g=g, gnorm=gnorm, it=it, fev=fev, gev=gev, steepest_descent=use_steepest_descent, converged=converged_state)
             if monitor:
                 monitor(state)
 
-        # update the state one last time
-        state=State(self, x=x, y=val, dy=dy, g=g, gnorm=gnorm, it=it, fev=fev, gev=gev, steepest_descent=use_steepest_descent, converged=converged_state)
-        if monitor:
-            monitor(state)
+            if converged_iters >= self.csteps:
+                state.status = Converged("YES: Tolerance achieved")
+                break
+
+            if state.gnorm < self.gtol:
+                state.status = Converged("YES: Gradient tolerance achieved")
+                break
+
+            if state.it > self.maxsteps:
+                state.status = TooManySteps("maximum number of iterations reached. QUITTING.")
+                break
 
         return state
 
