@@ -139,7 +139,7 @@ class ParticleMeshEngine(Engine):
         if isinstance(field, ComplexField):
             _field[...] = field.cnorm_gradient(_r, metric=metric)
         else:
-            _field[...] = field * 2
+            _field[...] = field * (2 * _r)
 
     @statement(aout=['residual'], ain=['model'])
     def residual(engine, model, data, sigma, residual):
