@@ -200,7 +200,7 @@ class Node(object):
             for arg, value in zip(self.args, bound):
                 if isinstance(arg, OArgument):
                     value[...] = ZERO
-            logger.info("Body skipped because all input gradients are zero: %s " % (self))
+            #logger.info("Body skipped because all input gradients are zero: %s " % (self))
             return True
         return False
 
@@ -211,7 +211,7 @@ class Node(object):
         raise NotImplementedError
 
     def invoke(self, frontier):
-        logger.info("Invoke %s" % (self))
+        #logger.info("Invoke %s" % (self))
         out = {}
         bound = self.bind(frontier, out)
         self.call(bound)
@@ -243,7 +243,7 @@ class CodeSegNode(Node):
 
         # compute doesn't taint init.
         out = self.codeseg.compute(aout, init, return_tape=return_tape)
-        logger.info("CodeSegment results %s %s" % (aout, _short_repr(out)))
+        #logger.info("CodeSegment results %s %s" % (aout, _short_repr(out)))
         if return_tape:
             out, tape = out
         else:
@@ -438,7 +438,7 @@ class Tape(object):
             for variable in code._input_variables.values():
                 code.defaults[variable.name] = ZERO
 
-            logger.info("GRADIENT code.defaults: %s " % code.defaults)
+            #logger.info("GRADIENT code.defaults: %s " % code.defaults)
         return code
 
     def to_graph(self, **kwargs):
@@ -585,10 +585,11 @@ class CodeSegment(object):
                 raise
             for var in abandon:
                 frontier.pop(var.name)
-            if len(abandon):
-                logger.info("Removed from frontier %s", abandon)
+
+#            if len(abandon):
+#                logger.info("Removed from frontier %s", abandon)
             frontier.update(r)
-            logger.info("Frontier %s", list(frontier.keys()))
+            #logger.info("Frontier %s", list(frontier.keys()))
 
         r = [frontier[vn] for vn in vout]
         if squeeze:
