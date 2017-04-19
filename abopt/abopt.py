@@ -270,8 +270,6 @@ class LBFGS(Optimizer):
             state = LBFGS.State(self)
 
             state.x = self.copy(x0)
-            state.y = objective(x0)
-            state.g = gradient(x0)
             state.rho = []
             state.S = []
             state.Y = []
@@ -279,13 +277,14 @@ class LBFGS(Optimizer):
 
             state.H0k = 1.0
 
-            state.fev, state.gev = 1, 1
-
         converged_iters = 0
 
         dy = None
         use_steepest_descent = False
 
+        state.y = objective(state.x)
+        state.g = gradient(state.x)
+        state.fev, state.gev = 1, 1
         state.it = 0
         if monitor: monitor(state)
 
