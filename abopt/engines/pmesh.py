@@ -32,8 +32,13 @@ class ParticleMeshEngine(Engine):
     def __init__(self, pm, q=None):
         self.pm = pm
         if q is None:
-            q = create_grid(pm)
+            q = create_grid(pm, dtype='f4')
         self.q = q
+
+    def get_x(self, s):
+        x = numpy.float64(self.q)
+        x[...] += s
+        return x
 
     @statement(aout=['real'], ain=['complex'])
     def c2r(engine, real, complex):
@@ -79,7 +84,7 @@ class ParticleMeshEngine(Engine):
 
     @statement(aout=['layout'], ain=['s'])
     def decompose(engine, layout, s):
-        x = s + engine.q
+        x = engine.get_x(s)
         pm = engine.pm
         layout[...] = pm.decompose(x)
 
@@ -90,7 +95,7 @@ class ParticleMeshEngine(Engine):
     @statement(aout=['mesh'], ain=['s', 'layout'])
     def paint(engine, s, mesh, layout):
         pm = engine.pm
-        x = s + engine.q
+        x = engine.get_x(s)
         mesh[...] = pm.create(mode='real')
         N = pm.comm.allreduce(len(x))
         mesh[...].paint(x, layout=layout, hold=False)
@@ -101,7 +106,7 @@ class ParticleMeshEngine(Engine):
     def _(engine, _s, _mesh, s, layout, _layout):
         pm = engine.pm
         _layout[...] = ZERO
-        x = s + engine.q
+        x = engine.get_x(s)
         N = pm.comm.allreduce(len(x))
         _s[...], junk = _mesh.paint_gradient(x, layout=layout, out_mass=False)
         _s[...][...] *= 1.0 * pm.Nmesh.prod() / N
@@ -109,14 +114,14 @@ class ParticleMeshEngine(Engine):
     @statement(aout=['value'], ain=['s', 'mesh', 'layout'])
     def readout(engine, value, s, mesh, layout):
         pm = engine.pm
-        x = s + engine.q
+        x = engine.get_x(s)
         N = pm.comm.allreduce(len(x))
         value[...] = mesh.readout(x, layout=layout)
 
     @readout.defvjp
     def _(engine, _value, _s, _mesh, s, layout, mesh):
         pm = engine.pm
-        x = s + engine.q
+        x = engine.get_x(s)
         _mesh[...], _s[...] = mesh.readout_gradient(x, _value, layout=layout)
 
     @statement(aout=['complex'], ain=['complex'])
