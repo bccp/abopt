@@ -45,13 +45,18 @@ class Optimizer(object):
     @parameter
     def tol(value=1e-6):
         """Relative tolerance of change in objective. Terminate if dy < tol * y + atol"""
-        assert value > 0
+        assert value >= 0
         return value
 
     @parameter
     def atol(value=0):
         """Absolute tolerance of change objective. Terminate if dy < tol * y + atol """
-        assert value > 0
+        assert value >= 0
+        return value
+
+    @parameter
+    def ymin(value=None):
+        """ending objective. Terminate if y < ymin """
         return value
 
     @parameter
@@ -206,7 +211,7 @@ class GradientDescent(Optimizer):
                 monitor(state)
 
             if state.gnorm < self.gtol: break
-
+            if self.ymin is not None and state.y < self.ymin : break
             # move to the next point
             x1 = self.addmul(state.x, state.g, -self.gamma)
             y1 = objective(x1)
@@ -366,6 +371,10 @@ class LBFGS(Optimizer):
 
             if state.gnorm < self.gtol:
                 state.status = Converged("YES: Gradient tolerance achieved")
+                break
+
+            if self.ymin is not None and state.y < self.ymin : 
+                state.status = Converged("YES: Objective below threshold.")
                 break
 
             if state.it > self.maxsteps:
