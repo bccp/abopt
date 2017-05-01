@@ -263,6 +263,30 @@ class LBFGS(Optimizer):
 
         return x1, y1
 
+    def blind_linesearch(self, objective, state, z, zg, rate):
+        # This tries to go a bigger step. Useful when there is no hessian
+        # e.g. with gradient descent but really just a hack;
+        # need a better algorithm than this..
+        tau = 2.0
+        x1 = self.addmul(state.x, z, -rate)
+        y1 = objective(x1)
+        state.fev = state.fev + 1
+        dy = state.y - y1
+        while True:
+            rate *= tau
+            x1 = self.addmul(state.x, z, -rate)
+            y1 = objective(x1)
+            state.fev = state.fev + 1
+
+            # worse descent
+            if state.y - y1 < dy:
+                break
+            dy = state.y - y1
+
+
+        return self.linesearch(objective, state, z, zg, rate)
+
+
     def converged(self, state, y1):
         valmax = max(abs(y1), abs(state.y))
         thresh = self.tol * max(valmax, 1.0) + self.atol
@@ -320,9 +344,12 @@ class LBFGS(Optimizer):
                 zg = 1.0
                 use_steepest_descent = True
 
-            rate = 1.0 / state.gnorm if (state.it == 0 or use_steepest_descent) else 1.0
-
-            x1, y1 = self.linesearch(objective, state, z, zg, rate)
+            if state.it == 0 or use_steepest_descent:
+                rate = 1.0 / state.gnorm 
+                x1, y1 = self.blind_linesearch(objective, state, z, zg, rate)
+            else: 
+                rate = 1.0
+                x1, y1 = self.linesearch(objective, state, z, zg, rate)
 
             if self.converged(state, y1) and state.it >= self.minsteps:
                 converged_iters += 1
