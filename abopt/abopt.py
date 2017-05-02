@@ -195,13 +195,14 @@ class GradientDescent(Optimizer):
             # FIXME: line search
             state.dy = None # initial it
             state.x = x0
-            state.y = objective(x0)
-            state.fev = 1
+            state.fev = 0
             state.gev = 0
             state.cit = 0 # number of contiguous small dy steps
             state.status = None
+            state.it = 0
 
-        state.it = 0
+        state.y = objective(state['x'])
+        state.fev = state.fev + 1
 
         while state.it < self.maxsteps:
             state.g = gradient(state.x)
@@ -314,6 +315,8 @@ class LBFGS(Optimizer):
             state.dy = None
 
             state.H0k = 1.0
+            state.fev, state.gev = 0, 0
+            state.it = 0
 
         converged_iters = 0
 
@@ -322,8 +325,9 @@ class LBFGS(Optimizer):
 
         state.y = objective(state.x)
         state.g = gradient(state.x)
-        state.fev, state.gev = 1, 1
-        state.it = 0
+        state.fev = state.fev + 1
+        state.gev = state.gev + 1
+
         if monitor: monitor(state)
 
 
