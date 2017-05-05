@@ -343,28 +343,30 @@ class LBFGS(Optimizer):
         g1 = gradient(x1)
         state.gev = state.gev + 1
 
-        # hessian update
-        # XXX: shall we do this when use_steepest_descent is true?
-        state.S.insert(0, self.addmul(x1, state.x, -1))
-        state.Y.insert(0, self.addmul(g1, state.g, -1))
-        ys = self.dot(state.S[0], state.Y[0])
-        yy = self.dot(state.Y[0], state.Y[0])
+        if self.converged(state, y1):
+            state.status = Converged("A single convergence")
+        else:
+            # hessian update
 
-        if ys == 0.0:
-            return BadDirection("LBFGS didn't move for some reason ys is 0, QUITTING")
-        if yy == 0.0:
-            return BadDirection("LBFGS didn't move for some reason yy is 0, QUITTING")
+            # XXX: shall we do this when use_steepest_descent is true?
+            state.S.insert(0, self.addmul(x1, state.x, -1))
+            state.Y.insert(0, self.addmul(g1, state.g, -1))
+            ys = self.dot(state.S[0], state.Y[0])
+            yy = self.dot(state.Y[0], state.Y[0])
 
-        state.rho.insert(0, 1.0 / ys)
+            if ys == 0.0:
+                state.status = BadDirection("LBFGS didn't move for some reason ys is 0, QUITTING")
+            if yy == 0.0:
+                state.status = BadDirection("LBFGS didn't move for some reason yy is 0, QUITTING")
 
-        if len(state.S) > self.m:
-            del state.S[-1]
-            del state.Y[-1]
-            del state.rho[-1]
+            state.rho.insert(0, 1.0 / ys)
 
-        state.H0k = ys / yy
+            if len(state.S) > self.m:
+                del state.S[-1]
+                del state.Y[-1]
+                del state.rho[-1]
 
-        converged = self.converged(state, y1)
+            state.H0k = ys / yy
 
         state.dy = abs(y1 - state.y)
         state.x = x1
@@ -373,13 +375,11 @@ class LBFGS(Optimizer):
 
         state.it = state.it + 1
 
-        return converged
 
     def minimize(self, objective, gradient, x0, monitor=None):
         state = self.State(self, objective, gradient, x0)
 
         if monitor: monitor(state)
-
 
         converged_iters = 0
 
@@ -404,15 +404,40 @@ class LBFGS(Optimizer):
 
             if state.gnorm < self.gtol:
                 state.status = Converged("YES: Gradient tolerance achieved")
-                break
 
             if self.ymin is not None and state.y < self.ymin : 
                 state.status = Converged("YES: Objective below threshold.")
-                break
 
             if state.it > self.maxsteps:
                 state.status = TooManySteps("maximum number of iterations reached. QUITTING.")
-                break
 
         return state
 
+class SLBFGS(LBFGS):
+    """ Stochastic LBFGS """
+    @parameter
+    def oracle(value=None):
+        """Function to generates a random displacement in the parameter space """
+        return value
+
+    @parameter
+    def N0(value=10):
+        return int(value)
+
+    def one(self, objective, gradient, state):
+        if state.it % self.N0 == 0:
+            # stochastic step
+            z = self.oracle(self.state)
+            rate = 1.0
+            x1, y1 = self.blind_linesearch(objective, gradient, state, dx, 1.0, rate)
+
+            g1 = gradient(x1)
+            state.gev = state.gev + 1
+            state.dy = abs(y1 - state.y)
+            state.x = x1
+            state.y = y1
+            state.g = g1
+
+            state.it = state.it + 1
+        else:
+            status = LBFGS.one(objective, state)
