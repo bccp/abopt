@@ -74,10 +74,21 @@ class Optimizer(object):
     def csteps(value=3):
         """ number of iterations dy < threshold before confirming convergence """
         return int(value)
+
     @parameter
     def minsteps(value=10):
         """ minimum number of steps """
         return int(value)
+
+    @parameter
+    def local_linesearch(value=True):
+        """ whether the blind search tries to use local minima """
+        return bool(value)
+
+    @parameter
+    def use_linesearch(value=True):
+        """ whether use line search """
+        return bool(value)
 
     def copy(self, a):
         return self.addmul(a, a, 0)
@@ -118,6 +129,69 @@ class Optimizer(object):
 
     def minimize(self, objective, gradient, x0, monitor=None):
         raise NotImplementedError
+
+    def backtrace(self, objective, state, z, zg, rate):
+        # doing only backtracking line search
+        # FIXME: implement more-thuente
+        tau = 0.5
+        c = 1e-5
+        x1 = self.addmul(state.x, z, -rate)
+        y1 = objective(x1)
+        state.fev = state.fev + 1
+        while True:
+            valmax = max(abs(y1), abs(state.y))
+            thresh = self.tol * max(valmax, 1.0) + self.atol
+
+            #print(rate, state.y, y1, state.x, x1)
+            if self.converged(state, y1): break
+
+            # sufficient descent
+            if state.y - y1 >= rate * c * zg:
+                break
+
+            rate *= tau
+            x1 = self.addmul(state.x, z, -rate)
+            y1 = objective(x1)
+            #print('new point ', x1, y1, state.x, state.y)
+            state.fev = state.fev + 1
+
+        return x1, y1
+
+    def linesearch(self, objective, gradient, state, z, zg, rate):
+        # This tries to go a bigger step until the direction of
+        # gradient changes or the objective increases.
+        # Useful when there is no hessian
+        # e.g. with gradient descent but really just a hack -- it may hop around
+        # to a different local stationary point.
+        # need a better algorithm than this..
+        if not self.use_linesearch:
+            return self.backtrace(objective, state, z, zg, rate)
+        tau = 2.0
+        x1 = self.addmul(state.x, z, -rate)
+        y1 = objective(x1)
+        state.fev = state.fev + 1
+        dy = state.y - y1
+        while True:
+            rate *= tau
+            x1 = self.addmul(state.x, z, -rate)
+            y1 = objective(x1)
+            state.fev = state.fev + 1
+
+            if self.local_linesearch:
+                g1 = gradient(x1)
+                state.gev = state.gev + 1
+
+                # change direction
+                if self.dot(g1, state.g) / state.gnorm < 0.01:
+                    break
+
+            # worse descent
+            if state.y - y1 < dy:
+                break
+            dy = state.y - y1
+
+
+        return self.backtrace(objective, state, z, zg, rate)
 
 def simpleproperty(varname, mode):
     def fget(self): return getattr(self, varname)
@@ -241,65 +315,6 @@ class LBFGS(Optimizer):
             self.Y = []
             self.H0k = 1.0
 
-    def linesearch(self, objective, state, z, zg, rate):
-        # doing only backtracking line search
-        # FIXME: implement more-thuente
-        tau = 0.5
-        c = 1e-5
-        x1 = self.addmul(state.x, z, -rate)
-        y1 = objective(x1)
-        state.fev = state.fev + 1
-        while True:
-            valmax = max(abs(y1), abs(state.y))
-            thresh = self.tol * max(valmax, 1.0) + self.atol
-
-            #print(rate, state.y, y1, state.x, x1)
-            if self.converged(state, y1): break
-
-            # sufficient descent
-            if state.y - y1 >= rate * c * zg:
-                break
-
-            rate *= tau
-            x1 = self.addmul(state.x, z, -rate)
-            y1 = objective(x1)
-            #print('new point ', x1, y1, state.x, state.y)
-            state.fev = state.fev + 1
-
-        return x1, y1
-
-    def blind_linesearch(self, objective, gradient, state, z, zg, rate):
-        # This tries to go a bigger step until the direction of
-        # gradient changes or the objective increases.
-        # Useful when there is no hessian
-        # e.g. with gradient descent but really just a hack -- it may hop around
-        # to a different local stationary point.
-        # need a better algorithm than this..
-        tau = 2.0
-        x1 = self.addmul(state.x, z, -rate)
-        y1 = objective(x1)
-        state.fev = state.fev + 1
-        dy = state.y - y1
-        while True:
-            rate *= tau
-            x1 = self.addmul(state.x, z, -rate)
-            y1 = objective(x1)
-            g1 = gradient(x1)
-            state.fev = state.fev + 1
-            state.gev = state.gev + 1
-
-            # change direction
-            if self.dot(g1, state.g) / state.gnorm < 0.01:
-                break
-
-            # worse descent
-            if state.y - y1 < dy:
-                break
-            dy = state.y - y1
-
-
-        return self.linesearch(objective, state, z, zg, rate)
-
 
     def converged(self, state, y1):
         valmax = max(abs(y1), abs(state.y))
@@ -335,10 +350,10 @@ class LBFGS(Optimizer):
 
         if state.it == 0 or use_steepest_descent:
             rate = 1.0 / state.gnorm
-            x1, y1 = self.blind_linesearch(objective, gradient, state, z, zg, rate)
+            x1, y1 = self.linesearch(objective, gradient, state, z, zg, rate)
         else: 
             rate = 1.0
-            x1, y1 = self.linesearch(objective, state, z, zg, rate)
+            x1, y1 = self.backtrace(objective, state, z, zg, rate)
 
         g1 = gradient(x1)
         state.gev = state.gev + 1
@@ -425,19 +440,10 @@ class SLBFGS(LBFGS):
         return int(value)
 
     def one(self, objective, gradient, state):
-        if state.it % self.N0 == 0:
-            # stochastic step
-            z = self.oracle(self.state)
-            rate = 1.0
-            x1, y1 = self.blind_linesearch(objective, gradient, state, dx, 1.0, rate)
-
-            g1 = gradient(x1)
-            state.gev = state.gev + 1
-            state.dy = abs(y1 - state.y)
-            state.x = x1
-            state.y = y1
-            state.g = g1
-
-            state.it = state.it + 1
+        def sgradient(x0):
+            return self.addmul(gradient(x0), self.oracle(state), 1.0)
+        if (state.it + 1) % self.N0 == 0:
+            status = LBFGS.one(self, objective, sgradient, state)
         else:
-            status = LBFGS.one(objective, state)
+            status = LBFGS.one(self, objective, gradient, state)
+

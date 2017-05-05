@@ -1,5 +1,5 @@
 from __future__ import print_function
-from abopt import GradientDescent, LBFGS
+from abopt import GradientDescent, LBFGS, SLBFGS
 from numpy.testing import assert_raises, assert_allclose
 
 def test_nothing():
@@ -158,3 +158,40 @@ def test_lbfgs_default():
     assert_allclose(result['x'], 2.25, rtol=0.05)
     assert_allclose(result['g'], 0.0, atol=0.05)
 
+def test_lbfgs_stochastic():
+    import numpy
+    optimizer = SLBFGS()
+    optimizer.N0 = 3
+    rng = numpy.random.RandomState(123)
+    optimizer.use_linesearch = True
+    optimizer.local_linesearch = False
+
+    def df(x):
+        y = 4 * x**3 - 9 * x**2
+        return y
+    def f(x):
+        return x ** 4 - 3 * x ** 3 + 2
+
+    called = [False]
+    def notification(state):
+        #print("***NOTIFICATION***")
+        print(state)
+        called[0] = True
+
+    optimizer.maxsteps=1000
+    optimizer.tol=1e-5
+    optimizer.gtol=1e-10
+    optimizer.m = 10
+
+    optimizer.oracle = lambda state : rng.normal() * 0.1
+    result = optimizer.minimize(objective=f, gradient=df, x0=6, monitor=notification)
+    assert called[0]
+    assert_allclose(result['x'], 2.25, rtol=0.05)
+    assert_allclose(result['g'], 0.0, atol=0.05)
+
+    optimizer.oracle = lambda state : 0
+    result = optimizer.minimize(objective=f, gradient=df, x0=6, monitor=notification)
+    # without the oracle it falls at a stationary point.
+    assert called[0]
+    assert_allclose(result['x'], 0.0, atol=0.01)
+    assert_allclose(result['g'], 0.0, atol=0.05)
