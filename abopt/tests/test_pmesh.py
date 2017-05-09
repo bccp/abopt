@@ -10,7 +10,7 @@ logger.setLevel(level=logging.WARNING)
 
 try:
     from abopt.engines.pmesh import ParticleMeshEngine, ParticleMesh, RealField, ComplexField, check_grad
-    pm = ParticleMesh(BoxSize=1.0, Nmesh=(4, 4), dtype='f8')
+    pm = ParticleMesh(BoxSize=1.0, Nmesh=(4, 4), dtype='f8', method='tsc')
 except ImportError:
     pm = None
 
@@ -56,6 +56,7 @@ def test_gradient():
 def test_paint():
     engine = ParticleMeshEngine(pm)
     code = CodeSegment(engine)
+    numpy.random.seed(1234)
     s = numpy.random.uniform(size=engine.q.shape) * 0.1
 
     code.decompose(s='s', layout='layout')
@@ -67,6 +68,7 @@ def test_paint():
 def test_readout():
     engine = ParticleMeshEngine(pm)
     code = CodeSegment(engine)
+    numpy.random.seed(1234)
     s = numpy.random.uniform(size=engine.q.shape) * 0.1
 
     field = pm.generate_whitenoise(seed=1234).c2r()
