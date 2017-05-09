@@ -130,6 +130,15 @@ class Optimizer(object):
     def minimize(self, objective, gradient, x0, monitor=None):
         raise NotImplementedError
 
+    def get_thresh(self, y1, y2):
+        valmax = max(abs(y1), abs(y2))
+        thresh = self.tol * max(valmax, 1.0) + self.atol
+        return thresh
+
+    def converged(self, state, y1):
+        return abs(y1 - state.y) < self.get_thresh(state.y, y1) and state.y >= y1
+
+
     def backtrace(self, objective, state, z, zg, rate):
         # doing only backtracking line search
         # FIXME: implement more-thuente
@@ -192,15 +201,6 @@ class Optimizer(object):
 
 
         return self.backtrace(objective, state, z, zg, rate)
-
-def simpleproperty(varname, mode):
-    def fget(self): return getattr(self, varname)
-    def fset(self, value): return setattr(self, varname, value)
-    if 'w' in mode:
-        r = property(fget, fset)
-    else:
-        r = property(fget)
-    return r
 
 class BaseState(object):
     #__slots__ = ['it', 'fev', 'gev', 'dy', 'statue']
@@ -314,12 +314,7 @@ class LBFGS(Optimizer):
             self.S = []
             self.Y = []
             self.H0k = 1.0
-
-
-    def converged(self, state, y1):
-        valmax = max(abs(y1), abs(state.y))
-        thresh = self.tol * max(valmax, 1.0) + self.atol
-        return abs(y1 - state.y) < thresh and state.y >= y1
+            self.converged_it = 0
 
     def one(self, objective, gradient, state):
         q = self.copy(state.g)
@@ -359,8 +354,9 @@ class LBFGS(Optimizer):
         state.gev = state.gev + 1
 
         if self.converged(state, y1):
-            state.status = Converged("A single convergence")
+            state.converged_it = state.converged_it + 1
         else:
+            state.converged_it = 0
             # hessian update
 
             # XXX: shall we do this when use_steepest_descent is true?
@@ -396,16 +392,8 @@ class LBFGS(Optimizer):
 
         if monitor: monitor(state)
 
-        converged_iters = 0
-
         while True:
             self.one(objective, gradient, state)
-
-            if isinstance(state.status, Converged):
-                converged_iters += 1
-                state.status = None
-            else:
-                converged_iters = 0
 
             if monitor:
                 monitor(state)
@@ -413,7 +401,7 @@ class LBFGS(Optimizer):
             if state.status is not None:
                 break
 
-            if converged_iters >= self.csteps and state.it >= self.minsteps:
+            if state.converged_it >= self.csteps and state.it >= self.minsteps:
                 state.status = Converged("YES: Tolerance achieved")
                 break
 
@@ -439,11 +427,46 @@ class SLBFGS(LBFGS):
     def N0(value=10):
         return int(value)
 
+    @parameter
+    def gthresh(value=1.0):
+        return float(value)
+
+    @parameter
+    def noiseamp(value=0.1):
+        return float(value)
+
+    class State(LBFGS.State):
+        def __init__(self, optimizer, objective, gradient, x0):
+            LBFGS.State.__init__(self, optimizer, objective, gradient, x0)
+            self.it_noise = - optimizer.N0 - 1
+            self.x_noise = None
+            self.y_noise = None
+            self.g_noise = None
+            self.noise = None
+
     def one(self, objective, gradient, state):
-        def sgradient(x0):
-            return self.addmul(gradient(x0), self.oracle(state), 1.0)
-        if (state.it + 1) % self.N0 == 0:
-            status = LBFGS.one(self, objective, sgradient, state)
+        state.noise = None
+
+        if state.it - state.it_noise > self.N0 and state.gnorm < self.gthresh:
+            state.x_noise = state.x
+            state.it_noise = state.it
+            state.g_noise = state.g
+            state.y_noise = state.y
+            noise = self.oracle(state)
+            state.noise = noise
+            state.x = self.addmul(state.x_noise, state.noise, self.gthresh * self.noiseamp)
+            print('hop', state.x, state.x_noise, state.noise, self.gthresh, self.noiseamp)
+            state.y = objective(state.x)
+            state.g = gradient(state.x)
+            state.fev = state.fev + 1
+            state.gev = state.gev + 1
+            state.it = state.it + 1
+        elif state.it - state.it_noise == self.N0 and state.y - state.y_noise > - self.get_thresh(state.y, state.y_noise):
+            state.x = state.x_noise
+            state.y = state.y_noise
+            state.g = state.g_noise
+            #state.status = Converged("Perturbed Gradient Descent converged")
+            state.it = state.it + 1
         else:
-            status = LBFGS.one(self, objective, gradient, state)
+            state.status = LBFGS.one(self, objective, gradient, state)
 
