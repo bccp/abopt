@@ -90,8 +90,12 @@ class Variable(object):
         self.postfix = postfix
 
     @property
-    def gradname(self):
+    def vjp_vector_name(self):
         return '_' + self.name
+
+    @property
+    def jvp_vector_name(self):
+        return self.name + '_'
 
     def __hash__(self): return hash(self.name + '-%s' % self.postfix)
     def __eq__(self, other): return self.name == other.name and self.postfix == other.postfix
@@ -113,6 +117,21 @@ class Argument(object):
         arg.value = self.value
         arg.ovalue = self.ovalue
         return arg
+
+    def dereference(self, context):
+        """ returns the value of an argument by its value
+
+            if context is None, returns the name of the variable
+        """
+        if isinstance(self.value, Literal):
+            return self.value.value
+        elif isinstance(self.value, Variable):
+            if context is None:
+                return self.value.name
+            else:
+                return context[self.value.name]
+        else:
+            return self.value
 
     def __repr__(self):
         if isinstance(self, IOArgument):
@@ -136,6 +155,15 @@ class Arguments(list):
             if arg.name == argname: return arg
         else:
             raise KeyError
+
+    def get_kwargs(self):
+        kwargs = {}
+        for arg in self:
+            if isinstance(arg.value, Variable):
+                kwarg[arg.name] = arg.value.name
+            else:
+                kwarg[arg.name] = arg.value
+        return kwargs
 
     def set_values(self, kwargs, defaults, code):
         _kwargs = defaults.copy()
@@ -182,10 +210,7 @@ class Node(object):
         primitive = self.primitive
         for arg in self.args:
             if isinstance(arg, (IArgument, IOArgument)):
-                if isinstance(arg.value, Literal):
-                    bound.append(arg.value.value)
-                else:
-                    bound.append(frontier[arg.value.name])
+                bound.append(arg.dereference(frontier))
             elif isinstance(arg, OArgument):
                 bound.append(LValue(arg.value.name, results))
             else:
@@ -283,17 +308,34 @@ class Statement(Primitive):
         gout = ['_' + a for a in self.ain]
         gin  = ['_' + a for a in self.aout]
 
-        body.__name__ = "G:" + self.body.__name__
+        body.__name__ = "BG:" + self.body.__name__
         self.vjp = StatementVJP(body, gin, gout)
 
         # allow the gradient with the same name as the original body.
         return self.vjp
+
+    def defjvp(self, body):
+        """ Define the forward-propagation gradient operator. """
+        gin = [a + '_' for a in self.ain]
+        gout  = [a + '_' for a in self.aout]
+
+        body.__name__ = "FG:" + self.body.__name__
+        self.jvp = StatementJVP(body, gin, gout)
+
+        # allow the gradient with the same name as the original body.
+        return self.jvp
 
     class NodeType(Node):
         def call(self, bound):
             self.primitive.body(self.engine, *bound)
 
 class StatementVJP(Primitive):
+    class NodeType(Node):
+        @Node.zero_bypass
+        def call(self, bound):
+            self.primitive.body(self.engine, *bound)
+
+class StatementJVP(Primitive):
     class NodeType(Node):
         @Node.zero_bypass
         def call(self, bound):
@@ -387,9 +429,10 @@ class Tape(object):
     def append(self, node, frontier):
         d = {}
         for arg in node.args:
-            if isinstance(arg, (IArgument, IOArgument)):
-                if isinstance(arg.value, Literal): continue
-                d[arg.value.name] = frontier[arg.value.name]
+            # remember all input variable as their values
+            if isinstance(arg, (IArgument, IOArgument)) \
+                 and isinstance(arg.value, Variable):
+                d[arg.value.name] = arg.dereference(frontier)
 
         self.records.append((node, d))
 
@@ -412,14 +455,10 @@ class Tape(object):
             for arg in node.args:
                 if isinstance(arg, OArgument) \
                 and '_' + arg.name in vjp.argnames:
-                    kwargs['_' + arg.name] = arg.value.gradname
+                    kwargs['_' + arg.name] = arg.value.vjp_vector_name
                 if isinstance(arg, (IArgument, IOArgument)) \
                 and arg.name in vjp.argnames:
-                    if isinstance(arg.value, Literal):
-                        kwargs[arg.name] = arg.value.value
-                    else:
-                        value = d[arg.value.name]
-                        kwargs[arg.name] = value
+                    kwargs[arg.name] = arg.dereference(d)
 
                 if isinstance(arg, (IArgument, IOArgument)) and \
                 '_' + arg.name in vjp.argnames:
@@ -430,13 +469,13 @@ class Tape(object):
                         ocd[arg.value] = occ + 1
                         if occ == 0:
                             # directly write to the gradient, it is used
-                            kwargs['_' + arg.name] = arg.value.gradname
+                            kwargs['_' + arg.name] = arg.value.vjp_vector_name
                         else:
-                            newname = arg.value.gradname + '#partial'
+                            newname = arg.value.vjp_vector_name + '#partial'
                             kwargs['_' + arg.name] = newname
-                            partials.append((newname, arg.value.gradname))
+                            partials.append((newname, arg.value.vjp_vector_name))
 
-                if isinstance(arg, EXArgument):
+                if isinstance(arg, EXArgument) and arg.name in vjp.argnames:
                     kwargs[arg.name] = arg.value
 
             if isinstance(node.primitive, Programme):
@@ -615,6 +654,24 @@ class CodeSegment(object):
         if return_tape:
             r = r, tape
         return r
+
+    def gradient(self):
+        code = CodeSegment(self.engine)
+
+        for node in self.nodes:
+            jvp = node.primitive.jvp
+            kwargs = {}
+            for arg in node.args:
+                if isinstance(arg.value, Variable) and arg.name + '_' in jvp.argnames:
+                    kwargs[arg.name + '_'] = arg.value.jvp_vector_name
+                if isinstance(arg, (IArgument, IOArgument)) and arg.name in jvp.argnames:
+                    kwargs[arg.name] = arg.dereference(None)
+                if isinstance(arg, EXArgument) and arg.name in jvp.argnames:
+                    kwargs[arg.name] = arg.value
+
+            code.append(jvp, kwargs)
+
+        return code
 
     def compute_with_gradient(self, vout, init, ginit, return_tape=False):
         if not isinstance(vout, (tuple, list, set)):
