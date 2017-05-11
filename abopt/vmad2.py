@@ -192,17 +192,21 @@ class Node(object):
                 bound.append(arg.value)
         return bound
 
-    def call_zero_bypass(self, bound):
-        zeros = [value is ZERO
-                for arg, value in zip(self.args, bound)
-                if isinstance(arg, (IArgument, IOArgument))]
-        if all(zeros):
-            for arg, value in zip(self.args, bound):
-                if isinstance(arg, OArgument):
-                    value[...] = ZERO
+    @staticmethod
+    def zero_bypass(function):
+        def call(self, bound, *args, **kwargs):
+            zeros = [value is ZERO
+                    for arg, value in zip(self.args, bound)
+                    if isinstance(arg, (IArgument, IOArgument))]
+            if all(zeros):
+                for arg, value in zip(self.args, bound):
+                    if isinstance(arg, OArgument):
+                        value[...] = ZERO
+            else:
+                return function(self, bound, *args, **kwargs)
             #logger.info("Body skipped because all input gradients are zero: %s " % (self))
-            return True
-        return False
+        functools.update_wrapper(call, function)
+        return call
 
     def __repr__(self):
         return "%s(%s)" % (self.primitive, self.args)
@@ -228,6 +232,22 @@ class CodeSegNode(Node):
     def invoke_for_tape(self, codeseg, frontier):
         bound = self.bind(frontier, {})
         return self.call(bound, return_tape=True)
+
+    @staticmethod
+    def zero_bypass(function):
+        def call(self, bound, return_tape=False):
+            zeros = [value is ZERO
+                    for arg, value in zip(self.args, bound)
+                    if isinstance(arg, (IArgument, IOArgument))]
+            if not return_tape and all(zeros):
+                for arg, value in zip(self.args, bound):
+                    if isinstance(arg, OArgument):
+                        value[...] = ZERO
+            else:
+                return function(self, bound, return_tape)
+            #logger.info("Body skipped because all input gradients are zero: %s " % (self))
+        functools.update_wrapper(call, function)
+        return call
 
     def call(self, bound, return_tape=False):
         init = {}
@@ -275,9 +295,9 @@ class Statement(Primitive):
 
 class StatementVJP(Primitive):
     class NodeType(Node):
+        @Node.zero_bypass
         def call(self, bound):
-            if not Node.call_zero_bypass(self, bound):
-                self.primitive.body(self.engine, *bound)
+            self.primitive.body(self.engine, *bound)
 
 class Inspect(Primitive):
     @staticmethod
@@ -353,11 +373,9 @@ class ProgrammeVJP(Primitive):
                 node._codeseg = self._codeseg
             return node
 
+        @CodeSegNode.zero_bypass
         def call(self, bound, return_tape=False):
-            if return_tape:
-                return CodeSegNode.call(self, bound, return_tape)
-            if not CodeSegNode.call_zero_bypass(self, bound):
-                return CodeSegNode.call(self, bound, return_tape)
+            return CodeSegNode.call(self, bound, return_tape)
 
 class Tape(object):
     def __init__(self, engine, init):
