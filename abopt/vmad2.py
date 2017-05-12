@@ -308,8 +308,11 @@ class Statement(Primitive):
         gout = ['_' + a for a in self.ain]
         gin  = ['_' + a for a in self.aout]
 
+        argnames = body.__code__.co_varnames[1:body.__code__.co_argcount]
+        ain = [a for a in self.ain if a in argnames]
+
         body.__name__ = "BG:" + self.body.__name__
-        self.vjp = StatementVJP(body, gin, gout)
+        self.vjp = StatementVJP(body, gin + ain, gout)
 
         # allow the gradient with the same name as the original body.
         return self.vjp
@@ -460,7 +463,7 @@ class Tape(object):
                     kwargs['_' + arg.name] = arg.value.vjp_vector_name
                 if isinstance(arg, (IArgument, IOArgument)) \
                 and arg.name in vjp.argnames:
-                    kwargs[arg.name] = arg.dereference(d)
+                    kwargs[arg.name] = Literal(arg.dereference(d))
 
                 if isinstance(arg, (IArgument, IOArgument)) and \
                 '_' + arg.name in vjp.argnames:
