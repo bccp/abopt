@@ -160,9 +160,9 @@ class Arguments(list):
         kwargs = {}
         for arg in self:
             if isinstance(arg.value, Variable):
-                kwarg[arg.name] = arg.value.name
+                kwargs[arg.name] = arg.value.name
             else:
-                kwarg[arg.name] = arg.value
+                kwargs[arg.name] = arg.value
         return kwargs
 
     def set_values(self, kwargs, defaults, code):
@@ -318,9 +318,11 @@ class Statement(Primitive):
         """ Define the forward-propagation gradient operator. """
         gin = [a + '_' for a in self.ain]
         gout  = [a + '_' for a in self.aout]
-
+        argnames = body.__code__.co_varnames[1:body.__code__.co_argcount]
+        ain = [a for a in self.ain if a in argnames]
         body.__name__ = "FG:" + self.body.__name__
-        self.jvp = StatementJVP(body, gin, gout)
+
+        self.jvp = StatementJVP(body, gin + ain, gout)
 
         # allow the gradient with the same name as the original body.
         return self.jvp
@@ -670,6 +672,7 @@ class CodeSegment(object):
                     kwargs[arg.name] = arg.value
 
             code.append(jvp, kwargs)
+            code.append(node.primitive, node.args.get_kwargs())
 
         return code
 
