@@ -10,7 +10,7 @@ logger.setLevel(level=logging.WARNING)
 
 try:
     from abopt.engines.pmesh import ParticleMeshEngine, ParticleMesh, RealField, ComplexField, check_grad
-    pm = ParticleMesh(BoxSize=1.0, Nmesh=(4, 4), dtype='f8', method='tsc')
+    pm = ParticleMesh(BoxSize=1.0, Nmesh=(4, 4), dtype='f8', resampler='tsc')
 except ImportError:
     pm = None
 
