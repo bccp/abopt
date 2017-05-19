@@ -229,28 +229,3 @@ def test_programme_unused():
     assert_array_equal(d, 1.0)
     assert_array_equal(_a, 0.0)
 
-def test_inspect():
-    inspect_called = [False]
-    vjp_inspect_called = [False]
-
-    def inspect(engine, frontier):
-        inspect_called[0] = True
-
-    def vjp_inspect(engine, frontier):
-        vjp_inspect_called[0] = True
-
-    engine = TestEngine()
-    code = CodeSegment(engine)
-    code.unitary(x='a', y='d', factor=3.0)
-    code.inspect(inspector=inspect)
-    code.inspect(vjp_inspector=vjp_inspect)
-
-    d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
-
-    assert inspect_called[0] == True
-    assert vjp_inspect_called[0] == False
-
-    gradient = tape.gradient()
-    _a  = gradient.compute(['_a'], {'_d': 1.0})
-    assert inspect_called[0] == True
-    assert vjp_inspect_called[0] == True

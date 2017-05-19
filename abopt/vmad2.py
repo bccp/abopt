@@ -124,7 +124,10 @@ class Argument(object):
             if context is None, returns the name of the variable
         """
         if isinstance(self.value, Literal):
-            return self.value.value
+            if context is None:
+                return self.value
+            else:
+                return self.value.value
         elif isinstance(self.value, Variable):
             if context is None:
                 return self.value.name
@@ -334,43 +337,17 @@ class Statement(Primitive):
         def call(self, bound):
             self.primitive.body(self.engine, *bound)
 
-class StatementVJP(Primitive):
+class StatementVJP(Statement):
     class NodeType(Node):
         @Node.zero_bypass
         def call(self, bound):
             self.primitive.body(self.engine, *bound)
 
-class StatementJVP(Primitive):
+class StatementJVP(Statement):
     class NodeType(Node):
         @Node.zero_bypass
         def call(self, bound):
             self.primitive.body(self.engine, *bound)
-
-class Inspect(Primitive):
-    @staticmethod
-    def inspect(engine, inspector=None, vjp_inspector=None):
-        pass
-
-    def __init__(self, is_vjp=False):
-        Primitive.__init__(self, Inspect.inspect, ain=[], aout=[])
-        self.is_vjp = is_vjp
-        if not is_vjp:
-            self.vjp = Inspect(is_vjp=True)
-
-    class NodeType(Node):
-        def bind(self, frontier, results):
-            if self.primitive.is_vjp:
-                inspector = self.args.find('vjp_inspector').value
-            else:
-                inspector = self.args.find('inspector').value
-
-            if inspector: inspector(self.engine, frontier)
-
-            bound = Node.bind(self, frontier, results)
-            return bound
-
-        def call(self, bound):
-            pass
 
 class Programme(Primitive):
     def __init__(self, body, ain, aout):
@@ -592,7 +569,7 @@ class CodeSegment(object):
         segment.nodes = nodes
         return segment
 
-    def compute(self, vout, init, return_tape=False):
+    def compute(self, vout, init, return_tape=False, monitor=None):
         assign = self.engine.assign.body
 
         if not isinstance(vout, (tuple, list, set)):
@@ -622,6 +599,10 @@ class CodeSegment(object):
             def mark(engine, x): pass
             @mark.defvjp
             def _(engine, _x): pass
+            @mark.defjvp
+            def _(engine, x_): pass
+            @mark.vjp.defjvp
+            def _(engine, _x_): pass
             for varname in vout:
                 self.append(mark, {'x' : varname})
         else:
@@ -645,6 +626,9 @@ class CodeSegment(object):
             except Exception as e:
                 print("Failure in running `%s`" % node)
                 raise
+
+            if monitor is not None:
+                monitor(node, frontier, r)
             for var in abandon:
                 frontier.pop(var.name)
 
@@ -724,8 +708,6 @@ class Engine(object):
     def assign(engine, x, y):
         y[...] = x * 1.0
 
-    inspect = Inspect()
-
 def _optimize(nodes, out):
     """ return an optimized codeseg for computing vout. irrelevant nodes are pruned. """
 
@@ -741,8 +723,6 @@ def _optimize(nodes, out):
             if isinstance(arg, IOArgument) and arg.ovalue in deps:
                 keep = True
                 deps.remove(arg.ovalue)
-        if isinstance(node.primitive, Inspect):
-            keep = True
         if not keep: continue
         newnodes.append(node)
         for arg in node.args:
