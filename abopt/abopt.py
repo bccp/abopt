@@ -317,8 +317,8 @@ class LBFGS(Optimizer):
             self.converged_it = 0
             self.use_steepest_descent = False
 
-        def __repr__(self):
-            return BaseState.__repr__(self) + 'ST: %s' % self.use_steepest_descent
+        def __str__(self):
+            return BaseState.__str__(self) + ' GD: %s' % self.use_steepest_descent
 
     def one(self, objective, gradient, state):
         q = self.copy(state.g)
