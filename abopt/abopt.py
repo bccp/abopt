@@ -315,6 +315,10 @@ class LBFGS(Optimizer):
             self.Y = []
             self.H0k = 1.0
             self.converged_it = 0
+            self.use_steepest_descent = False
+
+        def __repr__(self):
+            return BaseState.__repr__(self) + 'ST: %s' % self.use_steepest_descent
 
     def one(self, objective, gradient, state):
         q = self.copy(state.g)
@@ -331,7 +335,7 @@ class LBFGS(Optimizer):
             beta = state.rho[i] * dotproduct
             z = self.addmul(z, state.S[i], alpha[i] - beta)
 
-        use_steepest_descent = False
+        state.use_steepest_descent = False
 
         znorm = self.dot(z, z) ** 0.5
         zg = 0.0 if znorm == 0 else self.dot(z, state.g) / znorm
@@ -341,9 +345,9 @@ class LBFGS(Optimizer):
             # L-BFGS gave a bad direction.
             z = self.copy(state.g)
             zg = 1.0
-            use_steepest_descent = True
+            state.use_steepest_descent = True
 
-        if state.it == 0 or use_steepest_descent:
+        if state.it == 0 or state.use_steepest_descent:
             rate = 1.0 / state.gnorm
             x1, y1 = self.linesearch(objective, gradient, state, z, zg, rate)
         else: 
