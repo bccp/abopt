@@ -138,12 +138,26 @@ class Optimizer(object):
     def converged(self, state, y1):
         return abs(y1 - state.y) < self.get_thresh(state.y, y1) and state.y >= y1
 
+    def backtrace_optimal(self, objective, state, z, zg, rate):
+        """ This finds the minimal along the proposal direction. """
+        from scipy.optimize import minimize_scalar
+        def func(tau):
+            if tau == 0: return state.y
+            x1 = self.addmul(state.x, z, -tau * rate)
+            state.fev = state.fev + 1
+            return objective(x1)
+
+        r = minimize_scalar(func, (0, 1), bounds=(0, 1), method='bounded', options={'maxiter':10}, )
+
+        x1 = self.addmul(state.x, z, -r.x * rate)
+        return x1, r.fun
 
     def backtrace(self, objective, state, z, zg, rate):
+
         # doing only backtracking line search
         # FIXME: implement more-thuente
         tau = 0.5
-        c = 1e-5
+        c = 0.5
         x1 = self.addmul(state.x, z, -rate)
         y1 = objective(x1)
         state.fev = state.fev + 1
@@ -155,7 +169,7 @@ class Optimizer(object):
             if self.converged(state, y1): break
 
             # sufficient descent
-            if state.y - y1 >= rate * c * zg:
+            if y1 < state.y and abs(y1 - state.y) <= abs(rate * c * zg):
                 break
 
             rate *= tau
@@ -315,6 +329,7 @@ class LBFGS(Optimizer):
             self.Y = []
             self.H0k = 1.0
             self.converged_it = 0
+            self.z = self.g
             self.use_steepest_descent = False
 
         def __str__(self):
@@ -346,7 +361,7 @@ class LBFGS(Optimizer):
             z = self.copy(state.g)
             zg = 1.0
             state.use_steepest_descent = True
-
+        state.z = z
         if state.it == 0 or state.use_steepest_descent:
             rate = 1.0 / state.gnorm
             x1, y1 = self.linesearch(objective, gradient, state, z, zg, rate)
