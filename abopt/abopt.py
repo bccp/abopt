@@ -161,12 +161,13 @@ class Optimizer(object):
         x1 = self.addmul(state.x, z, -rate)
         y1 = objective(x1)
         state.fev = state.fev + 1
-        while True:
+        i = 0
+        while i < 10:
             valmax = max(abs(y1), abs(state.y))
             thresh = self.tol * max(valmax, 1.0) + self.atol
 
-            #print(rate, state.y, y1, state.x, x1)
-            if self.converged(state, y1): break
+            #print(rate, state.y, y1, state.x, x1, z)
+            #if self.converged(state, y1): break
 
             # sufficient descent
             if y1 < state.y and abs(y1 - state.y) >= abs(rate * c * zg):
@@ -177,7 +178,7 @@ class Optimizer(object):
             y1 = objective(x1)
             #print('new point ', x1, y1, state.x, state.y)
             state.fev = state.fev + 1
-
+            i = i + 1
         return x1, y1
 
     def linesearch(self, objective, gradient, state, z, zg, rate):
@@ -361,10 +362,21 @@ class LBFGS(Optimizer):
             z = self.copy(state.g)
             zg = 1.0
             state.use_steepest_descent = True
+        """
+        print('--------')
+        print(alpha)
+        print([1 / tmp for tmp in state.rho])
+        print('q', q)
+        print('z', z)
+        print(state.H0k)
+        print(state.Y)
+        print(state.S)
+        """
         state.z = z
         if state.it == 0 or state.use_steepest_descent:
             rate = 1.0 / state.gnorm
-            x1, y1 = self.linesearch(objective, gradient, state, z, zg, rate)
+            #x1, y1 = self.linesearch(objective, gradient, state, z, zg, rate)
+            x1, y1 = self.backtrace(objective, state, z, zg, rate)
         else: 
             rate = 1.0
             x1, y1 = self.backtrace(objective, state, z, zg, rate)
