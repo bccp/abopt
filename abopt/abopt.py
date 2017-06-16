@@ -157,7 +157,7 @@ class Optimizer(object):
         # doing only backtracking line search
         # FIXME: implement more-thuente
         tau = 0.5
-        c = 0.5
+        c = 1e-5
         x1 = self.addmul(state.x, z, -rate)
         y1 = objective(x1)
         state.fev = state.fev + 1
@@ -169,7 +169,7 @@ class Optimizer(object):
             if self.converged(state, y1): break
 
             # sufficient descent
-            if y1 < state.y and abs(y1 - state.y) <= abs(rate * c * zg):
+            if y1 < state.y and abs(y1 - state.y) >= abs(rate * c * zg):
                 break
 
             rate *= tau
