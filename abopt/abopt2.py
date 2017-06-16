@@ -355,7 +355,7 @@ def minpack_linesearch(vs, problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
         state.fev = state.fev + 1
         x1 = addmul(state.x, z, -alpha)
         y1 = problem.objective(x1)
-        print('phi', -alpha, y1, state.y)
+        # print('phi', -alpha, y1, state.y)
         return y1
 
     gval = [state.g]
