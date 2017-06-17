@@ -47,8 +47,19 @@ class Problem(object):
         self.atol = 1e-7
         self.rtol = 1e-7
         self.gtol = 0
-
         self.__dict__.update(kwargs)
+
+class PreconditionedProblem(Problem):
+    def __init__(self, objective, gradient, P, PT, **kwargs):
+        self.P = P
+        self.PT = PT
+        Problem.__init__(self)
+
+    def objectivePT(self, Px):
+        return self._objective(self.PT(Px))
+
+    def PgradientPT(self, Px):
+        return self.P(self._gradient(self.PT(Px)))
 
 class Optimizer(object):
     problem_defaults = {} # placeholder for subclasses to replace
@@ -98,8 +109,11 @@ class Optimizer(object):
         state.nit = state.nit + 1
         self.move(problem, state, x1, y1, g1, r1)
 
-    def minimize(optimizer, objective, gradient, x0, monitor=None, **kwargs):
-        return minimize(optimizer, objective, gradient, x0, monitor, **kwargs)
+    def minimize(optimizer, objective, gradient, x0, P=None, PT=None, monitor=None, **kwargs):
+        if P is not None:
+            return minimize_p(optimizer, objective, gradient, x0, P, PT, monitor, **kwargs)
+        else:
+            return minimize(optimizer, objective, gradient, x0, monitor, **kwargs)
 
 class GradientDescent(Optimizer):
     def single_iteration(self, problem, state):
@@ -219,6 +233,33 @@ class LBFGS(Optimizer):
         if state.gnorm <= problem.gtol: 
             # but if gnorm is small, converged too
             state.converged = True
+
+def minimize_p(optimizer, objective, gradient, x0, P, PT, monitor=None, **kwargs):
+
+    def objectivePT(Px):
+        return objective(PT(Px))
+
+    def PgradientPT(Px):
+        return P(gradient(PT(Px)))
+
+    Px0 = P(x0)
+
+    def Pmonitor(state):
+        if monitor is None: return
+
+        Px = state.x
+        Pg = state.g
+        state.x = PT(Px)
+        state.g = PT(Pg)
+        monitor(state)
+        state.x = Px
+        state.g = Pg
+
+    state = minimize(optimizer, objectivePT, PgradientPT, Px0, monitor=Pmonitor, **kwargs)
+
+    state.x = PT(state.x)
+    state.g = PT(state.g)
+    return state
 
 def minimize(optimizer, objective, gradient, x0, monitor=None, **kwargs):
     problem_args = {}
