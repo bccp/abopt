@@ -422,7 +422,7 @@ def minpack_linesearch(vs, problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
 
     if derphi_star is None:
         #raise ValueError('The line search algorithm did not converge')
-        pass
+        return None, None, None, None
     else:
         # derphi_star is a number (derphi) -- so use the most recently
         # calculated gradient used in computing it derphi = gfk*pk
