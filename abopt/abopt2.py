@@ -298,7 +298,7 @@ def backtrace_linesearch(vs, problem, state, z, rate, c=1e-5, tau=0.5):
     zg = dot(z, state.g) / zz
 
     if zg < 0.0: #1 * state.gnorm:
-        raise ValueError("Line search failed the direction is not along the gradient direction.")
+        return None, None, None, None
 
     x1 = addmul(state.x, z, -rate)
     y1 = objective(x1)
