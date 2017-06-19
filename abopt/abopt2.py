@@ -318,15 +318,14 @@ def backtrace_linesearch(vs, problem, state, z, rate, c=1e-5, tau=0.5):
             xmin = x1
             ratemin = rate
         if y1 < state.y and abs(y1 - state.y) >= abs(rate * c * zg):
-            break
+            return xmin, ymin, None, rate
 
         rate *= tau
         x1 = addmul(state.x, z, -rate)
         y1 = objective(x1)
         state.fev = state.fev + 1
         i = i + 1
-
-    return xmin, ymin, None, rate
+    return None, None, None, None
 
 def exact_linesearch(vs, problem, state, z, rate, c=0.5):
     addmul = vs.addmul
