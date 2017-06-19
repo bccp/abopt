@@ -226,11 +226,14 @@ class LBFGS(Optimizer):
         state.z = z
         self.post_single_iteration(problem, state, x1, y1, g1, r1)
 
-        if len(state.Y) < problem.m:
-            # must have 'good' approximation for the hessian
+        if len(state.Y) < problem.m and len(state.Y) > 1:
+            # started building the hessian, then
+            # must have a 'good' approximation before ending
+            # Watch out: if > 0 is not protected we will not
+            # terminated on a converged GD step.
             state.converged = False
 
-        if state.gnorm <= problem.gtol: 
+        if state.gnorm <= problem.gtol:
             # but if gnorm is small, converged too
             state.converged = True
 
