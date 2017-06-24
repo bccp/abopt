@@ -19,5 +19,7 @@ setup(name="abopt", version=find_version("abopt/version.py"),
       zip_safe=True, # this should be pure python
       packages=["abopt", "abopt.tests"],
       license='GPLv3',
-      install_requires=['numpy'], # maybe not needed by the core, but we need numpy for testing
+      install_requires=['numpy', 
+                        'scipy', # currently needed for 1d linesearch]
       )
+
