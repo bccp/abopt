@@ -20,6 +20,7 @@ setup(name="abopt", version=find_version("abopt/version.py"),
       packages=["abopt", "abopt.tests"],
       license='GPLv3',
       install_requires=['numpy', 
-                        'scipy', # currently needed for 1d linesearch]
+                        'scipy', # currently needed for 1d linesearch
+                       ]
       )
 
