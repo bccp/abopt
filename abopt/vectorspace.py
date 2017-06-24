@@ -1,3 +1,18 @@
+"""
+    Vectors.
+
+    define addmul, which allows transporting vectors;
+       and dot, which defines the inner product and distance.
+
+    ABOPT sees complex numbers as a tuple of real numbers.
+    and thus the vector space is self-dual;
+    :math:`x + \lambda g` being well defined.
+
+    `autograd` sees complex numbers as complex numbers,
+    thus the vector space is not self-dual; gradient lives in the dual
+    space and :math:`x + \lambda g^\dagger` is well defined.
+
+"""
 class VectorSpace(object):
     def __init__(self, addmul=None, dot=None):
         if addmul:
