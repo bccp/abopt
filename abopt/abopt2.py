@@ -1,26 +1,4 @@
-class VectorSpace(object):
-    def __init__(self, addmul=None, dot=None):
-        if addmul:
-            self.addmul = addmul
-        if dot:
-            self.dot = dot
-
-    @staticmethod
-    def addmul(a, b, s):
-        if s is 0:
-            return 1.0 * a # always a new instance is created
-        if a is 0:
-            return b * s
-        return a + b * s
-
-    @staticmethod
-    def dot(a, b):
-        if hasattr(a, 'dot'):
-            return a.dot(b)
-        try:
-            return sum(a * b)
-        except TypeError:
-            return float(a * b)
+from .vectorspace import VectorSpace
 
 class State(object):
     def __init__(self):
@@ -63,11 +41,11 @@ class PreconditionedProblem(Problem):
 class Optimizer(object):
     problem_defaults = {} # placeholder for subclasses to replace
 
+    from .vectorspace import real_vector_space
+    from .vectorspace import complex_vector_space
     from .linesearch import backtrace
-    def __init__(self, vs=None, linesearch=backtrace):
-        if vs is None:
-            vs = VectorSpace()
 
+    def __init__(self, vs=real_vector_space, linesearch=backtrace):
         self.vs = vs
         self.linesearch = linesearch
 
@@ -114,9 +92,9 @@ class Optimizer(object):
 
 class GradientDescent(Optimizer):
     def single_iteration(self, problem, state):
-        addmul = self.vs.addmul
+        mul = self.vs.mul
 
-        z = addmul(0, state.g, 1 / state.gnorm)
+        z = mul(state.g, 1 / state.gnorm)
 
         x1, y1, g1, r1 = self.linesearch(self.vs, problem, state, z, state.rate * 2)
 

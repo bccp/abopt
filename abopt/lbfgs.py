@@ -30,7 +30,11 @@ from .abopt2 import Optimizer
 def scalar_diag(vs, state):
     """ M1QN2.A in Gilbert and Lemarechal 1989.  EQ 4.1; wikipedia version of L-BFGS """
 
-    if len(state.S) == 0: return 1.0
+    D1 = vs.mul(state.x, 0.0)
+
+    if len(state.S) == 0:
+        D1[...] = 1.0
+        return D1
 
     D0 = state.D
     s = state.S[-1]
@@ -38,7 +42,8 @@ def scalar_diag(vs, state):
     ys = state.YS[-1]
     yy = state.YY[-1]
 
-    return  ys / yy
+    D1[...] = ys / yy
+    return D1
 
 def inverse_bfgs_diag(vs, state):
     """ 
@@ -47,7 +52,7 @@ def inverse_bfgs_diag(vs, state):
         This is bad.  D grows rapidly over iterations.
 
     """
-    if len(state.S) == 0: return 1.0
+    if len(state.S) == 0: return vs.ones_like(state.x)
 
     D0 = state.D
     s = state.S[-1]
@@ -56,12 +61,17 @@ def inverse_bfgs_diag(vs, state):
     yy = state.YY[-1]
 
     dot = vs.dot
+    mul = vs.mul
+    pow = vs.pow
 
-    Dyy = dot(y * D0, y)
+    Dy = mul(D0, y)
+    Dyy = dot(Dy, y)
 
-    D1 = D0 + 1 / ys * (
-         (1 + Dyy / ys) * s ** 2 \
-       - 2  * y * s * D0 )
+    a3 = mul(mul(D0, y), s)
+
+    D1 = addmul(D0, pow(s, 2), (1 / ys  + Dyy / ys ** 2))
+    D1 = addmul(D1, mul(mul(D0, y), s), -2.0 / ys)
+
     return D1
 
 def direct_bfgs_diag(vs, state, scaled=False):
@@ -69,26 +79,30 @@ def direct_bfgs_diag(vs, state, scaled=False):
         M1QN3.B, M1QN3.B2, Gilbert and Lemarechal 1989. 
         Equation 4.7, 4.9
     """
-    if len(state.S) == 0: return 1.0
+    if len(state.S) == 0: return vs.ones_like(state.x)
 
     D0 = state.D
+
     s = state.S[-1]
     y = state.Y[-1]
     ys = state.YS[-1]
     yy = state.YY[-1]
 
     dot = vs.dot
+    addmul= vs.addmul
+    mul = vs.mul
+    pow = vs.pow
 
-    if scaled:
-        Dyy = dot(y * D0, y)
-        sigma = ys / Dyy
+    Dyy = dot(mul(y, D0), y)
 
-        D0 = D0 * sigma
+    if scaled: D0 = mul(D0, ys / Dyy)
 
-    invDss = dot(s * D0 ** -1, s)
-    invD1 = D0 ** -1 + y** 2 / ys - (s / D0)**2 / invDss
-    D1 = invD1 ** -1
-    return D1
+    invD0 = pow(D0, -1)
+
+    t = addmul(invD0, pow(y, 2), 1 / ys)
+    t = addmul(t, pow(mul(s, invD0), 2), -1 / dot(mul(invD0, s), s))
+
+    return pow(t, -1)
 
 def scaled_direct_bfgs_diag(vs, state):
     """ M1QN3.B2 """
@@ -99,7 +113,9 @@ def inverse_dfp_diag(vs, state, scaled=False):
         M1QN3.C and M1QN3.C2, Gilbert and Lemarechal 1989. 
         Equation 4.8, 4.10
     """
-    if len(state.S) == 0: return 1.0
+    D1 = vs.mul(state.x, 0.0)
+
+    if len(state.S) == 0: return vs.ones_like(state.x)
 
     D0 = state.D
     s = state.S[-1]
@@ -108,16 +124,19 @@ def inverse_dfp_diag(vs, state, scaled=False):
     yy = state.YY[-1]
 
     dot = vs.dot
+    mul = vs.mul
+    addmul = vs.addmul
+    pow = vs.pow
 
-    Dyy = dot(y * D0, y)
+    yD0 = mul(y, D0)
+    Dyy = dot(yD0, y)
 
-    if scaled:
-        sigma = ys / Dyy
-        D0 = D0 * sigma
+    if scaled: D0 = mul(D0, ys / Dyy)
 
-    D1 = D0 + s**2 / ys - (D0 * y) ** 2 / Dyy
+    t = addmul(D0, pow(s, 2), 1 / ys)
+    t = addmul(t,  pow(yD0, 2), 1/ Dyy)
 
-    return D1
+    return t
 
 def scaled_inverse_dfp_diag(vs, state):
     """ M1QN3.C2, bad """
@@ -126,7 +145,7 @@ def scaled_inverse_dfp_diag(vs, state):
 
 class LBFGS(Optimizer):
     problem_defaults = {'m' : 6}
-    def __init__(self, vs, linesearch=Optimizer.backtrace, diag=scaled_direct_bfgs_diag):
+    def __init__(self, vs=Optimizer.real_vector_space, linesearch=Optimizer.backtrace, diag=scaled_direct_bfgs_diag):
         Optimizer.__init__(self, vs, linesearch=linesearch)
         self.diag = diag
 
@@ -152,9 +171,9 @@ class LBFGS(Optimizer):
                 del state.S[0]
                 del state.YS[0]
 
-        state.D = self.diag(self.vs, state)
-
         Optimizer.move(self, problem, state, x1, y1, g1, r1)
+
+        state.D = self.diag(self.vs, state)
 
     def single_iteration(self, problem, state):
         """ Line by line translation of the LBFGS on wikipedia """
@@ -207,7 +226,6 @@ class LBFGS(Optimizer):
             state.S = []
             state.YS = []
             state.YY = []
-            state.D = 1.0
 
             z = addmul(0, state.g, 1 / state.gnorm)
 
