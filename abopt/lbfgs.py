@@ -30,11 +30,7 @@ from .abopt2 import Optimizer
 def scalar_diag(vs, state):
     """ M1QN2.A in Gilbert and Lemarechal 1989.  EQ 4.1; wikipedia version of L-BFGS """
 
-    D1 = vs.mul(state.x, 0.0)
-
-    if len(state.S) == 0:
-        D1[...] = 1.0
-        return D1
+    if len(state.S) == 0: return vs.ones_like(state.x)
 
     D0 = state.D
     s = state.S[-1]
@@ -42,7 +38,7 @@ def scalar_diag(vs, state):
     ys = state.YS[-1]
     yy = state.YY[-1]
 
-    D1[...] = ys / yy
+    D1 = vs.mul(vs.ones_like(state.x), ys / yy)
     return D1
 
 def inverse_bfgs_diag(vs, state):
@@ -63,6 +59,7 @@ def inverse_bfgs_diag(vs, state):
     dot = vs.dot
     mul = vs.mul
     pow = vs.pow
+    addmul = vs.addmul
 
     Dy = mul(D0, y)
     Dyy = dot(Dy, y)

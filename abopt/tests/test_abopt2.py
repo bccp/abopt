@@ -131,12 +131,24 @@ def test_abopt_lbfgs_inverse_dfp_diag():
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
 
-def test_abopt_lbfgs_direct_bfgs_diag_c():
-    lbfgs = LBFGS(complex_vector_space, linesearch=exact, diag=direct_bfgs_diag)
-    def monitor(state):
-        print(str(state), 'D', state.D)
-        pass
-    s = minimize(lbfgs, crosen, crosen_der, numpy.array([0 + 0j]), monitor=monitor)
-    print(s)
-    assert s.converged
-    assert_allclose(s.x, 1.0 + 1.0j, rtol=1e-4)
+def test_abopt_lbfgs_complex():
+    for diag in [direct_bfgs_diag, scaled_direct_bfgs_diag,
+            inverse_dfp_diag, scaled_inverse_dfp_diag, inverse_bfgs_diag, scalar_diag]:
+
+        lbfgs_r = LBFGS(linesearch=exact, diag=diag)
+
+        lbfgs_c = LBFGS(complex_vector_space, linesearch=exact, diag=diag)
+
+        X = []
+        Y = []
+        def monitor_r(state):
+            X.append(state.x[0] + state.x[1] * 1j)
+
+        def monitor_c(state):
+            Y.append(state.x[0])
+
+        s = minimize(lbfgs_r, rosen, rosen_der, numpy.array([0, 0]), monitor=monitor_r)
+        s = minimize(lbfgs_c, crosen, crosen_der, numpy.array([0 + 0j]), monitor=monitor_c)
+
+        assert_allclose(X, Y, rtol=1e-4)
+
