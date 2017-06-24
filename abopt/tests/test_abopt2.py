@@ -147,8 +147,8 @@ def test_abopt_lbfgs_complex():
         def monitor_c(state):
             Y.append(state.x[0])
 
-        s = minimize(lbfgs_r, rosen, rosen_der, numpy.array([0, 0]), monitor=monitor_r)
-        s = minimize(lbfgs_c, crosen, crosen_der, numpy.array([0 + 0j]), monitor=monitor_c)
+        s = minimize(lbfgs_r, rosen, rosen_der, numpy.array([0., 0.]), monitor=monitor_r)
+        s = minimize(lbfgs_c, crosen, crosen_der, numpy.array([0. + 0.j]), monitor=monitor_c)
 
         assert_allclose(X, Y, rtol=1e-4)
 

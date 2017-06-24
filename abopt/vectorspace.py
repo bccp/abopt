@@ -21,25 +21,24 @@ class VectorSpace(object):
             self.dot = dot
 
     def copy(self, a):
-        return self.addmul(a, 0, 0)
+        return self.addmul(0, a, 1)
 
-    def ones_like(self, a):
-        o = self.copy(a)
-        return self.addmul(o, 1, 1)
+    def ones_like(self, b):
+        r = self.addmul(1, b, 0)
+        return r
 
     def mul(self, b, c, p=1):
         return self.addmul(0, b, c, p)
 
     def pow(self, c, p):
-        return self.addmul(0, 1, c, p)
+        i = self.ones_like(c)
+        return self.addmul(0, i, c, p)
 
 def addmul(a, b, c, p=1):
-    """ a + b * c ** p """
-    if b is 0 and c is 0:
-        return 1.0 * a # always a new instance is created
+    """ a + b * c ** p, follow the type of b """
     if p is not 1: c = c ** p
-    if b is not 1: c = b * c
-    if a is not 0: c = a + c
+    c = b * c
+    if a is not 0: c = c + a
     return c
 
 def dot(a, b):
