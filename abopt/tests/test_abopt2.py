@@ -5,7 +5,8 @@ from abopt.abopt2 import GradientDescent, LBFGS, \
 
 from abopt.linesearch import minpack, backtrace, exact
 from abopt.lbfgs import inverse_bfgs_diag, direct_bfgs_diag, scalar_diag, inverse_dfp_diag
-from abopt.lbfgs import scaled_direct_bfgs_diag, scaled_inverse_dfp_diag
+from abopt.lbfgs import pre_scaled_direct_bfgs_diag, pre_scaled_inverse_dfp_diag
+from abopt.lbfgs import post_scaled_direct_bfgs_diag, post_scaled_inverse_dfp_diag
 from abopt.vectorspace import real_vector_space, complex_vector_space
 
 from numpy.testing import assert_raises, assert_allclose
@@ -29,10 +30,13 @@ def crosen_der(x):
     r = v[:s] + v[s:] * 1j
     return r
 
+x0 = numpy.zeros(2)
+
+
 def test_abopt_gd_backtrace():
     gd = GradientDescent(linesearch=backtrace)
-    
-    s = minimize(gd, quad, quad_der, numpy.array([0, 0]), monitor=print)
+
+    s = minimize(gd, quad, quad_der, x0, monitor=print)
     print(s)
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
@@ -40,7 +44,7 @@ def test_abopt_gd_backtrace():
 def test_abopt_gd_minpack():
     gd = GradientDescent(linesearch=minpack)
     
-    s = minimize(gd, quad, quad_der, numpy.array([0, 0]))
+    s = minimize(gd, quad, quad_der, x0)
     print(s)
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
@@ -48,7 +52,7 @@ def test_abopt_gd_minpack():
 def test_abopt_gd_exact():
     gd = GradientDescent(linesearch=exact)
     
-    s = minimize(gd, quad, quad_der, numpy.array([0, 0]))
+    s = minimize(gd, quad, quad_der, x0)
     print(s)
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
@@ -56,7 +60,7 @@ def test_abopt_gd_exact():
 def test_abopt_lbfgs_backtrace():
     lbfgs = LBFGS(linesearch=backtrace)
     
-    s = minimize(lbfgs, rosen, rosen_der, numpy.array([0, 0]))
+    s = minimize(lbfgs, rosen, rosen_der, x0)
     print(s)
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
@@ -64,7 +68,7 @@ def test_abopt_lbfgs_backtrace():
 def test_abopt_lbfgs_minpack():
     lbfgs = LBFGS(linesearch=minpack)
     
-    s = minimize(lbfgs, rosen, rosen_der, numpy.array([0, 0]))
+    s = minimize(lbfgs, rosen, rosen_der, x0)
     print(s)
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
@@ -72,31 +76,31 @@ def test_abopt_lbfgs_minpack():
 def test_abopt_lbfgs_exact():
     lbfgs = LBFGS(linesearch=exact)
     
-    s = minimize(lbfgs, rosen, rosen_der, numpy.array([0, 0]))
+    s = minimize(lbfgs, rosen, rosen_der, x0)
     print(s)
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
 
 def test_abopt_lbfgs_quad():
     gd = LBFGS(linesearch=backtrace)
-    s = minimize(gd, quad, quad_der, numpy.array([0, 0]))
+    s = minimize(gd, quad, quad_der, x0)
     print(s)
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
 
 def test_abopt_lbfgs_quad_P():
     gd = LBFGS(linesearch=backtrace)
-    s = minimize_p(gd, quad, quad_der, numpy.array([0, 0]), P=lambda x: 2 * x, PT=lambda x: 0.5 * x)
+    s = minimize_p(gd, quad, quad_der, x0, P=lambda x: 2 * x, PT=lambda x: 0.5 * x)
     print(s)
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
 
 def test_abopt_lbfgs_scaled_direct_bfgs_diag():
-    lbfgs = LBFGS(linesearch=exact, diag=scaled_direct_bfgs_diag)
+    lbfgs = LBFGS(linesearch=exact, diag=pre_scaled_direct_bfgs_diag)
     def monitor(state):
 #        print(str(state), 'D', state.D)
         pass
-    s = minimize(lbfgs, rosen, rosen_der, numpy.array([0, 0]), monitor=monitor)
+    s = minimize(lbfgs, rosen, rosen_der, x0, monitor=monitor)
     print(s)
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
@@ -106,17 +110,17 @@ def test_abopt_lbfgs_direct_bfgs_diag():
     def monitor(state):
 #        print(str(state), 'D', state.D)
         pass
-    s = minimize(lbfgs, rosen, rosen_der, numpy.array([0, 0]), monitor=monitor)
+    s = minimize(lbfgs, rosen, rosen_der, x0, monitor=monitor)
     print(s)
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
 
 def test_abopt_lbfgs_scaled_inverse_dfp_diag():
-    lbfgs = LBFGS(linesearch=exact, diag=scaled_inverse_dfp_diag)
+    lbfgs = LBFGS(linesearch=exact, diag=pre_scaled_inverse_dfp_diag)
     def monitor(state):
 #        print(str(state), 'D', state.D)
         pass
-    s = minimize(lbfgs, rosen, rosen_der, numpy.array([0, 0]), monitor=monitor)
+    s = minimize(lbfgs, rosen, rosen_der, x0, monitor=monitor)
     print(s)
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
@@ -126,14 +130,16 @@ def test_abopt_lbfgs_inverse_dfp_diag():
     def monitor(state):
 #        print(str(state), 'D', state.D)
         pass
-    s = minimize(lbfgs, rosen, rosen_der, numpy.array([0, 0]), monitor=monitor)
+    s = minimize(lbfgs, rosen, rosen_der, x0, monitor=monitor)
     print(s)
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
 
 def test_abopt_lbfgs_complex():
-    for diag in [direct_bfgs_diag, scaled_direct_bfgs_diag,
-            inverse_dfp_diag, scaled_inverse_dfp_diag, inverse_bfgs_diag, scalar_diag]:
+    for diag in [
+            direct_bfgs_diag, pre_scaled_direct_bfgs_diag, post_scaled_direct_bfgs_diag,
+            inverse_dfp_diag, pre_scaled_inverse_dfp_diag, post_scaled_inverse_dfp_diag,
+            inverse_bfgs_diag, scalar_diag]:
 
         lbfgs_r = LBFGS(linesearch=exact, diag=diag)
 

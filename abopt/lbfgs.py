@@ -9,9 +9,6 @@
 
     https://link.springer.com/article/10.1007/BF01589113
 
-    Another reference is Limited-Memory BFGS Diagonal Preconditioners by
-    F. VEERSE D. AUROUX and M. FISHER, Optimization and Engineering, 1, 323-339, 2000
-
     M1QN3.B2 is recommended over the wikipedia L-BFGS; so we use it by default.
 
     Interesting quote from Gilbert and Lemarechal:
@@ -23,6 +20,10 @@
         performance. In other words, least-change updates may be too shy in the present
         context and should perhaps be replaced by high rank stable updates.
 
+    Another reference is Limited-Memory BFGS Diagonal Preconditioners by
+    F. VEERSE D. AUROUX and M. FISHER, Optimization and Engineering, 1, 323-339, 2000
+
+    We use their recommended post update scaled direct BFGS diagonals as default.
 """
 
 from .abopt2 import Optimizer
@@ -71,7 +72,7 @@ def inverse_bfgs_diag(vs, state):
 
     return D1
 
-def direct_bfgs_diag(vs, state, scaled=False):
+def direct_bfgs_diag(vs, state, pre_scaled=False, post_scaled=False):
     """ 
         M1QN3.B, M1QN3.B2, Gilbert and Lemarechal 1989. 
         Equation 4.7, 4.9
@@ -90,22 +91,32 @@ def direct_bfgs_diag(vs, state, scaled=False):
     mul = vs.mul
     pow = vs.pow
 
-    Dyy = dot(mul(y, D0), y)
+    D0yy = dot(mul(y, D0), y)
 
-    if scaled: D0 = mul(D0, ys / Dyy)
+    if pre_scaled: D0 = mul(D0, ys / D0yy)
 
     invD0 = pow(D0, -1)
 
     t = addmul(invD0, pow(y, 2), 1 / ys)
     t = addmul(t, pow(mul(s, invD0), 2), -1 / dot(mul(invD0, s), s))
 
-    return pow(t, -1)
+    D1 = pow(t, -1)
 
-def scaled_direct_bfgs_diag(vs, state):
+    if post_scaled:
+        D1yy = dot(mul(y, D1), y)
+        D1 = mul(D1, ys / D1yy)
+
+    return D1
+
+def pre_scaled_direct_bfgs_diag(vs, state):
     """ M1QN3.B2 """
-    return direct_bfgs_diag(vs, state, scaled=True)
+    return direct_bfgs_diag(vs, state, pre_scaled=True)
 
-def inverse_dfp_diag(vs, state, scaled=False):
+def post_scaled_direct_bfgs_diag(vs, state):
+    """ M1QN3.B2 """
+    return direct_bfgs_diag(vs, state, post_scaled=True)
+
+def inverse_dfp_diag(vs, state, pre_scaled=False, post_scaled=False):
     """ 
         M1QN3.C and M1QN3.C2, Gilbert and Lemarechal 1989. 
         Equation 4.8, 4.10
@@ -126,23 +137,35 @@ def inverse_dfp_diag(vs, state, scaled=False):
     pow = vs.pow
 
     yD0 = mul(y, D0)
-    Dyy = dot(yD0, y)
+    D0yy = dot(yD0, y)
 
-    if scaled: D0 = mul(D0, ys / Dyy)
+    if pre_scaled: D0 = mul(D0, ys / D0yy)
 
     t = addmul(D0, pow(s, 2), 1 / ys)
-    t = addmul(t,  pow(yD0, 2), 1/ Dyy)
+    t = addmul(t,  pow(yD0, 2), 1/ D0yy)
 
-    return t
+    D1 = t
 
-def scaled_inverse_dfp_diag(vs, state):
+    if post_scaled:
+        yD1 = mul(y, D1)
+        D1yy = dot(yD1, y)
+        D1 = mul(D1, ys / D1yy)
+
+    return D1
+
+def pre_scaled_inverse_dfp_diag(vs, state):
     """ M1QN3.C2, bad """
 
-    return inverse_dfp_diag(vs, state, scaled=True)
+    return inverse_dfp_diag(vs, state, pre_scaled=True)
+
+def post_scaled_inverse_dfp_diag(vs, state):
+    """ M1QN3.C2, bad """
+
+    return inverse_dfp_diag(vs, state, post_scaled=True)
 
 class LBFGS(Optimizer):
     problem_defaults = {'m' : 6}
-    def __init__(self, vs=Optimizer.real_vector_space, linesearch=Optimizer.backtrace, diag=scaled_direct_bfgs_diag):
+    def __init__(self, vs=Optimizer.real_vector_space, linesearch=Optimizer.backtrace, diag=post_scaled_direct_bfgs_diag):
         Optimizer.__init__(self, vs, linesearch=linesearch)
         self.diag = diag
 
