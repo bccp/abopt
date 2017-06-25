@@ -1,6 +1,7 @@
 """
     This module implements the schemes of L-BFGS initial matrix tested in
 
+    (GL)
     Some numerical experiments with variable-storage quasi-Newton algorithms,
     1989,
     Gilbert, J.C. & Lemarechal, C. Mathematical Programming (1989) 45: 407.
@@ -8,8 +9,6 @@
     doi:10.1007/BF01589113
 
     https://link.springer.com/article/10.1007/BF01589113
-
-    M1QN3.B2 is recommended over the wikipedia L-BFGS; so we use it by default.
 
     Interesting quote from Gilbert and Lemarechal:
 
@@ -20,16 +19,49 @@
         performance. In other words, least-change updates may be too shy in the present
         context and should perhaps be replaced by high rank stable updates.
 
-    Another reference is Limited-Memory BFGS Diagonal Preconditioners by
+
+    GL recommends using M1QN3.B2, which scales the diagonal D before the update.
+    The scaling requires D to satisty the quasi-Cauchy condition, improving convergence.
+
+        M1QN3_B2 = LBFGS(diag_update=pre_scaled_direct_bfgs, rescale_diag=False)
+
+    In another reference, (VAF)  Limited-Memory BFGS Diagonal Preconditioners by
     F. VEERSE D. AUROUX and M. FISHER, Optimization and Engineering, 1, 323-339, 2000
 
-    We use their recommended post update scaled direct BFGS diagonals as default.
+    The authors showed scaling after D-update improves the convergence even more.
+
+    We use post_scaled_direct_bfgs D-update as *default*:
+
+        VAFFast = LBFGS(diag_update=post_scaled_direct_bfgs, rescale_diag=False)
+
+    VAF recommended a "new approach", where they do not scale D during D-update, but only
+    scale D before L-BFGS update. The "new approach" was supposed to improve hessian
+    approximation without suffering convergence rate.
+
+        VAFGoodHessian = LBFGS(diag_update=direct_bfgs, rescale_diag=True)
+
+    I only find slower convergence in our linear + smoothing and LPT-nonlinear cases.
+    Never cheched the hessian.
+
+    One may tempt to use,
+
+        M1QN3_B2_RESCALED = LBFGS(diag_update=pre_scaled_direct_bfgs, rescale_diag=True)
+
+    but it is as slow as VAFGoodHessian, and due the prescaling it doesn't give good hessian.
+
+    We shall do these tests more rigourously and write some notes.
+
+    Yu Feng
 """
 
 from .abopt2 import Optimizer
 
-def scalar_diag(vs, state):
-    """ M1QN2.A in Gilbert and Lemarechal 1989.  EQ 4.1; wikipedia version of L-BFGS """
+def scalar(vs, state):
+    """ M1QN2.A in GL.  EQ 4.1;
+        This is L-BFGS when people refers to it.
+        wikipedia version of L-BFGS
+
+    """
 
     if len(state.S) == 0: return vs.ones_like(state.x)
 
@@ -42,10 +74,9 @@ def scalar_diag(vs, state):
     D1 = vs.mul(vs.ones_like(state.x), ys / yy)
     return D1
 
-def inverse_bfgs_diag(vs, state):
+def inverse_bfgs(vs, state):
     """ 
-        M1QN3.A, Gilbert and Lemarechal 1989.
-        Equation 4.6.
+        M1QN3.A in GL Equation 4.6.
         This is bad.  D grows rapidly over iterations.
 
     """
@@ -72,10 +103,10 @@ def inverse_bfgs_diag(vs, state):
 
     return D1
 
-def direct_bfgs_diag(vs, state, pre_scaled=False, post_scaled=False):
+def direct_bfgs(vs, state, pre_scaled=False, post_scaled=False):
     """ 
-        M1QN3.B, M1QN3.B2, Gilbert and Lemarechal 1989. 
-        Equation 4.7, 4.9
+        M1QN3.B, M1QN3.B2, GL Equation 4.7, 4.9
+        and VAF post update scaling.
     """
     if len(state.S) == 0: return vs.ones_like(state.x)
 
@@ -108,18 +139,21 @@ def direct_bfgs_diag(vs, state, pre_scaled=False, post_scaled=False):
 
     return D1
 
-def pre_scaled_direct_bfgs_diag(vs, state):
+def pre_scaled_direct_bfgs(vs, state):
     """ M1QN3.B2 """
-    return direct_bfgs_diag(vs, state, pre_scaled=True)
+    return direct_bfgs(vs, state, pre_scaled=True)
 
-def post_scaled_direct_bfgs_diag(vs, state):
-    """ M1QN3.B2 """
-    return direct_bfgs_diag(vs, state, post_scaled=True)
+def post_scaled_direct_bfgs(vs, state):
+    """ Modified from M1QN3.B2; Recommended by 
+        VEERSE, AUROUX & FISHER, for fewer iterations.
+    """
+    return direct_bfgs(vs, state, post_scaled=True)
 
-def inverse_dfp_diag(vs, state, pre_scaled=False, post_scaled=False):
+def inverse_dfp(vs, state, pre_scaled=False, post_scaled=False):
     """ 
-        M1QN3.C and M1QN3.C2, Gilbert and Lemarechal 1989. 
-        Equation 4.8, 4.10
+        M1QN3.C and M1QN3.C2 in GL Equation 4.8, 4.10;
+        and VAF post update scaling.
+        This is not applicable since we do not implement DFP.
     """
     D1 = vs.mul(state.x, 0.0)
 
@@ -153,21 +187,23 @@ def inverse_dfp_diag(vs, state, pre_scaled=False, post_scaled=False):
 
     return D1
 
-def pre_scaled_inverse_dfp_diag(vs, state):
-    """ M1QN3.C2, bad """
+def pre_scaled_inverse_dfp(vs, state):
+    """ M1QN3.C2, we didn't implement DFP."""
 
-    return inverse_dfp_diag(vs, state, pre_scaled=True)
+    return inverse_dfp(vs, state, pre_scaled=True)
 
-def post_scaled_inverse_dfp_diag(vs, state):
-    """ M1QN3.C2, bad """
+def post_scaled_inverse_dfp(vs, state):
+    """ post-update version of M1QN3.C2.  we didn't implement DFP."""
 
-    return inverse_dfp_diag(vs, state, post_scaled=True)
+    return inverse_dfp(vs, state, post_scaled=True)
 
 class LBFGS(Optimizer):
     problem_defaults = {'m' : 6}
-    def __init__(self, vs=Optimizer.real_vector_space, linesearch=Optimizer.backtrace, diag=post_scaled_direct_bfgs_diag):
+    def __init__(self, vs=Optimizer.real_vector_space,
+            linesearch=Optimizer.backtrace, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
         Optimizer.__init__(self, vs, linesearch=linesearch)
-        self.diag = diag
+        self.diag_update = diag_update
+        self.rescale_diag = rescale_diag
 
     def move(self, problem, state, x1, y1, g1, r1):
         addmul = self.vs.addmul
@@ -193,12 +229,13 @@ class LBFGS(Optimizer):
 
         Optimizer.move(self, problem, state, x1, y1, g1, r1)
 
-        state.D = self.diag(self.vs, state)
+        state.D = self.diag_update(self.vs, state)
 
     def single_iteration(self, problem, state):
         """ Line by line translation of the LBFGS on wikipedia """
         addmul = self.vs.addmul
         dot = self.vs.dot
+        mul = self.vs.mul
 
         if state.gnorm == 0:
             raise RuntimeError("gnorm is zero. This shall not happen because terminated() checks for this")
@@ -219,7 +256,13 @@ class LBFGS(Optimizer):
                 alpha[i] = dot(state.S[i], q) / state.YS[i]
                 q = addmul(q, state.Y[i], -alpha[i])
 
-            z = addmul(0, q, state.D)
+            D = state.D
+
+            if self.rescale_diag:
+                Dyy = dot(mul(state.Y[-1], D), state.Y[-1])
+                D = mul(D, state.YS[-1]/ Dyy)
+
+            z = addmul(0, q, D)
             for i in range(len(state.Y)):
                 beta[i] = 1.0 / state.YS[i] * dot(state.Y[i], z)
                 z = addmul(z, state.S[i], (alpha[i] - beta[i]))

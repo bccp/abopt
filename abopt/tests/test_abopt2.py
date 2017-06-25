@@ -4,9 +4,9 @@ from abopt.abopt2 import GradientDescent, LBFGS, \
         minimize, minimize_p
 
 from abopt.linesearch import minpack, backtrace, exact
-from abopt.lbfgs import inverse_bfgs_diag, direct_bfgs_diag, scalar_diag, inverse_dfp_diag
-from abopt.lbfgs import pre_scaled_direct_bfgs_diag, pre_scaled_inverse_dfp_diag
-from abopt.lbfgs import post_scaled_direct_bfgs_diag, post_scaled_inverse_dfp_diag
+from abopt.lbfgs import inverse_bfgs, direct_bfgs, scalar, inverse_dfp
+from abopt.lbfgs import pre_scaled_direct_bfgs, pre_scaled_inverse_dfp
+from abopt.lbfgs import post_scaled_direct_bfgs, post_scaled_inverse_dfp
 from abopt.vectorspace import real_vector_space, complex_vector_space
 
 from numpy.testing import assert_raises, assert_allclose
@@ -95,8 +95,8 @@ def test_abopt_lbfgs_quad_P():
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
 
-def test_abopt_lbfgs_scaled_direct_bfgs_diag():
-    lbfgs = LBFGS(linesearch=exact, diag=pre_scaled_direct_bfgs_diag)
+def test_abopt_lbfgs_scaled_direct_bfgs():
+    lbfgs = LBFGS(linesearch=exact, diag_update=pre_scaled_direct_bfgs)
     def monitor(state):
 #        print(str(state), 'D', state.D)
         pass
@@ -105,8 +105,8 @@ def test_abopt_lbfgs_scaled_direct_bfgs_diag():
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
 
-def test_abopt_lbfgs_direct_bfgs_diag():
-    lbfgs = LBFGS(linesearch=exact, diag=direct_bfgs_diag)
+def test_abopt_lbfgs_direct_bfgs():
+    lbfgs = LBFGS(linesearch=exact, diag_update=direct_bfgs)
     def monitor(state):
 #        print(str(state), 'D', state.D)
         pass
@@ -115,8 +115,8 @@ def test_abopt_lbfgs_direct_bfgs_diag():
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
 
-def test_abopt_lbfgs_scaled_inverse_dfp_diag():
-    lbfgs = LBFGS(linesearch=exact, diag=pre_scaled_inverse_dfp_diag)
+def test_abopt_lbfgs_scaled_inverse_dfp():
+    lbfgs = LBFGS(linesearch=exact, diag_update=pre_scaled_inverse_dfp)
     def monitor(state):
 #        print(str(state), 'D', state.D)
         pass
@@ -125,8 +125,8 @@ def test_abopt_lbfgs_scaled_inverse_dfp_diag():
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)
 
-def test_abopt_lbfgs_inverse_dfp_diag():
-    lbfgs = LBFGS(linesearch=exact, diag=inverse_dfp_diag)
+def test_abopt_lbfgs_inverse_dfp():
+    lbfgs = LBFGS(linesearch=exact, diag_update=inverse_dfp)
     def monitor(state):
 #        print(str(state), 'D', state.D)
         pass
@@ -137,13 +137,13 @@ def test_abopt_lbfgs_inverse_dfp_diag():
 
 def test_abopt_lbfgs_complex():
     for diag in [
-            direct_bfgs_diag, pre_scaled_direct_bfgs_diag, post_scaled_direct_bfgs_diag,
-            inverse_dfp_diag, pre_scaled_inverse_dfp_diag, post_scaled_inverse_dfp_diag,
-            inverse_bfgs_diag, scalar_diag]:
+            direct_bfgs, pre_scaled_direct_bfgs, post_scaled_direct_bfgs,
+            inverse_dfp, pre_scaled_inverse_dfp, post_scaled_inverse_dfp,
+            inverse_bfgs, scalar]:
 
-        lbfgs_r = LBFGS(linesearch=exact, diag=diag)
+        lbfgs_r = LBFGS(linesearch=exact, diag_update=diag)
 
-        lbfgs_c = LBFGS(complex_vector_space, linesearch=exact, diag=diag)
+        lbfgs_c = LBFGS(complex_vector_space, linesearch=exact, diag_update=diag)
 
         X = []
         Y = []
