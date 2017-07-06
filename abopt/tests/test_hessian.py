@@ -56,8 +56,8 @@ def test_scalar():
     b = code.compute('b', {'a' : 2.0})
     b, tape = code.compute('b', {'a' : 2.0}, return_tape=True)
 
-    backward_gradient = tape.gradient()
-    forward_gradient = code.gradient()
+    backward_gradient = tape.vector_jacobian_product()
+    forward_gradient = code.jacobian_vector_product()
 
     b_ = forward_gradient.compute('b_', {'a' : 2.0, 'a_' : 1.0})
     _a = backward_gradient.compute('_a', {'_b' : 1.0})
@@ -71,7 +71,7 @@ def test_scalar():
     print(forward_gradient)
     (b_, b), tape = forward_gradient.compute(['b_', 'b'], {'a' : 2.0, 'a_' : 1.0}, return_tape=True)
     print('b_', 'b', b_, b)
-    hessian_dot = tape.gradient()
+    hessian_dot = tape.vector_jacobian_product()
     print(hessian_dot)
 
     _a = hessian_dot.compute('_a', {'_b_' : 1.0, '_b' : 0.0}, monitor=lambda node, frontier, r:print('---', node, frontier, r))
@@ -160,8 +160,8 @@ def test_vector():
             'x2' : numpy.array([1.0, 1.0])}
     b, tape = code.compute('y', init, return_tape=True)
 
-    backward_gradient = tape.gradient()
-    forward_gradient = code.gradient()
+    backward_gradient = tape.vector_jacobian_product()
+    forward_gradient = code.jacobian_vector_product()
 
     _x1, _x2 = backward_gradient.compute(['_x1', '_x2'], {'_y' : 1.0})
 
@@ -176,6 +176,6 @@ def test_vector():
     d = {'x1_' : x1_, 'x2_' : x2_}
     d.update(init)
     (y, y_), tape = forward_gradient.compute(['y', 'y_'], d, return_tape=True)
-    hessian_dot = tape.gradient()
+    hessian_dot = tape.vector_jacobian_product()
     _x1, _x2 = hessian_dot.compute({'_x1', '_x2'}, {'_y_' : 1.0, '_y' : 0.0})
 

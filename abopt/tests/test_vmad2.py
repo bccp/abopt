@@ -121,7 +121,7 @@ def test_partial_gradient():
     d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
     assert_array_equal(d, 12.0)
 
-    gradient = tape.gradient()
+    gradient = tape.vector_jacobian_product()
     _a  = gradient.compute(['_a'], {'_d': 1.0})
     assert_array_equal(_a, 12.0)
 
@@ -131,7 +131,7 @@ def test_partial_gradient():
     assert_array_equal(_a, 12.0)
 
     (c1, d), tape = code.compute(['c1', 'd'], {'a' : 1.0}, return_tape=True)
-    gradient = tape.gradient()
+    gradient = tape.vector_jacobian_product()
     assert_array_equal(d, 12.0)
     assert_array_equal(c1, 6.0)
     _a  = gradient.compute(['_a'], {'_c1': 1.0})
@@ -168,7 +168,7 @@ def test_to_graph():
     code.batch(u='b2', v='f')
 
     d, tape = code.compute(('e', 'a', 'f', 'd'), {'a' : 1.0}, return_tape=True)
-    gradient = tape.gradient()
+    gradient = tape.vector_jacobian_product()
     graph1 = code.to_graph()
     graph2 = gradient.to_graph()
 #    graph2.render('temp.png', view=True)

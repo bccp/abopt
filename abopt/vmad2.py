@@ -382,15 +382,15 @@ class ProgrammeVJP(Primitive):
             d = self.args.find('#frontier').value
             codeseg = node.codeseg
             tape = node.invoke_for_tape(codeseg, d)
-            gradient = tape.gradient()
+            vjpcode = tape.vector_jacobian_product()
             # if a variable is not mentioned in the code
             # then the gradient object doesn't set the default to ZERO
             # we fix it here.
             for arg in self.args:
                 if isinstance(arg, OArgument):
-                    gradient.defaults[arg.name] = ZERO
-            self._codeseg = gradient
-            return gradient
+                    vjpcode.defaults[arg.name] = ZERO
+            self._codeseg = vjpcode
+            return vjpcode
         def copy(self):
             node = CodeSegNode.copy(self)
             if hasattr(self, '_codeseg'):
@@ -421,9 +421,14 @@ class Tape(object):
     def __repr__(self):
         return '\n'.join('%s | %s' % (node, list(d.keys())) for node, d in self.records)
 
-    def gradient(self):
-        """ Create a code segment that computes the gradient from tape for the current
-            code segment """
+    def vector_jacobian_product(self):
+        """ Create a code segment that computes the vector jacobian product for a tape
+
+            A vector jacobian product is J_ij v_j where j is the output variable index.
+
+            The input variable of the returned CodeSegment is '_a', '_b', ... where a, b,
+            ... are the output variables.
+        """
 
         code = CodeSegment(self.engine)
 
@@ -644,7 +649,14 @@ class CodeSegment(object):
             r = r, tape
         return r
 
-    def gradient(self):
+    def jacobian_vector_product(self):
+        """ creates a CodeSegment that computes the jacobian vector product.
+
+            A jacobian vector product is J_ij v_i where i is index of the input variables.
+
+            The returned CodeSegment input is 'a_', 'b_', ... where 'a', 'b', ...
+            are the input variables of the original code segment.
+        """
         code = CodeSegment(self.engine)
 
         for node in self.nodes:
@@ -679,9 +691,10 @@ class CodeSegment(object):
         cout, tape = self.compute(cnout + cnout_g, init, return_tape=True)
         cout = cout[:len(cnout)]
 
-        gradient = tape.gradient()
+        vjpcode = tape.vector_jacobian_product()
 
-        gout = gradient.compute(gnout, ginit)
+        gout = vjpcode.compute(gnout, ginit)
+
         d = {}
         d.update(zip(cnout, cout))
         d.update(zip(gnout, gout))
