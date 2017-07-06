@@ -253,11 +253,10 @@ class Node(object):
         return out
 
 class CodeSegNode(Node):
-    @property
-    def codeseg(self):
+    def get_codeseg(self):
         raise NotImplementedError
 
-    def invoke_for_tape(self, codeseg, frontier):
+    def invoke_for_tape(self, frontier):
         bound = self.bind(frontier, {})
         return self.call(bound, return_tape=True)
 
@@ -289,8 +288,10 @@ class CodeSegNode(Node):
         aout = [ arg.name for arg in self.args
                 if isinstance(arg, (OArgument, IOArgument))]
 
+        codeseg = self.get_codeseg()
+
         # compute doesn't taint init.
-        out = self.codeseg.compute(aout, init, return_tape=return_tape)
+        out = codeseg.compute(aout, init, return_tape=return_tape)
         #logger.info("CodeSegment results %s %s" % (aout, _short_repr(out)))
         if return_tape:
             out, tape = out
@@ -355,8 +356,7 @@ class Programme(Primitive):
         self.vjp = ProgrammeVJP(self)
 
     class NodeType(CodeSegNode):
-        @property
-        def codeseg(self):
+        def get_codeseg(self):
             return self.primitive.body(self.engine,
                 *[arg.value if isinstance(arg, EXArgument)
                 else arg.name for arg in self.args])
@@ -373,29 +373,22 @@ class ProgrammeVJP(Primitive):
         Primitive.__init__(self, body, gin, gout, argnames=argnames)
 
     class NodeType(CodeSegNode):
-        @property
-        def codeseg(self):
-            if hasattr(self, '_codeseg'):
-                return self._codeseg
+        def get_codeseg(self):
             # replay then obtain the gradient codeseg
             node = self.args.find('#programme_node').value
             d = self.args.find('#frontier').value
-            codeseg = node.codeseg
-            tape = node.invoke_for_tape(codeseg, d)
-            vjpcode = tape.vector_jacobian_product()
-            # if a variable is not mentioned in the code
-            # then the gradient object doesn't set the default to ZERO
+
+            tape = node.invoke_for_tape(d)
+
+            vjpcode = tape.get_vjp()
+            # if an output variable is not mentioned in the code
+            # then the vjp code segment doesn't set the default to ZERO
             # we fix it here.
             for arg in self.args:
                 if isinstance(arg, OArgument):
                     vjpcode.defaults[arg.name] = ZERO
-            self._codeseg = vjpcode
+
             return vjpcode
-        def copy(self):
-            node = CodeSegNode.copy(self)
-            if hasattr(self, '_codeseg'):
-                node._codeseg = self._codeseg
-            return node
 
         @CodeSegNode.zero_bypass
         def call(self, bound, return_tape=False):
@@ -421,7 +414,7 @@ class Tape(object):
     def __repr__(self):
         return '\n'.join('%s | %s' % (node, list(d.keys())) for node, d in self.records)
 
-    def vector_jacobian_product(self):
+    def get_vjp(self):
         """ Create a code segment that computes the vector jacobian product for a tape
 
             A vector jacobian product is J_ij v_j where j is the output variable index.
@@ -434,7 +427,7 @@ class Tape(object):
 
         add = self.engine.add
 
-        ocd = {} # number of times seen
+        first_time = {} 
         for node, d in self.records[::-1]:
             vjp = node.primitive.vjp
             kwargs = {}
@@ -452,11 +445,10 @@ class Tape(object):
                     if isinstance(arg.value, Literal):
                         kwargs['_' + arg.name] = '###abandon###'
                     else:
-                        occ = ocd.get(arg.value, 0)
-                        ocd[arg.value] = occ + 1
-                        if occ == 0:
+                        if first_time.get(arg.value, True):
                             # directly write to the gradient, it is used
                             kwargs['_' + arg.name] = arg.value.vjp_vector_name
+                            first_time[arg.value] = False
                         else:
                             newname = arg.value.vjp_vector_name + '#partial'
                             kwargs['_' + arg.name] = newname
@@ -467,7 +459,7 @@ class Tape(object):
 
             if isinstance(node.primitive, Programme):
                 # the vjp of a Programme requires more arguments
-                # to build the gradient codesegment on the fly
+                # to build the vjp codesegment on the fly
                 kwargs['#programme_node'] = node
                 kwargs['#frontier'] = d
 
@@ -649,7 +641,7 @@ class CodeSegment(object):
             r = r, tape
         return r
 
-    def jacobian_vector_product(self):
+    def get_jvp(self):
         """ creates a CodeSegment that computes the jacobian vector product.
 
             A jacobian vector product is J_ij v_i where i is index of the input variables.
@@ -691,7 +683,7 @@ class CodeSegment(object):
         cout, tape = self.compute(cnout + cnout_g, init, return_tape=True)
         cout = cout[:len(cnout)]
 
-        vjpcode = tape.vector_jacobian_product()
+        vjpcode = tape.get_vjp()
 
         gout = vjpcode.compute(gnout, ginit)
 
