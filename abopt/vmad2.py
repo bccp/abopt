@@ -90,12 +90,10 @@ class Variable(object):
         self.postfix = postfix
 
     @property
-    def vjp_vector_name(self):
-        return '_' + self.name
+    def name_vjp(self): return '_' + self.name
 
     @property
-    def jvp_vector_name(self):
-        return self.name + '_'
+    def name_jvp(self): return self.name + '_'
 
     def __hash__(self): return hash(self.name + '-%s' % self.postfix)
     def __eq__(self, other): return self.name == other.name and self.postfix == other.postfix
@@ -117,6 +115,13 @@ class Argument(object):
         arg.value = self.value
         arg.ovalue = self.ovalue
         return arg
+
+    @property
+    def name_vjp(self): return '_' + self.name
+
+    @property
+    def name_jvp(self): return self.name + '_'
+
 
     def dereference(self, context):
         """ returns the value of an argument by its value
@@ -226,7 +231,10 @@ class Node(object):
         return "%s(%s)" % (self.primitive, self.args)
 
     def call(self, bound, return_tape=False):
-        raise NotImplementedError
+        # a simple node doesn't know how to return a Tape
+        assert not return_tape
+        r = self.primitive.body(self.engine, *bound)
+        return None
 
     def invoke(self, frontier):
         #logger.info("Invoke %s" % (self))
@@ -252,7 +260,10 @@ class Node(object):
 
     def invoke_for_tape(self, frontier):
         bound = self.bind(frontier, {})
-        return self.call(bound, return_tape=True)
+        tape = self.call(bound, return_tape=True)
+        # The call didn't return a Tape. Likley calling the method on a statement's Node?
+        assert isinstance(tape, Tape)
+        return tape
 
 class CodeSegNode(Node):
     def get_codeseg(self):
@@ -317,22 +328,15 @@ class Statement(Primitive):
         return self.jvp
 
     class NodeType(Node):
-        def call(self, bound, return_tape=False):
-            r = self.primitive.body(self.engine, *bound)
+        pass
 
 class StatementVJP(Statement):
     class NodeType(Node):
         ZERO_BYPASS = True
-        def call(self, bound, return_tape=False):
-            self.primitive.body(self.engine, *bound)
-            return None
 
 class StatementJVP(Statement):
     class NodeType(Node):
         ZERO_BYPASS = True
-        def call(self, bound, return_tape=False):
-            self.primitive.body(self.engine, *bound)
-            return None
 
 class Programme(Primitive):
     def __init__(self, body, ain, aout):
@@ -350,7 +354,7 @@ class ProgrammeVJP(Primitive):
         gout = ['_' + a for a in programme.ain]
         gin  = ['_' + a for a in programme.aout]
         ex = [a for a in programme.argnames if a not in programme.aout + programme.ain]
-        extra = ['#programme_node', '#frontier']
+        extra = ['#replay-record']
         body = lambda : None
         body.__name__ = "G:" + programme.body.__name__
         argnames = list(set(gin + gout + programme.ain + ex + extra))
@@ -361,8 +365,7 @@ class ProgrammeVJP(Primitive):
 
         def get_codeseg(self):
             # replay then obtain the gradient codeseg
-            node = self.args.find('#programme_node').value
-            d = self.args.find('#frontier').value
+            node, d = self.args.find('#replay-record').value
 
             tape = node.invoke_for_tape(d)
 
@@ -416,25 +419,25 @@ class Tape(object):
             partials = []
             for arg in node.args:
                 if isinstance(arg, OArgument) \
-                and '_' + arg.name in vjp.argnames:
-                    kwargs['_' + arg.name] = arg.value.vjp_vector_name
+                and arg.name_vjp in vjp.argnames:
+                    kwargs[arg.name_vjp] = arg.value.name_vjp
                 if isinstance(arg, (IArgument, IOArgument)) \
                 and arg.name in vjp.argnames:
                     kwargs[arg.name] = Literal(arg.dereference(d))
 
                 if isinstance(arg, (IArgument, IOArgument)) and \
-                '_' + arg.name in vjp.argnames:
+                   arg.name_vjp in vjp.argnames:
                     if isinstance(arg.value, Literal):
-                        kwargs['_' + arg.name] = '###abandon###'
+                        kwargs[arg.name_vjp] = '###abandon###'
                     else:
                         if first_time.get(arg.value, True):
                             # directly write to the gradient, it is used
-                            kwargs['_' + arg.name] = arg.value.vjp_vector_name
+                            kwargs[arg.name_vjp] = arg.value.name_vjp
                             first_time[arg.value] = False
                         else:
-                            newname = arg.value.vjp_vector_name + '#partial'
-                            kwargs['_' + arg.name] = newname
-                            partials.append((newname, arg.value.vjp_vector_name))
+                            newname = arg.value.name_vjp + '#partial'
+                            kwargs[arg.name_vjp] = newname
+                            partials.append((newname, arg.value.name_vjp))
 
                 if isinstance(arg, EXArgument) and arg.name in vjp.argnames:
                     kwargs[arg.name] = arg.value
@@ -442,8 +445,7 @@ class Tape(object):
             if isinstance(node.primitive, Programme):
                 # the vjp of a Programme requires more arguments
                 # to build the vjp codesegment on the fly
-                kwargs['#programme_node'] = node
-                kwargs['#frontier'] = d
+                kwargs['#replay-record'] = (node, d)
 
             code.append(vjp, kwargs)
             for p, r in partials:
@@ -637,8 +639,8 @@ class CodeSegment(object):
             jvp = node.primitive.jvp
             kwargs = {}
             for arg in node.args:
-                if isinstance(arg.value, Variable) and arg.name + '_' in jvp.argnames:
-                    kwargs[arg.name + '_'] = arg.value.jvp_vector_name
+                if isinstance(arg.value, Variable) and arg.name_jvp in jvp.argnames:
+                    kwargs[arg.name_jvp] = arg.value.name_jvp
                 if isinstance(arg, (IArgument, IOArgument)) and arg.name in jvp.argnames:
                     kwargs[arg.name] = arg.dereference(None)
                 if isinstance(arg, EXArgument) and arg.name in jvp.argnames:
