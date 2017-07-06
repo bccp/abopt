@@ -78,7 +78,7 @@ def exact(vs, problem, state, z, rate, c=0.5):
         x1, y1, tau = best
         return x1, y1, None, tau * rate
 
-from scipy.optimize.linesearch import scalar_search_wolfe2
+from .scipywolfe2 import scalar_search_wolfe2
 
 def minpack(vs, problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
     """"
@@ -120,7 +120,7 @@ def minpack(vs, problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
         y0_prev = None
 
     alpha_star, phi_star, old_fval, derphi_star = scalar_search_wolfe2(
-            phi, derphi, y0, y0_prev, derphi0, c1, c2, rate)
+            phi, derphi, y0, y0_prev, derphi0, c1, c2, amax * rate)
 
     if derphi_star is None:
         #raise ValueError('The line search algorithm did not converge')
