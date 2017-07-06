@@ -199,6 +199,8 @@ class Arguments(list):
             raise ValueError("additional kwargs are found: %s" % list(kwargs.keys()))
 
 class Node(object):
+    ZERO_BYPASS = False
+
     def __init__(self, engine, primitive):
         self.primitive = primitive
         self.engine = engine
@@ -220,61 +222,41 @@ class Node(object):
                 bound.append(arg.value)
         return bound
 
-    @staticmethod
-    def zero_bypass(function):
-        def call(self, bound, *args, **kwargs):
-            zeros = [value is ZERO
-                    for arg, value in zip(self.args, bound)
-                    if isinstance(arg, (IArgument, IOArgument))]
-            if all(zeros):
-                for arg, value in zip(self.args, bound):
-                    if isinstance(arg, OArgument):
-                        value[...] = ZERO
-            else:
-                return function(self, bound, *args, **kwargs)
-            #logger.info("Body skipped because all input gradients are zero: %s " % (self))
-        functools.update_wrapper(call, function)
-        return call
-
     def __repr__(self):
         return "%s(%s)" % (self.primitive, self.args)
 
-    def call(self, bound):
+    def call(self, bound, return_tape=False):
         raise NotImplementedError
 
     def invoke(self, frontier):
         #logger.info("Invoke %s" % (self))
         out = {}
         bound = self.bind(frontier, out)
-        self.call(bound)
+
+        if self.ZERO_BYPASS and (
+            all([value is ZERO for arg, value in zip(self.args, bound) 
+                if isinstance(arg, (IArgument, IOArgument))])):
+
+            for arg, value in zip(self.args, bound):
+                if isinstance(arg, OArgument):
+                    # IOArguments are already ZEROs
+                    value[...] = ZERO
+        else:
+            self.call(bound)
+
         for arg, value in zip(self.args, bound):
             if isinstance(arg, IOArgument):
                 out[arg.value.name] = value
-        return out
 
-class CodeSegNode(Node):
-    def get_codeseg(self):
-        raise NotImplementedError
+        return out
 
     def invoke_for_tape(self, frontier):
         bound = self.bind(frontier, {})
         return self.call(bound, return_tape=True)
 
-    @staticmethod
-    def zero_bypass(function):
-        def call(self, bound, return_tape=False):
-            zeros = [value is ZERO
-                    for arg, value in zip(self.args, bound)
-                    if isinstance(arg, (IArgument, IOArgument))]
-            if not return_tape and all(zeros):
-                for arg, value in zip(self.args, bound):
-                    if isinstance(arg, OArgument):
-                        value[...] = ZERO
-            else:
-                return function(self, bound, return_tape)
-            #logger.info("Body skipped because all input gradients are zero: %s " % (self))
-        functools.update_wrapper(call, function)
-        return call
+class CodeSegNode(Node):
+    def get_codeseg(self):
+        raise NotImplementedError
 
     def call(self, bound, return_tape=False):
         init = {}
@@ -335,20 +317,22 @@ class Statement(Primitive):
         return self.jvp
 
     class NodeType(Node):
-        def call(self, bound):
-            self.primitive.body(self.engine, *bound)
+        def call(self, bound, return_tape=False):
+            r = self.primitive.body(self.engine, *bound)
 
 class StatementVJP(Statement):
     class NodeType(Node):
-        @Node.zero_bypass
-        def call(self, bound):
+        ZERO_BYPASS = True
+        def call(self, bound, return_tape=False):
             self.primitive.body(self.engine, *bound)
+            return None
 
 class StatementJVP(Statement):
     class NodeType(Node):
-        @Node.zero_bypass
-        def call(self, bound):
+        ZERO_BYPASS = True
+        def call(self, bound, return_tape=False):
             self.primitive.body(self.engine, *bound)
+            return None
 
 class Programme(Primitive):
     def __init__(self, body, ain, aout):
@@ -373,6 +357,8 @@ class ProgrammeVJP(Primitive):
         Primitive.__init__(self, body, gin, gout, argnames=argnames)
 
     class NodeType(CodeSegNode):
+        ZERO_BYPASS = True
+
         def get_codeseg(self):
             # replay then obtain the gradient codeseg
             node = self.args.find('#programme_node').value
@@ -389,10 +375,6 @@ class ProgrammeVJP(Primitive):
                     vjpcode.defaults[arg.name] = ZERO
 
             return vjpcode
-
-        @CodeSegNode.zero_bypass
-        def call(self, bound, return_tape=False):
-            return CodeSegNode.call(self, bound, return_tape)
 
 class Tape(object):
     def __init__(self, engine, init):
