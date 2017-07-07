@@ -422,7 +422,8 @@ class Tape(object):
         return '\n'.join('%s | %s' % (node, list(d.keys())) for node, d in self.records)
 
     def get_vjp(self):
-        """ Create a code segment that computes the vector jacobian product for a tape
+        """ Create a code segment that computes the vector jacobian product for a tape,
+            with backward gradient propagation.
 
             A vector jacobian product is J_ij v_j where j is the output variable index.
 
@@ -484,7 +485,8 @@ class Tape(object):
         return code
 
     def get_jvp(self):
-        """ creates a CodeSegment that computes the jacobian vector product, from a tape.
+        """ creates a CodeSegment that computes the jacobian vector product, from a tape,
+            via forward gradient propagation.
 
             A jacobian vector product is J_ij v_i where i is index of the input variables.
 
@@ -680,14 +682,15 @@ class CodeSegment(object):
         return r
 
     def get_jvp(self, init={}):
-        """ creates a CodeSegment that computes the jacobian vector product.
+        """ creates a CodeSegment that computes the jacobian vector product, with forward
+            gradient propagation.
 
             A jacobian vector product is J_ij v_i where i is index of the input variables.
 
             The returned CodeSegment input is 'a_', 'b_', ... where 'a', 'b', ...
             are the input variables of the original code segment.
 
-            This will compute 
+            This will compute the original code together with the forward gradient pass.
         """
         code = CodeSegment(self.engine)
 
