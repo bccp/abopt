@@ -123,7 +123,7 @@ def test_nested_compute():
     assert_array_equal(c, 9.0)
     assert_array_equal(_a, 9.0)
 
-def test_vjp():
+def test_tape_gradients():
     engine = MyEngine()
     code = CodeSegment(engine)
     code.unitary(x='a', y='b1', factor=3.0)
@@ -141,6 +141,10 @@ def test_vjp():
     _a  = vjp.compute(['_a'], {'_d': 1.0})
     assert_array_equal(_a, 12.0)
 
+    jvp = tape.get_jvp()
+    d_  = jvp.compute(['d_'], {'a_': 1.0})
+    assert_array_equal(d_, 12.0)
+
     d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})
 
     assert_array_equal(d, 12.0)
@@ -152,9 +156,13 @@ def test_vjp():
     assert_array_equal(c1, 6.0)
 
     vjp = tape.get_vjp()
+    jvp = tape.get_jvp()
 
-    _a  = vjp.compute(['_a'], {'_c1': 1.0})
-    assert_array_equal(_a, 6.0)
+    _a = vjp.compute(['_a'], {'_c1': 1.0})
+    c1_, d_ = jvp.compute(['c1_', 'd_'], {'a_': 1.0})
+
+    assert_array_equal(c1_, 6.0)
+    assert_array_equal(d_, 12.0)
 
 def test_jvp():
     engine = MyEngine()

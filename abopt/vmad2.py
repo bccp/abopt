@@ -483,6 +483,38 @@ class Tape(object):
             #logger.info("GRADIENT code.defaults: %s " % code.defaults)
         return code
 
+    def get_jvp(self):
+        """ creates a CodeSegment that computes the jacobian vector product, from a tape.
+
+            A jacobian vector product is J_ij v_i where i is index of the input variables.
+
+            The returned CodeSegment input is 'a_', 'b_', ... where 'a', 'b', ...
+            are the input variables of the original code segment.
+
+            The advantage of starting from a tape is that we do not need to compute
+            the original code together with the forward pass. Useful if we need to do
+            vjp and jvp same time.
+        """
+        code = CodeSegment(self.engine)
+
+        for node, d in self.records:
+            jvp = node.primitive.jvp
+            kwargs = {}
+            for arg in node.args:
+                if isinstance(arg.value, Variable) and arg.name_jvp in jvp.argnames:
+                    kwargs[arg.name_jvp] = arg.value.name_jvp
+                if isinstance(arg, (IArgument, IOArgument)) and arg.name in jvp.argnames:
+                    kwargs[arg.name] = arg.dereference(None)
+                if isinstance(arg, EXArgument) and arg.name in jvp.argnames:
+                    kwargs[arg.name] = arg.value
+
+            if isinstance(jvp, ProgrammeJVP):
+                kwargs['#replay-record'] = node, d
+
+            code.append(jvp, kwargs)
+
+        return code
+
     def to_graph(self, **kwargs):
         nodes = [node for node, kwargs in self.records]
         return nodes_to_graph(nodes, **kwargs)[0]
