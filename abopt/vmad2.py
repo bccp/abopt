@@ -395,10 +395,10 @@ class ProgrammeJVP(Primitive):
         ZERO_BYPASS = True
 
         def get_codeseg(self):
-            node = self.args.find('#replay-record').value
+            node, d = self.args.find('#replay-record').value
 
             replaycode = node.get_codeseg()
-            jvpcode = replaycode.get_jvp()
+            jvpcode = replaycode.get_jvp(init=d)
             return jvpcode
 
 class Tape(object):
@@ -647,13 +647,15 @@ class CodeSegment(object):
             r = r, tape
         return r
 
-    def get_jvp(self):
+    def get_jvp(self, init={}):
         """ creates a CodeSegment that computes the jacobian vector product.
 
             A jacobian vector product is J_ij v_i where i is index of the input variables.
 
             The returned CodeSegment input is 'a_', 'b_', ... where 'a', 'b', ...
             are the input variables of the original code segment.
+
+            This will compute 
         """
         code = CodeSegment(self.engine)
 
@@ -669,11 +671,14 @@ class CodeSegment(object):
                     kwargs[arg.name] = arg.value
 
             if isinstance(jvp, ProgrammeJVP):
-                kwargs['#replay-record'] = node
+                # empty init because all variables are on the frontier.
+                kwargs['#replay-record'] = node, {}
 
             code.append(jvp, kwargs)
             code.append(node.primitive, node.args.get_kwargs())
 
+        # initialize with the defaults
+        code.defaults.update(init)
         return code
 
     def compute_with_gradient(self, vout, init, ginit, return_tape=False):

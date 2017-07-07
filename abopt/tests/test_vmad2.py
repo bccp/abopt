@@ -167,12 +167,12 @@ def test_jvp():
     code.binary(x1='b3', x2='b4', y='c2')
     code.binary(x1='c1', x2='c2', y='d')
 
-    jvp = code.get_jvp()
+    jvp = code.get_jvp(init={'a' : 1.0})
 
-    d_ = jvp.compute('d_', {'a' : 1.0, 'a_' : 1.0})
+    d_ = jvp.compute('d_', {'a_' : 1.0})
     assert_array_equal(d_, 12.0)
 
-    c1_, d_ = jvp.compute(['c1_', 'd_'], {'a_' : 1.0, 'a' : 1.0})
+    c1_, d_ = jvp.compute(['c1_', 'd_'], {'a_' : 1.0})
     assert_array_equal(d_, 12.0)
     assert_array_equal(c1_, 6.0)
 
@@ -183,8 +183,8 @@ def test_jvp_programme():
     code.unitary(x='d', y='d', factor=2.0)
     code.batch_with_exarg(u='a', v='e', factor=3.0)
 
-    jvp = code.get_jvp()
-    d_, e_ = jvp.compute(['d_', 'e_'], {'a' : 1.0, 'a_' : 1.0})
+    jvp = code.get_jvp(init={'a' : 1.0})
+    d_, e_ = jvp.compute(['d_', 'e_'], {'a_' : 1.0})
     assert_array_equal(d_, 4.0)
     assert_array_equal(e_, 6.0)
 
@@ -197,8 +197,8 @@ def test_jvp_vector():
 
     A = numpy.array
 
-    jvp = code.get_jvp()
-    d_, e_ = jvp.compute(['d_', 'e_'], {'a' : A([1.0, 1.0]), 'a_' : A([1.0, 1.0])})
+    jvp = code.get_jvp(init={'a' : A([1.0, 1.0])})
+    d_, e_ = jvp.compute(['d_', 'e_'], {'a_' : A([1.0, 1.0])})
     assert_array_equal(d_, [4.0, 4.0])
     assert_array_equal(e_, [6.0, 6.0])
 
