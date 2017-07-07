@@ -9,31 +9,47 @@ try: import graphviz
 except ImportError: graphviz = None
 
 logger.setLevel(level=logging.INFO)
-class TestSubEngine(Engine):
+class MySubEngine(Engine):
     @statement(ain=['x'], aout=['y'])
     def unitary(engine, x, y, factor):
         y[...] = x * factor
+
     @unitary.defvjp
     def _(engine, _x, _y, factor):
         _x[...] = _y * factor
 
-class TestEngine(Engine):
+    @unitary.defjvp
+    def _(engine, x_, y_, factor):
+        y_[...] = x_ * factor
+
+class MyEngine(Engine):
     def __init__(self):
-        self.subengine = TestSubEngine()
+        self.subengine = MySubEngine()
 
     @statement(ain=['x'], aout=['y'])
     def unitary(engine, x, y, factor):
         y[...] = x * factor
+
     @unitary.defvjp
     def _(engine, _x, _y, factor):
         _x[...] = _y * factor
+
+    @unitary.defjvp
+    def _(engine, x_, y_, factor):
+        y_[...] = x_ * factor
+
     @statement(ain=['x1', 'x2'], aout=['y'])
     def binary(engine, x1, x2, y):
         y[...] = x1 + x2
+
     @binary.defvjp
     def _(engine, _x1, _x2, _y):
         _x1[...] = _y
         _x2[...] = _y
+
+    @binary.defjvp
+    def _(engine, x1_, x2_, y_):
+        y_[...] = x1_ + x2_
 
     @programme(ain=['u'], aout=['v'])
     def batch(engine, u, v):
@@ -62,14 +78,14 @@ class TestEngine(Engine):
         return code
 
 def test_compute():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.unitary(x='a', y='b', factor=3.0)
     b = code.compute('b', {'a' : 1.0})
     assert_array_equal(b, 3.0)
 
 def test_optimize():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.unitary(x='a', y='d', factor=3.0)
     code.unitary(x='a', y='b', factor=3.0)
@@ -81,7 +97,7 @@ def test_optimize():
     assert_array_equal(b, 3.0)
 
 def test_optimized_execution():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.unitary(x='a', y='d', factor=3.0)
     code.unitary(x='a', y='b', factor=3.0)
@@ -94,7 +110,7 @@ def test_optimized_execution():
     print(tape)
 
 def test_nested_compute():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.unitary(x='a', y='b', factor=3.0)
     code.unitary(x='b', y='c', factor=3.0)
@@ -107,8 +123,8 @@ def test_nested_compute():
     assert_array_equal(c, 9.0)
     assert_array_equal(_a, 9.0)
 
-def test_partial_gradient():
-    engine = TestEngine()
+def test_vjp():
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.unitary(x='a', y='b1', factor=3.0)
     code.unitary(x='a', y='b2', factor=3.0)
@@ -137,9 +153,40 @@ def test_partial_gradient():
     _a  = gradient.compute(['_a'], {'_c1': 1.0})
     assert_array_equal(_a, 6.0)
 
+def test_jvp():
+    engine = MyEngine()
+    code = CodeSegment(engine)
+    code.unitary(x='a', y='b1', factor=3.0)
+    code.unitary(x='a', y='b2', factor=3.0)
+    code.unitary(x='a', y='b3', factor=3.0)
+    code.unitary(x='a', y='b4', factor=3.0)
+    code.binary(x1='b1', x2='b2', y='c1')
+    code.binary(x1='b3', x2='b4', y='c2')
+    code.binary(x1='c1', x2='c2', y='d')
+
+    jvp = code.get_jvp()
+
+    d_ = jvp.compute('d_', {'a' : 1.0, 'a_' : 1.0})
+    assert_array_equal(d_, 12.0)
+
+    c1_, d_ = jvp.compute(['c1_', 'd_'], {'a_' : 1.0, 'a' : 1.0})
+    assert_array_equal(d_, 12.0)
+    assert_array_equal(c1_, 6.0)
+
+def test_jvp_programme():
+    engine = MyEngine()
+    code = CodeSegment(engine)
+    code.batch(u='a', v='d')
+    code.batch_with_exarg(u='a', v='e', factor=3.0)
+
+    jvp = code.get_jvp()
+    d_, e_ = jvp.compute(['d_', 'e_'], {'a' : 1.0, 'a_' : 1.0})
+    assert_array_equal(d_, 2.0)
+    assert_array_equal(e_, 6.0)
+
 
 def test_inplace():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.unitary(x='a', y='a', factor=3.0)
     code.unitary(x='a', y='b1', factor=3.0)
@@ -157,7 +204,7 @@ def test_inplace():
 
 @skipif(graphviz == None, "graphviz is not properly installed")
 def test_to_graph():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.batch_with_sub(u='a', v='e')
     code.unitary(x='a', y='a', factor=3.0)
@@ -174,7 +221,7 @@ def test_to_graph():
 #    graph2.render('temp.png', view=True)
 
 def test_zeros():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.unitary(x='a', y='a', factor=3.0)
     code.unitary(x='a', y='b1', factor=3.0)
@@ -183,7 +230,7 @@ def test_zeros():
     assert _a is ZERO
 
 def test_literal():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.binary(x1='a', x2=Literal(2.0), y='a')
     code.batch(u=Literal(2.0), v='d')
@@ -192,7 +239,7 @@ def test_literal():
     assert_array_equal(_a, 1.0)
 
 def test_copy():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.batch_with_sub(u='a', v='e')
     code.unitary(x='a', y='a', factor=3.0)
@@ -205,7 +252,7 @@ def test_copy():
     code2 = code.copy()
 
 def test_programme():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.batch(u='a', v='d')
     code.batch_with_exarg(u='a', v='e', factor=3.0)
@@ -222,7 +269,7 @@ def test_programme():
     assert_array_equal(_a, 6.0)
 
 def test_programme_unused():
-    engine = TestEngine()
+    engine = MyEngine()
     code = CodeSegment(engine)
     code.batch_unused(u='a', v='d')
     d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})

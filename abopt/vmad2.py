@@ -204,7 +204,8 @@ class Arguments(list):
             raise ValueError("additional kwargs are found: %s" % list(kwargs.keys()))
 
 class Node(object):
-    ZERO_BYPASS = False
+    # if true, invoke will directly return ZERO when all inputs are ZERO
+    ZERO_BYPASS = False 
 
     def __init__(self, engine, primitive):
         self.primitive = primitive
@@ -297,6 +298,8 @@ class CodeSegNode(Node):
         return tape
 
 class Statement(Primitive):
+    NodeType = Node
+
     def __init__(self, body, ain, aout):
         Primitive.__init__(self, body, ain, aout)
 
@@ -327,9 +330,6 @@ class Statement(Primitive):
         # allow the gradient with the same name as the original body.
         return self.jvp
 
-    class NodeType(Node):
-        pass
-
 class StatementVJP(Statement):
     class NodeType(Node):
         ZERO_BYPASS = True
@@ -342,6 +342,7 @@ class Programme(Primitive):
     def __init__(self, body, ain, aout):
         Primitive.__init__(self, body, ain, aout)
         self.vjp = ProgrammeVJP(self)
+        self.jvp = ProgrammeJVP(self)
 
     class NodeType(CodeSegNode):
         def get_codeseg(self):
@@ -356,7 +357,7 @@ class ProgrammeVJP(Primitive):
         ex = [a for a in programme.argnames if a not in programme.aout + programme.ain]
         extra = ['#replay-record']
         body = lambda : None
-        body.__name__ = "G:" + programme.body.__name__
+        body.__name__ = "VJP:" + programme.body.__name__
         argnames = list(set(gin + gout + programme.ain + ex + extra))
         Primitive.__init__(self, body, gin, gout, argnames=argnames)
 
@@ -378,6 +379,27 @@ class ProgrammeVJP(Primitive):
                     vjpcode.defaults[arg.name] = ZERO
 
             return vjpcode
+
+class ProgrammeJVP(Primitive):
+    def __init__(self, programme):
+        gin  = [a + '_' for a in programme.ain]
+        gout = [a + '_' for a in programme.aout]
+        ex = [a for a in programme.argnames if a not in programme.aout + programme.ain]
+        extra = ['#replay-record']
+        body = lambda : None
+        body.__name__ = "JVP:" + programme.body.__name__
+        argnames = list(set(gin + gout + programme.ain + ex + extra))
+        Primitive.__init__(self, body, gin, gout, argnames=argnames)
+
+    class NodeType(CodeSegNode):
+        ZERO_BYPASS = True
+
+        def get_codeseg(self):
+            node = self.args.find('#replay-record').value
+
+            replaycode = node.get_codeseg()
+            jvpcode = replaycode.get_jvp()
+            return jvpcode
 
 class Tape(object):
     def __init__(self, engine, init):
@@ -645,6 +667,9 @@ class CodeSegment(object):
                     kwargs[arg.name] = arg.dereference(None)
                 if isinstance(arg, EXArgument) and arg.name in jvp.argnames:
                     kwargs[arg.name] = arg.value
+
+            if isinstance(jvp, ProgrammeJVP):
+                kwargs['#replay-record'] = node
 
             code.append(jvp, kwargs)
             code.append(node.primitive, node.args.get_kwargs())
