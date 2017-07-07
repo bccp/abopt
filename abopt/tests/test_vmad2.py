@@ -137,8 +137,8 @@ def test_vjp():
     d, tape = code.compute('d', {'a' : 1.0}, return_tape=True)
     assert_array_equal(d, 12.0)
 
-    gradient = tape.get_vjp()
-    _a  = gradient.compute(['_a'], {'_d': 1.0})
+    vjp = tape.get_vjp()
+    _a  = vjp.compute(['_a'], {'_d': 1.0})
     assert_array_equal(_a, 12.0)
 
     d, _a = code.compute_with_gradient(['d', '_a'], {'a' : 1.0}, {'_d': 1.0})
@@ -147,10 +147,13 @@ def test_vjp():
     assert_array_equal(_a, 12.0)
 
     (c1, d), tape = code.compute(['c1', 'd'], {'a' : 1.0}, return_tape=True)
-    gradient = tape.get_vjp()
+
     assert_array_equal(d, 12.0)
     assert_array_equal(c1, 6.0)
-    _a  = gradient.compute(['_a'], {'_c1': 1.0})
+
+    vjp = tape.get_vjp()
+
+    _a  = vjp.compute(['_a'], {'_c1': 1.0})
     assert_array_equal(_a, 6.0)
 
 def test_jvp():
@@ -177,11 +180,12 @@ def test_jvp_programme():
     engine = MyEngine()
     code = CodeSegment(engine)
     code.batch(u='a', v='d')
+    code.unitary(x='d', y='d', factor=2.0)
     code.batch_with_exarg(u='a', v='e', factor=3.0)
 
     jvp = code.get_jvp()
     d_, e_ = jvp.compute(['d_', 'e_'], {'a' : 1.0, 'a_' : 1.0})
-    assert_array_equal(d_, 2.0)
+    assert_array_equal(d_, 4.0)
     assert_array_equal(e_, 6.0)
 
 
@@ -215,9 +219,11 @@ def test_to_graph():
     code.batch(u='b2', v='f')
 
     d, tape = code.compute(('e', 'a', 'f', 'd'), {'a' : 1.0}, return_tape=True)
-    gradient = tape.get_vjp()
+    vjp = tape.get_vjp()
+
     graph1 = code.to_graph()
-    graph2 = gradient.to_graph()
+    graph2 = vjp.to_graph()
+
 #    graph2.render('temp.png', view=True)
 
 def test_zeros():
