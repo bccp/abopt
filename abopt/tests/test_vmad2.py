@@ -188,6 +188,19 @@ def test_jvp_programme():
     assert_array_equal(d_, 4.0)
     assert_array_equal(e_, 6.0)
 
+def test_jvp_vector():
+    engine = MyEngine()
+    code = CodeSegment(engine)
+    code.batch(u='a', v='d')
+    code.unitary(x='d', y='d', factor=2.0)
+    code.batch_with_exarg(u='a', v='e', factor=3.0)
+
+    A = numpy.array
+
+    jvp = code.get_jvp()
+    d_, e_ = jvp.compute(['d_', 'e_'], {'a' : A([1.0, 1.0]), 'a_' : A([1.0, 1.0])})
+    assert_array_equal(d_, [4.0, 4.0])
+    assert_array_equal(e_, [6.0, 6.0])
 
 def test_inplace():
     engine = MyEngine()
