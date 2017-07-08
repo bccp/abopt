@@ -478,10 +478,10 @@ class Tape(object):
                 kwargs['y'] = r
                 code.append(add, kwargs)
 
-            for variable in code._input_variables.values():
-                code.defaults[variable.name] = ZERO
+        for variable in code._input_variables.values():
+            code.defaults[variable.name] = ZERO
 
-            #logger.info("GRADIENT code.defaults: %s " % code.defaults)
+        #logger.info("GRADIENT code.defaults: %s " % code.defaults)
         return code
 
     def get_jvp(self):
@@ -506,7 +506,7 @@ class Tape(object):
                 if isinstance(arg.value, Variable) and arg.name_jvp in jvp.argnames:
                     kwargs[arg.name_jvp] = arg.value.name_jvp
                 if isinstance(arg, (IArgument, IOArgument)) and arg.name in jvp.argnames:
-                    kwargs[arg.name] = arg.dereference(None)
+                    kwargs[arg.name] = Literal(arg.dereference(d))
                 if isinstance(arg, EXArgument) and arg.name in jvp.argnames:
                     kwargs[arg.name] = arg.value
 
@@ -514,6 +514,9 @@ class Tape(object):
                 kwargs['#replay-record'] = node, d
 
             code.append(jvp, kwargs)
+
+        for variable in code._input_variables.values():
+            code.defaults[variable.name] = ZERO
 
         return code
 
