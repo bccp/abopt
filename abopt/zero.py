@@ -8,9 +8,9 @@ def ZeroType():
     def __int__(self): return 0
     def __float__(self): return 0.0
     def __round__(self): return 0
-    def __array__(self):
+    def __array__(self, dtype=None):
         import numpy
-        return numpy.array(0)
+        return numpy.array(0, dtype=dtype)
     def __repr__(self): return "<ZERO>"
     dict = {}
     for name, value in locals().items():

@@ -276,6 +276,8 @@ class CodeSegNode(Node):
         for arg, value in zip(self.args, bound):
             if isinstance(arg, (IArgument, IOArgument)):
                 init[arg.name] = value
+            elif isinstance(arg, (EXArgument,)):
+                init[arg.name] = value
             else:
                 lvalues[arg.name] = value
 
@@ -396,9 +398,14 @@ class ProgrammeJVP(Primitive):
 
         def get_codeseg(self):
             node, d = self.args.find('#replay-record').value
+            tape = node.invoke_for_tape(d)
+            # Watch out: We use the tape version
+            # of VJP because with the code version of VJP
+            # we do not know how to pass in the arguments
+            # these arguments are marked as EXArgument in the VJP
+            # but we need to resolve them from the frontier.
 
-            replaycode = node.get_codeseg()
-            jvpcode = replaycode.get_jvp(init=d)
+            jvpcode = tape.get_jvp()
             return jvpcode
 
 class Tape(object):
@@ -694,6 +701,7 @@ class CodeSegment(object):
             are the input variables of the original code segment.
 
             This will compute the original code together with the forward gradient pass.
+
         """
         code = CodeSegment(self.engine)
 
@@ -714,6 +722,12 @@ class CodeSegment(object):
 
             code.append(jvp, kwargs)
             code.append(node.primitive, node.args.get_kwargs())
+
+        for variable in code._input_variables.values():
+            code.defaults[variable.name] = ZERO
+
+        # merge in the defaults of self
+        code.defaults.update(self.defaults)
 
         # initialize with the defaults
         code.defaults.update(init)
