@@ -59,6 +59,13 @@ class MyEngine(Engine):
         return code
 
     @programme(ain=['u'], aout=['v'])
+    def batch_batch(engine, u, v):
+        code = CodeSegment(engine)
+        code.batch_with_exarg(u=u, v='t', factor=1)
+        code.unitary(x='t', y=v, factor=1.0)
+        return code
+
+    @programme(ain=['u'], aout=['v'])
     def batch_with_sub(engine, u, v):
         code = CodeSegment(engine.subengine)
         code.unitary(x=u, y=v, factor=2.0)
@@ -195,6 +202,22 @@ def test_jvp_programme():
     d_, e_ = jvp.compute(['d_', 'e_'], {'a_' : 1.0})
     assert_array_equal(d_, 4.0)
     assert_array_equal(e_, 6.0)
+
+def test_jvp_programme_nested():
+    engine = MyEngine()
+    code = CodeSegment(engine)
+    code.batch_batch(u='a', v='d')
+
+    jvp = code.get_jvp(init={'a' : 1.0})
+
+    d_ = jvp.compute('d_', {'a_' : 1.0})
+    assert_array_equal(d_, 2.0)
+
+    d, tape = code.compute('d', init={'a' : 1.0}, return_tape=True)
+    jvp = tape.get_jvp()
+
+    d_ = jvp.compute('d_', {'a_' : 1.0})
+    assert_array_equal(d_, 2.0)
 
 def test_jvp_vector():
     engine = MyEngine()
