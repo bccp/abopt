@@ -512,7 +512,12 @@ class Tape(object):
             for arg in node.args:
                 if isinstance(arg.value, Variable) and arg.name_jvp in jvp.argnames:
                     kwargs[arg.name_jvp] = arg.value.name_jvp
-                if isinstance(arg, (IArgument, IOArgument)) and arg.name in jvp.argnames:
+                if isinstance(arg, IArgument) and arg.name in jvp.argnames:
+                    kwargs[arg.name] = Literal(arg.dereference(d))
+                    # for literal inputs, we shall set the input gradient to zero
+                    if isinstance(arg.value, Literal):
+                        kwargs[arg.name_jvp] = ZERO
+                if isinstance(arg, IOArgument) and arg.name in jvp.argnames:
                     kwargs[arg.name] = Literal(arg.dereference(d))
                 if isinstance(arg, EXArgument) and arg.name in jvp.argnames:
                     kwargs[arg.name] = arg.value
