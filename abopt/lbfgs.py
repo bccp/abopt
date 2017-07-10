@@ -54,7 +54,7 @@
     Yu Feng
 """
 
-from .abopt2 import LineSearchOptimizer
+from .abopt2 import Optimizer
 
 def scalar(vs, state):
     """ M1QN2.A in GL.  EQ 4.1;
@@ -63,7 +63,7 @@ def scalar(vs, state):
 
     """
 
-    if len(state.S) == 0: return vs.ones_like(state.x)
+    if len(state.S) == 0: return vs.ones_like(state.Px)
 
     D0 = state.D
     s = state.S[-1]
@@ -71,7 +71,7 @@ def scalar(vs, state):
     ys = state.YS[-1]
     yy = state.YY[-1]
 
-    D1 = vs.mul(vs.ones_like(state.x), ys / yy)
+    D1 = vs.mul(vs.ones_like(state.Px), ys / yy)
     return D1
 
 def inverse_bfgs(vs, state):
@@ -80,7 +80,7 @@ def inverse_bfgs(vs, state):
         This is bad.  D grows rapidly over iterations.
 
     """
-    if len(state.S) == 0: return vs.ones_like(state.x)
+    if len(state.S) == 0: return vs.ones_like(state.Px)
 
     D0 = state.D
     s = state.S[-1]
@@ -108,7 +108,7 @@ def direct_bfgs(vs, state, pre_scaled=False, post_scaled=False):
         M1QN3.B, M1QN3.B2, GL Equation 4.7, 4.9
         and VAF post update scaling.
     """
-    if len(state.S) == 0: return vs.ones_like(state.x)
+    if len(state.S) == 0: return vs.ones_like(state.Px)
 
     D0 = state.D
 
@@ -197,15 +197,19 @@ def post_scaled_inverse_dfp(vs, state):
 
     return inverse_dfp(vs, state, post_scaled=True)
 
-class LBFGS(LineSearchOptimizer):
+class LBFGS(Optimizer):
+    from .linesearch import backtrace
+
     problem_defaults = {'m' : 6}
-    def __init__(self, vs=LineSearchOptimizer.real_vector_space,
-            linesearch=LineSearchOptimizer.backtrace, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
-        LineSearchOptimizer.__init__(self, vs, linesearch=linesearch)
+    def __init__(self, vs=Optimizer.real_vector_space,
+            linesearch=backtrace, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
+
+        Optimizer.__init__(self, vs)
+        self.linesearch = linesearch
         self.diag_update = diag_update
         self.rescale_diag = rescale_diag
 
-    def move(self, problem, state, x1, y1, g1, r1):
+    def move(self, problem, state, Px1, y1, Pg1, r1):
         addmul = self.vs.addmul
         dot = self.vs.dot
 
@@ -214,10 +218,10 @@ class LBFGS(LineSearchOptimizer):
             state.S = [] # Delta S
             state.YS = []
             state.YY = []
-            state.z = g1
+            state.z = Pg1
         else:
-            state.Y.append(addmul(g1, state.g, -1))
-            state.S.append(addmul(x1, state.x, -1))
+            state.Y.append(addmul(Pg1, state.Pg, -1))
+            state.S.append(addmul(Px1, state.Px, -1))
             state.YS.append(dot(state.Y[-1], state.S[-1]))
             state.YY.append(dot(state.Y[-1], state.Y[-1]))
 
@@ -227,7 +231,7 @@ class LBFGS(LineSearchOptimizer):
                 del state.S[0]
                 del state.YS[0]
 
-        LineSearchOptimizer.move(self, problem, state, x1, y1, g1, r1)
+        Optimizer.move(self, problem, state, Px1, y1, Pg1, r1)
 
         state.D = self.diag_update(self.vs, state)
 
@@ -237,11 +241,11 @@ class LBFGS(LineSearchOptimizer):
         dot = self.vs.dot
         mul = self.vs.mul
 
-        if state.gnorm == 0:
+        if state.Pgnorm == 0:
             raise RuntimeError("gnorm is zero. This shall not happen because terminated() checks for this")
 
         try:
-            q = state.g
+            q = state.Pg
 
             if len(state.Y) == 0: # first step
                 raise StopIteration
@@ -278,9 +282,9 @@ class LBFGS(LineSearchOptimizer):
             print('Y', state.Y)
             print('S', state.S)
             """
-            x1, y1, g1, r1 = self.linesearch(self.vs, problem, state, z, 1.0)
+            Px1, y1, Pg1, r1 = self.linesearch(self.vs, problem, state, z, 1.0)
 
-            if x1 is None: # failed line search
+            if Px1 is None: # failed line search
                 raise StopIteration
 
         except StopIteration:
@@ -290,18 +294,18 @@ class LBFGS(LineSearchOptimizer):
             state.YS = []
             state.YY = []
 
-            z = addmul(0, state.g, 1 / state.gnorm)
+            z = addmul(0, state.Pg, 1 / state.Pgnorm)
 
-            x1, y1, g1, r1 = self.linesearch(self.vs, problem, state, state.g, 1.0 / state.gnorm)
+            Px1, y1, Pg1, r1 = self.linesearch(self.vs, problem, state, state.Pg, 1.0 / state.Pgnorm)
 
-            if x1 is None: raise ValueError("Line search failed.")
+            if Px1 is None: raise ValueError("Line search failed.")
 
-        if g1 is None:
-            g1 = problem.gradient(x1)
+        if Pg1 is None:
+            Pg1 = problem.gradient(Px1)
             state.gev = state.gev + 1
 
         state.z = z
-        self.post_single_iteration(problem, state, x1, y1, g1, r1)
+        self.post_single_iteration(problem, state, Px1, y1, Pg1, r1)
 
         if len(state.Y) < problem.m and len(state.Y) > 1:
             # started building the hessian, then
@@ -310,6 +314,6 @@ class LBFGS(LineSearchOptimizer):
             # terminated on a converged GD step.
             state.converged = False
 
-        if state.gnorm <= problem.gtol:
+        if state.Pgnorm <= problem.gtol:
             # but if gnorm is small, converged too
             state.converged = True

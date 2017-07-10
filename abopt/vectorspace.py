@@ -27,6 +27,10 @@ class VectorSpace(object):
         r = self.addmul(1, b, 0)
         return r
 
+    def zeros_like(self, b):
+        r = self.addmul(0, b, 0)
+        return r
+
     def mul(self, b, c, p=1):
         return self.addmul(0, b, c, p)
 

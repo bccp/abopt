@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 from abopt.abopt2 import GradientDescent, LBFGS, \
-        minimize, minimize_p
+        minimize
 
 from abopt.linesearch import minpack, backtrace, exact
 from abopt.lbfgs import inverse_bfgs, direct_bfgs, scalar, inverse_dfp
@@ -90,7 +90,7 @@ def test_abopt_lbfgs_quad():
 
 def test_abopt_lbfgs_quad_P():
     gd = LBFGS(linesearch=backtrace)
-    s = minimize_p(gd, quad, quad_der, x0, P=lambda x: 2 * x, PT=lambda x: 0.5 * x)
+    s = minimize(gd, quad, quad_der, x0, Pvp=lambda x: 2 * x, vPp=lambda x: 0.5 * x)
     print(s)
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
