@@ -43,11 +43,9 @@ class Optimizer(object):
 
     from .vectorspace import real_vector_space
     from .vectorspace import complex_vector_space
-    from .linesearch import backtrace
 
-    def __init__(self, vs=real_vector_space, linesearch=backtrace):
+    def __init__(self, vs=real_vector_space):
         self.vs = vs
-        self.linesearch = linesearch
 
     def terminated(self, problem, state):
         if state.dy is None: return False
@@ -90,7 +88,20 @@ class Optimizer(object):
         else:
             return minimize(optimizer, objective, gradient, x0, monitor, **kwargs)
 
-class GradientDescent(Optimizer):
+class LineSearchOptimizer(Optimizer):
+    from .linesearch import backtrace
+
+    def __init__(self, vs=Optimizer.real_vector_space, linesearch=backtrace):
+        Optimizer.__init__(self, vs)
+        self.linesearch = linesearch
+
+class TrustRegionOptimizer(Optimizer):
+    def __init__(self, vs=Optimizer.real_vector_space, trustregion=None):
+        Optimizer.__init__(self, vs)
+        self.trustregion = trustregion
+
+
+class GradientDescent(LineSearchOptimizer):
     def single_iteration(self, problem, state):
         mul = self.vs.mul
 

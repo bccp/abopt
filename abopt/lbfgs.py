@@ -54,7 +54,7 @@
     Yu Feng
 """
 
-from .abopt2 import Optimizer
+from .abopt2 import LineSearchOptimizer
 
 def scalar(vs, state):
     """ M1QN2.A in GL.  EQ 4.1;
@@ -197,11 +197,11 @@ def post_scaled_inverse_dfp(vs, state):
 
     return inverse_dfp(vs, state, post_scaled=True)
 
-class LBFGS(Optimizer):
+class LBFGS(LineSearchOptimizer):
     problem_defaults = {'m' : 6}
-    def __init__(self, vs=Optimizer.real_vector_space,
-            linesearch=Optimizer.backtrace, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
-        Optimizer.__init__(self, vs, linesearch=linesearch)
+    def __init__(self, vs=LineSearchOptimizer.real_vector_space,
+            linesearch=LineSearchOptimizer.backtrace, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
+        LineSearchOptimizer.__init__(self, vs, linesearch=linesearch)
         self.diag_update = diag_update
         self.rescale_diag = rescale_diag
 
@@ -227,7 +227,7 @@ class LBFGS(Optimizer):
                 del state.S[0]
                 del state.YS[0]
 
-        Optimizer.move(self, problem, state, x1, y1, g1, r1)
+        LineSearchOptimizer.move(self, problem, state, x1, y1, g1, r1)
 
         state.D = self.diag_update(self.vs, state)
 
