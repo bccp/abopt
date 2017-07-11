@@ -141,9 +141,7 @@ def test_abopt_lbfgs_complex():
             inverse_dfp, pre_scaled_inverse_dfp, post_scaled_inverse_dfp,
             inverse_bfgs, scalar]:
 
-        lbfgs_r = LBFGS(linesearch=exact, diag_update=diag)
-
-        lbfgs_c = LBFGS(complex_vector_space, linesearch=exact, diag_update=diag)
+        lbfgs = LBFGS(linesearch=exact, diag_update=diag)
 
         X = []
         Y = []
@@ -153,8 +151,8 @@ def test_abopt_lbfgs_complex():
         def monitor_c(state):
             Y.append(state.x[0])
 
-        s = minimize(lbfgs_r, rosen, rosen_der, numpy.array([0., 0.]), monitor=monitor_r)
-        s = minimize(lbfgs_c, crosen, crosen_der, numpy.array([0. + 0.j]), monitor=monitor_c)
+        s = minimize(lbfgs, rosen, rosen_der, numpy.array([0., 0.]), monitor=monitor_r, vs=real_vector_space)
+        s = minimize(lbfgs, crosen, crosen_der, numpy.array([0. + 0.j]), monitor=monitor_c, vs=complex_vector_space)
 
         assert_allclose(X, Y, rtol=1e-4)
 

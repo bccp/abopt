@@ -1,4 +1,6 @@
-def backtrace(vs, problem, state, z, rate, c=1e-5, tau=0.5):
+def backtrace(problem, state, z, rate, c=1e-5, tau=0.5):
+    vs = problem.vs
+
     addmul = vs.addmul
     dot = vs.dot
 
@@ -35,7 +37,8 @@ def backtrace(vs, problem, state, z, rate, c=1e-5, tau=0.5):
         i = i + 1
     return None, None, None, None
 
-def exact(vs, problem, state, z, rate, c=0.5):
+def exact(problem, state, z, rate, c=0.5):
+    vs = problem.vs
     addmul = vs.addmul
     dot = vs.dot
 
@@ -76,7 +79,7 @@ def exact(vs, problem, state, z, rate, c=0.5):
 
 from .scipywolfe2 import scalar_search_wolfe2
 
-def minpack(vs, problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
+def minpack(problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
     """"
     Notes
     -----
@@ -87,6 +90,7 @@ def minpack(vs, problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
     For the zoom phase it uses an algorithm by [...].
 
     """
+    vs = problem.vs
     addmul = vs.addmul
     dot = vs.dot
 

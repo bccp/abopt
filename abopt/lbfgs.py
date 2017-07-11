@@ -200,18 +200,16 @@ def post_scaled_inverse_dfp(vs, state):
 class LBFGS(Optimizer):
     from .linesearch import backtrace
 
-    problem_defaults = {'m' : 6}
-    def __init__(self, vs=Optimizer.real_vector_space,
-            linesearch=backtrace, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
-
-        Optimizer.__init__(self, vs)
-        self.linesearch = linesearch
-        self.diag_update = diag_update
-        self.rescale_diag = rescale_diag
+    problem_defaults = {
+        'm' : 6,
+        'linesearch' : backtrace,
+        'diag_update' : post_scaled_direct_bfgs,
+        'rescale_diag' : False,
+    }
 
     def move(self, problem, state, Px1, y1, Pg1, r1):
-        addmul = self.vs.addmul
-        dot = self.vs.dot
+        addmul = problem.vs.addmul
+        dot = problem.vs.dot
 
         if state.nit == 0:
             state.Y = [] # Delta G
@@ -226,20 +224,20 @@ class LBFGS(Optimizer):
             state.YY.append(dot(state.Y[-1], state.Y[-1]))
 
 
-            if len(state.Y) > problem.m:
+            if len(state.Y) > self.m:
                 del state.Y[0]
                 del state.S[0]
                 del state.YS[0]
 
         Optimizer.move(self, problem, state, Px1, y1, Pg1, r1)
 
-        state.D = self.diag_update(self.vs, state)
+        state.D = self.diag_update(problem.vs, state)
 
     def single_iteration(self, problem, state):
         """ Line by line translation of the LBFGS on wikipedia """
-        addmul = self.vs.addmul
-        dot = self.vs.dot
-        mul = self.vs.mul
+        addmul = problem.vs.addmul
+        dot = problem.vs.dot
+        mul = problem.vs.mul
 
         if state.Pgnorm == 0:
             raise RuntimeError("gnorm is zero. This shall not happen because terminated() checks for this")
@@ -282,7 +280,7 @@ class LBFGS(Optimizer):
             print('Y', state.Y)
             print('S', state.S)
             """
-            Px1, y1, Pg1, r1 = self.linesearch(self.vs, problem, state, z, 1.0)
+            Px1, y1, Pg1, r1 = self.linesearch(problem, state, z, 1.0)
 
             if Px1 is None: # failed line search
                 raise StopIteration
@@ -296,7 +294,7 @@ class LBFGS(Optimizer):
 
             z = addmul(0, state.Pg, 1 / state.Pgnorm)
 
-            Px1, y1, Pg1, r1 = self.linesearch(self.vs, problem, state, state.Pg, 1.0 / state.Pgnorm)
+            Px1, y1, Pg1, r1 = self.linesearch(problem, state, state.Pg, 1.0 / state.Pgnorm)
 
             if Px1 is None: raise ValueError("Line search failed.")
 
@@ -307,13 +305,13 @@ class LBFGS(Optimizer):
         state.z = z
         self.post_single_iteration(problem, state, Px1, y1, Pg1, r1)
 
-        if len(state.Y) < problem.m and len(state.Y) > 1:
+        if len(state.Y) < self.m and len(state.Y) > 1:
             # started building the hessian, then
             # must have a 'good' approximation before ending
             # Watch out: if > 0 is not protected we will not
             # terminated on a converged GD step.
             state.converged = False
 
-        if state.Pgnorm <= problem.gtol:
+        if state.Pgnorm <= self.gtol:
             # but if gnorm is small, converged too
             state.converged = True

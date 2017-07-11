@@ -1,4 +1,17 @@
+"""
+
+    Data model
+
+    A ``Problem`` is defined on a ``VectorSpace``.
+    A ``Problem`` consists of a differentiable function, up to second order. `Gradient` and `HessianVectorProduct`
+    A ``Problem`` can be `minimize`d by an ``Optimizer``, yielding a sequence of `State`s.
+
+    A ``Problem`` can be ``Preconditioned``, in which case Optimization yields a sequence of ``PreconditionedState``s
+
+"""
 from .vectorspace import VectorSpace
+from .vectorspace import real_vector_space
+from .vectorspace import complex_vector_space
 
 def NullPrecondition(x): return x
 
@@ -22,18 +35,14 @@ class State(object):
         return str(d)
 
 class Problem(object):
-    def __init__(self, objective, gradient, Hvp=NotImplementedHvp, **kwargs):
+
+    def __init__(self, objective, gradient, hessian_vector_product=NotImplementedHvp, vs=real_vector_space):
         self.objective = objective
         self.gradient = gradient
-        self.Hvp = Hvp
+        self.hessian_vector_product = hessian_vector_product
         self.Pvp = NullPrecondition
         self.vPp = NullPrecondition
-        self.maxiter = 1000
-        self.atol = 1e-7
-        self.rtol = 1e-7
-        self.gtol = 0
-        # this updates 
-        self.__dict__.update(kwargs)
+        self.vs = vs
 
     def f(self, Px):
         x = self.vPp(Px)
@@ -43,26 +52,35 @@ class Problem(object):
         x = self.vPp(Px)
         return self.Pvp(self.gradient(x))
 
+    def Hvp(self, Px, Pg):
+        x = self.vPp(Px)
+        g = self.vPp(Pg)
+        return self.Pvp(self.hessian_vector_product(x, g))
+
 class Optimizer(object):
-    problem_defaults = {} # placeholder for subclasses to replace
+    problem_defaults = {}
 
-    from .vectorspace import real_vector_space
-    from .vectorspace import complex_vector_space
+    def __init__(self, **kwargs):
+        self.maxiter = 1000
+        self.atol = 1e-7
+        self.rtol = 1e-7
+        self.gtol = 0
 
-    def __init__(self, vs=real_vector_space):
-        self.vs = vs
+        # this updates the attributes
+        self.__dict__.update(type(self).problem_defaults)
+        self.__dict__.update(kwargs)
 
     def terminated(self, problem, state):
         if state.dy is None: return False
 
-        if state.nit > problem.maxiter: return True
+        if state.nit > self.maxiter: return True
 
         if state.converged : return True
 
         return False
 
     def move(self, problem, state, Px1, y1, Pg1, r1):
-        dot = self.vs.dot
+        dot = problem.vs.dot
 
         if state.nit > 0:
             state.dy = y1 - state.y
@@ -93,11 +111,11 @@ class Optimizer(object):
 
     def post_single_iteration(self, problem, state, Px1, y1, Pg1, r1):
 
-        state.converged = check_convergence(state, y1, atol=problem.atol, rtol=problem.rtol)
+        state.converged = check_convergence(state, y1, atol=self.atol, rtol=self.rtol)
         state.nit = state.nit + 1
         self.move(problem, state, Px1, y1, Pg1, r1)
 
-    def minimize(optimizer, problem, x0, monitor=None, **kwargs):
+    def minimize(optimizer, problem, x0, monitor=None):
         state = State()
 
         Px0 = problem.Pvp(x0)
@@ -122,23 +140,21 @@ class Optimizer(object):
 
 
 class TrustRegionOptimizer(Optimizer):
-    def __init__(self, vs=Optimizer.real_vector_space, trustregion=None):
-        Optimizer.__init__(self, vs)
-        self.trustregion = trustregion
-
+    pass
 
 class GradientDescent(Optimizer):
     from .linesearch import backtrace
-    def __init__(self, vs=Optimizer.real_vector_space, linesearch=backtrace):
-        Optimizer.__init__(self, vs)
-        self.linesearch = linesearch
+
+    problem_defaults = {
+            'linesearch' : backtrace
+    }
 
     def single_iteration(self, problem, state):
-        mul = self.vs.mul
+        mul = problem.vs.mul
 
         z = mul(state.Pg, 1 / state.gnorm)
 
-        Px1, y1, Pg1, r1 = self.linesearch(self.vs, problem, state, z, state.rate * 2)
+        Px1, y1, Pg1, r1 = self.linesearch(problem, state, z, state.rate * 2)
 
         if Pg1 is None:
             Pg1 = problem.g(Px1)
@@ -146,7 +162,7 @@ class GradientDescent(Optimizer):
 
         self.post_single_iteration(problem, state, Px1, y1, Pg1, r1)
 
-        if state.gnorm <= problem.gtol: 
+        if state.gnorm <= self.gtol: 
             state.converged = True
 
 
@@ -161,10 +177,16 @@ def check_convergence(state, y1, rtol, atol):
 
 from .lbfgs import LBFGS
 
-def minimize(optimizer, objective, gradient, x0, monitor=None, Pvp=NullPrecondition, vPp=NullPrecondition, **kwargs):
-    problem_args = {}
-    problem_args.update(optimizer.problem_defaults)
-    problem_args.update(kwargs)
+def minimize(optimizer, objective, gradient, x0, hessian_vector_product=NotImplementedHvp,
+    monitor=None, vs=real_vector_space, Pvp=NullPrecondition, vPp=NullPrecondition):
 
-    problem = Problem(objective, gradient, **problem_args)
-    return optimizer.minimize(problem, x0, monitor=None, **kwargs)
+    problem = Problem(objective, gradient, hessian_vector_product=hessian_vector_product, vs=vs)
+
+    d = vs.addmul(problem.vPp(problem.Pvp(x0)), x0, -1)
+
+    # assert vPv and Pvp are inverses
+    assert vs.dot(d, d) ** 0.5 < 1e-15
+
+    return optimizer.minimize(problem, x0, monitor=None)
+
+
