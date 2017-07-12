@@ -2,11 +2,11 @@
 
     Data model
 
-    A ``Problem`` is defined on a ``VectorSpace``.
+    A ``Problem`` is defined on a ``VectorSpace``; the problem is to minimize a function to a given tolerance.
     A ``Problem`` consists of a differentiable function, up to second order. `Gradient` and `HessianVectorProduct`
     A ``Problem`` can be `minimize`d by an ``Optimizer``, yielding a sequence of `State`s.
-
-    A ``Problem`` can be ``Preconditioned``, in which case Optimization yields a sequence of ``PreconditionedState``s
+    A ``Problem`` is ``Preconditioned``, the ``Optimizer`` only operates on preconditioned variables.
+    An ``Optimizer`` implements a minimization policy (algorithm)
 
 """
 from .vectorspace import VectorSpace
@@ -34,37 +34,62 @@ class State(object):
         d = dict([(k, self[k]) for k in ['nit', 'fev', 'gev', 'dy', 'converged', 'y', 'xnorm', 'gnorm']])
         return str(d)
 
+class Preconditioner(object):
+    """ A preconditioner has three functions:
+
+        x~ i  = P_ij x_j -> Pvp(x)
+
+        x_j = Q_ij x~_i -> vQp(x~)
+
+        g~_i = g_j Q_ij -> Qvp(g)
+
+        H~_ij v_j = Q_ia Q_jb v_j H_ab -> Qvp(Hvp(vQp(v)))
+
+    """
+    def __init__(self, Pvp, Qvp, vQp):
+        self.Pvp = Pvp
+        self.Qvp = Qvp
+        self.vQp = vQp
+
+NullPreconditioner = Preconditioner(lambda x:x, lambda x:x, lambda x:x)
+
 class Problem(object):
 
-    def __init__(self, objective, gradient, hessian_vector_product=NotImplementedHvp, vs=real_vector_space):
+    def __init__(self, objective, gradient,
+        hessian_vector_product=NotImplementedHvp,
+        vs=real_vector_space,
+        atol=1e-7,
+        rtol=1e-7,
+        gtol=0,
+        precond=NullPreconditioner,
+        ):
         self.objective = objective
         self.gradient = gradient
         self.hessian_vector_product = hessian_vector_product
-        self.Pvp = NullPrecondition
-        self.vPp = NullPrecondition
+        self.precond = precond
+        self.atol = atol
+        self.rtol = rtol
+        self.gtol = gtol
         self.vs = vs
 
     def f(self, Px):
-        x = self.vPp(Px)
+        x = self.precond.vQp(Px)
         return self.objective(x)
 
     def g(self, Px):
-        x = self.vPp(Px)
-        return self.Pvp(self.gradient(x))
+        x = self.precond.vQp(Px)
+        return self.precond.Qvp(self.gradient(x))
 
-    def Hvp(self, Px, Pg):
-        x = self.vPp(Px)
-        g = self.vPp(Pg)
-        return self.Pvp(self.hessian_vector_product(x, g))
+    def Hvp(self, Px, v):
+        x = self.precond.vQp(Px)
+        vQ = self.precond.vQp(v)
+        return self.precond.Qvp(self.hessian_vector_product(x, vQ))
 
 class Optimizer(object):
     problem_defaults = {}
 
     def __init__(self, **kwargs):
         self.maxiter = 1000
-        self.atol = 1e-7
-        self.rtol = 1e-7
-        self.gtol = 0
 
         # this updates the attributes
         self.__dict__.update(type(self).problem_defaults)
@@ -96,10 +121,10 @@ class Optimizer(object):
         state.Pgnorm = dot(Pg1, Pg1) ** 0.5
 
         # now move the un-preconditioned variables
-        state.x = problem.vPp(Px1)
-        state.g = problem.vPp(Pg1)
+        state.x = problem.precond.vQp(Px1)
+        state.g = problem.precond.vQp(Pg1)
 
-        if problem.Pvp is not NullPrecondition:
+        if problem.precond is not NullPrecondition:
             state.xnorm = dot(state.x, state.x) ** 0.5
             state.gnorm = dot(state.g, state.g) ** 0.5
         else:
@@ -111,14 +136,14 @@ class Optimizer(object):
 
     def post_single_iteration(self, problem, state, Px1, y1, Pg1, r1):
 
-        state.converged = check_convergence(state, y1, atol=self.atol, rtol=self.rtol)
+        state.converged = check_convergence(state, y1, atol=problem.atol, rtol=problem.rtol)
         state.nit = state.nit + 1
         self.move(problem, state, Px1, y1, Pg1, r1)
 
     def minimize(optimizer, problem, x0, monitor=None):
         state = State()
 
-        Px0 = problem.Pvp(x0)
+        Px0 = problem.precond.Pvp(x0)
 
         y0 = problem.f(Px0)
         Pg0 = problem.g(Px0)
@@ -162,7 +187,7 @@ class GradientDescent(Optimizer):
 
         self.post_single_iteration(problem, state, Px1, y1, Pg1, r1)
 
-        if state.gnorm <= self.gtol: 
+        if state.gnorm <= problem.gtol: 
             state.converged = True
 
 
@@ -178,15 +203,15 @@ def check_convergence(state, y1, rtol, atol):
 from .lbfgs import LBFGS
 
 def minimize(optimizer, objective, gradient, x0, hessian_vector_product=NotImplementedHvp,
-    monitor=None, vs=real_vector_space, Pvp=NullPrecondition, vPp=NullPrecondition):
+    monitor=None, vs=real_vector_space, precond=NullPreconditioner):
 
-    problem = Problem(objective, gradient, hessian_vector_product=hessian_vector_product, vs=vs)
+    problem = Problem(objective, gradient, hessian_vector_product=hessian_vector_product, vs=vs, precond=precond)
 
-    d = vs.addmul(problem.vPp(problem.Pvp(x0)), x0, -1)
+    d = vs.addmul(problem.precond.vQp(problem.precond.Pvp(x0)), x0, -1)
 
     # assert vPv and Pvp are inverses
     assert vs.dot(d, d) ** 0.5 < 1e-15
 
-    return optimizer.minimize(problem, x0, monitor=None)
+    return optimizer.minimize(problem, x0, monitor=monitor)
 
 

@@ -299,7 +299,7 @@ class LBFGS(Optimizer):
             if Px1 is None: raise ValueError("Line search failed.")
 
         if Pg1 is None:
-            Pg1 = problem.gradient(Px1)
+            Pg1 = problem.g(Px1)
             state.gev = state.gev + 1
 
         state.z = z
@@ -312,6 +312,6 @@ class LBFGS(Optimizer):
             # terminated on a converged GD step.
             state.converged = False
 
-        if state.Pgnorm <= self.gtol:
+        if state.Pgnorm <= problem.gtol:
             # but if gnorm is small, converged too
             state.converged = True
