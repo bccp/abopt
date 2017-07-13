@@ -11,11 +11,14 @@ def backtrace(problem, state, z, rate, c=1e-5, tau=0.5):
         return None, None, None, None
 
     Px1 = addmul(state.Px, z, -rate)
-    y1 = problem.f(Px1)
+
+    x1 = problem.precond.vQp(Px1)
+    y1 = problem.f(x1)
+
     state.fev = state.fev + 1
     i = 0
     ymin = state.y
-    Pxmin = state.Px
+    Pxmin = (state.x, state.Px)
     ratemin = rate
     while i < 100:
         print('rate', rate, 'y', state.y, 'y1', y1, 'x', state.Px, 'x1', Px1, 'z', z)
@@ -25,14 +28,15 @@ def backtrace(problem, state, z, rate, c=1e-5, tau=0.5):
 
         if y1 < ymin:
             ymin = y1
-            Pxmin = Px1
+            Pxmin = (x1, Px1)
             ratemin = rate
         if y1 < state.y and abs(y1 - state.y) >= abs(rate * c * zg):
             return Pxmin, ymin, None, rate
 
         rate *= tau
         Px1 = addmul(state.Px, z, -rate)
-        y1 = problem.f(Px1)
+        x1 = problem.precond.vQp(Px1)
+        y1 = problem.f(x1)
         state.fev = state.fev + 1
         i = i + 1
     return None, None, None, None
@@ -53,9 +57,10 @@ def exact(problem, state, z, rate, c=0.5):
 
         Px1 = addmul(state.Px, z, -tau * rate)
         state.fev = state.fev + 1
-        y1 = problem.f(Px1)
+        x1 = problem.precond.vQp(Px1)
+        y1 = problem.f(x1)
         if y1 < best[1]:
-            best[0] = Px1
+            best[0] = (x1, Px1)
             best[1] = y1
             best[2] = tau
 
@@ -71,11 +76,12 @@ def exact(problem, state, z, rate, c=0.5):
             raise StopIteration
 
         Px1 = addmul(state.Px, z, -r.x * rate)
-        return Px1, r.fun, None, r.x * rate
+        x1 = problem.precond.vQp(Px1)
+        return (x1, Px1), r.fun, None, r.x * rate
 
     except StopIteration as e:
-        Px1, y1, tau = best
-        return Px1, y1, None, tau * rate
+        x1_and_Px1, y1, tau = best
+        return x1_and_Px1, y1, None, tau * rate
 
 from .scipywolfe2 import scalar_search_wolfe2
 
@@ -97,17 +103,20 @@ def minpack(problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
     def phi(alpha):
         state.fev = state.fev + 1
         Px1 = addmul(state.Px, z, -alpha)
-        y1 = problem.f(Px1)
+        x1 = problem.precond.vQp(Px1)
+        y1 = problem.f(x1)
         # print('phi', -alpha, y1, state.y)
         return y1
 
-    Pgval = [state.Pg]
+    Pgval = [(state.g, state.Pg), (state.x, state.Px)]
 
     def derphi(alpha):
         state.gev = state.gev + 1
         Px1 = addmul(state.Px, z, -alpha)
-        Pg1 = problem.g(Px1)
-        Pgval[0] = Pg1
+        x1 = problem.precond.vQp(Px1)
+        g1, Pg1 = problem.g(x1)
+        Pgval[0] = (g1, Pg1)
+        Pgval[1] = (x1, Px1)
     #    print('derphi', x1, g1)
         return -dot(Pg1, z)
 
@@ -130,8 +139,7 @@ def minpack(problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
         # calculated gradient used in computing it derphi = gfk*pk
         # this is the gradient at the next step no need to compute it
         # again in the outer loop.
-        derphi_star = Pgval[0]
+        (g1, Pg1), (x1, Px1) = Pgval
 
-    Px1 = addmul(state.Px, z, -alpha_star)
-    return Px1, phi_star, derphi_star, alpha_star
+    return (x1, Px1), phi_star, (g1, Pg1), alpha_star
 

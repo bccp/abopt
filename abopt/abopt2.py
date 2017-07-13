@@ -72,16 +72,14 @@ class Problem(object):
         self.gtol = gtol
         self.vs = vs
 
-    def f(self, Px):
-        x = self.precond.vQp(Px)
+    def f(self, x):
         return self.objective(x)
 
-    def g(self, Px):
-        x = self.precond.vQp(Px)
-        return self.precond.Qvp(self.gradient(x))
+    def g(self, x):
+        g = self.gradient(x)
+        return g, self.precond.Qvp(g)
 
-    def Hvp(self, Px, v):
-        x = self.precond.vQp(Px)
+    def Hvp(self, x, v):
         vQ = self.precond.vQp(v)
         return self.precond.Qvp(self.hessian_vector_product(x, vQ))
 
@@ -104,7 +102,7 @@ class Optimizer(object):
 
         return False
 
-    def move(self, problem, state, Px1, y1, Pg1, r1):
+    def move(self, problem, state, x1, Px1, y1, g1, Pg1, r1):
         dot = problem.vs.dot
 
         if state.nit > 0:
@@ -113,16 +111,16 @@ class Optimizer(object):
         state.y_.append(y1)
         if len(state.y_) > 2:
             del state.y_[0]
-        state.Px = Px1
         state.y = y1
+        state.Px = Px1
         state.rate = r1
         state.Pxnorm = dot(Px1, Px1) ** 0.5
         state.Pg = Pg1
         state.Pgnorm = dot(Pg1, Pg1) ** 0.5
 
         # now move the un-preconditioned variables
-        state.x = problem.precond.vQp(Px1)
-        state.g = problem.precond.vQp(Pg1)
+        state.x = x1
+        state.g = g1
 
         if problem.precond is not NullPrecondition:
             state.xnorm = dot(state.x, state.x) ** 0.5
@@ -134,23 +132,23 @@ class Optimizer(object):
     def single_iteration(self, problem, state):
         raise NotImplementedError
 
-    def post_single_iteration(self, problem, state, Px1, y1, Pg1, r1):
+    def post_single_iteration(self, problem, state, x1, Px1, y1, Pg1, g1, r1):
 
         state.converged = check_convergence(state, y1, atol=problem.atol, rtol=problem.rtol)
         state.nit = state.nit + 1
-        self.move(problem, state, Px1, y1, Pg1, r1)
+        self.move(problem, state, x1, Px1, y1, g1, Pg1, r1)
 
     def minimize(optimizer, problem, x0, monitor=None):
         state = State()
 
         Px0 = problem.precond.Pvp(x0)
 
-        y0 = problem.f(Px0)
-        Pg0 = problem.g(Px0)
+        y0 = problem.f(x0)
+        g0, Pg0 = problem.g(x0)
         state.fev = 1
         state.gev = 1
 
-        optimizer.move(problem, state, Px0, y0, Pg0, 1.0)
+        optimizer.move(problem, state, x0, Px0, y0, g0, Pg0, 1.0)
 
         if monitor is not None:
             monitor(state)
@@ -179,13 +177,17 @@ class GradientDescent(Optimizer):
 
         z = mul(state.Pg, 1 / state.gnorm)
 
-        Px1, y1, Pg1, r1 = self.linesearch(problem, state, z, state.rate * 2)
+        x1_and_Px1, y1, g1_and_Pg1, r1 = self.linesearch(problem, state, z, state.rate * 2)
 
-        if Pg1 is None:
-            Pg1 = problem.g(Px1)
+        x1, Px1 = x1_and_Px1
+
+        if g1_and_Pg1 is None:
+            g1, Pg1 = problem.g(x1)
             state.gev = state.gev + 1
+        else:
+            g1, Pg1 = g1_and_Pg1
 
-        self.post_single_iteration(problem, state, Px1, y1, Pg1, r1)
+        self.post_single_iteration(problem, state, x1, Px1, y1, g1, Pg1, r1)
 
         if state.gnorm <= problem.gtol: 
             state.converged = True

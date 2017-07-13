@@ -207,7 +207,7 @@ class LBFGS(Optimizer):
         'rescale_diag' : False,
     }
 
-    def move(self, problem, state, Px1, y1, Pg1, r1):
+    def move(self, problem, state, x1, Px1, y1, g1, Pg1, r1):
         addmul = problem.vs.addmul
         dot = problem.vs.dot
 
@@ -229,7 +229,7 @@ class LBFGS(Optimizer):
                 del state.S[0]
                 del state.YS[0]
 
-        Optimizer.move(self, problem, state, Px1, y1, Pg1, r1)
+        Optimizer.move(self, problem, state, x1, Px1, y1, g1, Pg1, r1)
 
         state.D = self.diag_update(problem.vs, state)
 
@@ -280,9 +280,9 @@ class LBFGS(Optimizer):
             print('Y', state.Y)
             print('S', state.S)
             """
-            Px1, y1, Pg1, r1 = self.linesearch(problem, state, z, 1.0)
+            x1_and_Px1, y1, g1_and_Pg1, r1 = self.linesearch(problem, state, z, 1.0)
 
-            if Px1 is None: # failed line search
+            if x1_and_Px1 is None: # failed line search
                 raise StopIteration
 
         except StopIteration:
@@ -294,16 +294,20 @@ class LBFGS(Optimizer):
 
             z = addmul(0, state.Pg, 1 / state.Pgnorm)
 
-            Px1, y1, Pg1, r1 = self.linesearch(problem, state, state.Pg, 1.0 / state.Pgnorm)
+            x1_and_Px1, y1, g1_and_Pg1, r1 = self.linesearch(problem, state, state.Pg, 1.0 / state.Pgnorm)
 
-            if Px1 is None: raise ValueError("Line search failed.")
+            if x1_and_Px1 is None: raise ValueError("Line search failed.")
 
-        if Pg1 is None:
-            Pg1 = problem.g(Px1)
+        x1, Px1 = x1_and_Px1
+
+        if g1_and_Pg1 is None:
+            g1, Pg1 = problem.g(x1)
             state.gev = state.gev + 1
+        else:
+            g1, Pg1 = g1_and_Pg1
 
         state.z = z
-        self.post_single_iteration(problem, state, Px1, y1, Pg1, r1)
+        self.post_single_iteration(problem, state, x1, Px1, y1, g1, Pg1, r1)
 
         if len(state.Y) < self.m and len(state.Y) > 1:
             # started building the hessian, then
