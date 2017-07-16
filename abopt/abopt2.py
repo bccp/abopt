@@ -63,13 +63,21 @@ class Problem(object):
         gtol=0,
         precond=NullPreconditioner,
         ):
+
         self.objective = objective
         self.gradient = gradient
         self.hessian_vector_product = hessian_vector_product
-        self.precond = precond
         self.atol = atol
         self.rtol = rtol
         self.gtol = gtol
+
+        if not isinstance(vs, VectorSpace):
+            raise TypeError("expecting a VectorSpace object for vs, got type(vs) = %s", repr(type(vs)))
+
+        if not isinstance(precond, Preconditioner):
+            raise TypeError("expecting a VPreconditioner object for precond, got type(vs) = %s", repr(type(precond)))
+
+        self.precond = precond
         self.vs = vs
 
     def f(self, x):

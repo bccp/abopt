@@ -38,43 +38,75 @@ class VectorSpace(object):
         i = self.ones_like(c)
         return self.addmul(0, i, c, p)
 
-def addmul(a, b, c, p=1):
-    """ a + b * c ** p, follow the type of b """
-    if p is not 1: c = c ** p
-    c = b * c
-    if a is not 0: c = c + a
-    return c
+    def addmul(self, a, b, c, p=1):
+        """ Defines the addmul operation.
 
-def dot(a, b):
-    """ einsum('i,i->', a, b) """
-    if hasattr(a, 'dot'):
-        return a.dot(b)
-    try:
-        return sum(a * b)
-    except TypeError:
-        return float(a * b)
+            either subclass this method or supply a method in the constructor, __init__
 
-def c2r(a):
+            addmul(a, b, c, p) := a + b * c ** p
+
+            The result shall be a vector like b.
+
+            b is always a vector for this VectorSpace; though be aware
+            that there can be multiple valid Python types defined on the same
+            VectorSpace. For example, particle positions are straight numpy.ndarray,
+            An overdensity field may be a ComplexField or a RealField object.
+        """
+
+        raise NotImplementedError
+
+    def dot(self, a, b):
+        """ defines the inner product operation. 
+
+            dot(a, b) := a @ b
+
+            The result shall be a scalar floating point number.
+
+            a and b are always vector for this VectorSpace, and are guarenteed
+            to be of the same Python type -- if not there is a bug from upstream
+            callers.
+
+        """
+        raise NotImplementedError
+
+class RealVectorSpace(VectorSpace):
+    def addmul(self, a, b, c, p=1):
+        """ a + b * c ** p, follow the type of b """
+        if p is not 1: c = c ** p
+        c = b * c
+        if a is not 0: c = c + a
+        return c
+
+    def dot(self, a, b):
+        """ einsum('i,i->', a, b) """
+        if hasattr(a, 'dot'):
+            return a.dot(b)
+        try:
+            return sum(a * b)
+        except TypeError:
+            return float(a * b)
+
+# helper functions to pack and unpack complex numbers.
+def _c2r(a):
     # complex vector space needs numpy
     import numpy
     if numpy.isscalar(a): return a
     a = numpy.concatenate([numpy.real(a), numpy.imag(a)], axis=0)
     return a
 
-def r2c(a):
+def _r2c(a):
     h = a.shape[0] // 2
     return a[:h] + a[h:] * 1j
 
-def caddmul(a, b, c, p=1):
-    a = c2r(a)
-    b = c2r(b)
-    c = c2r(c)
-    return r2c(addmul(a, b, c, p))
+class ComplexVectorSpace(VectorSpace):
+    def addmul(self, a, b, c, p=1):
+        a = _c2r(a)
+        b = _c2r(b)
+        c = _c2r(c)
+        return _r2c(RealVectorSpace.addmul(self, a, b, c, p))
 
-def cdot(a, b):
-    return dot(c2r(a), c2r(b))
+    def dot(self, a, b):
+        return RealVectorSpace.dot(self, _c2r(a), _c2r(b))
 
-real_vector_space = VectorSpace(addmul=addmul, dot=dot)
-complex_vector_space = VectorSpace(addmul=caddmul, dot=cdot)
-
-__all__ = ['VectorSpace', 'real_vector_space', 'complex_vector_space']
+real_vector_space = RealVectorSpace()
+complex_vector_space = ComplexVectorSpace()
