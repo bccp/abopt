@@ -140,7 +140,7 @@ class Optimizer(object):
     def single_iteration(self, problem, state):
         raise NotImplementedError
 
-    def post_single_iteration(self, problem, state, x1, Px1, y1, Pg1, g1, r1):
+    def post_single_iteration(self, problem, state, x1, Px1, y1, g1, Pg1, r1):
 
         state.converged = check_convergence(state, y1, atol=problem.atol, rtol=problem.rtol)
         state.nit = state.nit + 1

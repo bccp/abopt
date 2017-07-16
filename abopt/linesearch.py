@@ -21,7 +21,7 @@ def backtrace(problem, state, z, rate, c=1e-5, tau=0.5):
     Pxmin = (state.x, state.Px)
     ratemin = rate
     while i < 100:
-        print('rate', rate, 'y', state.y, 'y1', y1, 'x', state.Px, 'x1', Px1, 'z', z)
+        # print('rate', rate, 'y', state.y, 'y1', y1, 'x', state.Px, 'x1', Px1, 'z', z)
 
         # watch out : do not check convergence ; avoid jumping too far to the other side
         # sufficient descent
