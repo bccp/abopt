@@ -7,20 +7,6 @@
 
 from .abopt2 import Optimizer, Problem
 
-class TrustRegionSubProblem(Problem):
-    def __init__(self, vs, g, Hvp, Delta, atol, rtol, gtol):
-        def objective(x):
-            return vs.dot(g, x) + 0.5 * vs.dot(x, Hvp(x))
-
-        def gradient(x):
-            return vs.addmul(g, Hvp(x))
-
-        Problem.__init__(self, objective, gradient, Hvp,
-            atol=atol, gtol=gtol, rtol=rtol,
-        )
-        self.Delta = Delta
-
-
 class TrustRegion(Optimizer):
     problem_defaults = {'eta1' : 0.75,
                         'eta2' : 0.25,
@@ -29,6 +15,25 @@ class TrustRegion(Optimizer):
                         't2' : 2.0,
                         }
 
+
+    def single_iteration(self, problem, state):
+        mul = problem.vs.mul
+
+        z = mul(state.Pg, 1 / state.gnorm)
+
+        def Hvp(v):
+            return problem.Hvp(state.Px, v)
+
+        Px1, y1, Pg1, r1 = self.linesearch(problem, state, z, state.rate * 2)
+
+        if Pg1 is None:
+            Pg1 = problem.g(Px1)
+            state.gev = state.gev + 1
+
+        self.post_single_iteration(problem, state, Px1, y1, Pg1, r1)
+
+        if state.gnorm <= problem.gtol: 
+            state.converged = True
 
 def cg_steihaug(vs, Bvp, g, Delta, rtol, monitor=None):
     """ best effort solving for y = A^{-1} b with cg,
