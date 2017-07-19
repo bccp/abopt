@@ -207,19 +207,22 @@ class LBFGS(Optimizer):
         'rescale_diag' : False,
     }
 
-    def move(self, problem, state, x1, Px1, y1, g1, Pg1, r1):
+    def move(self, problem, state, prop):
+
         addmul = problem.vs.addmul
         dot = problem.vs.dot
+
+        prop.complete(state)
 
         if state.nit == 0:
             state.Y = [] # Delta G
             state.S = [] # Delta S
             state.YS = []
             state.YY = []
-            state.z = Pg1
+            state.z = prop.Pg
         else:
-            state.Y.append(addmul(Pg1, state.Pg, -1))
-            state.S.append(addmul(Px1, state.Px, -1))
+            state.Y.append(addmul(prop.Pg, state.Pg, -1))
+            state.S.append(addmul(prop.Px, state.Px, -1))
             state.YS.append(dot(state.Y[-1], state.S[-1]))
             state.YY.append(dot(state.Y[-1], state.Y[-1]))
 
@@ -229,9 +232,20 @@ class LBFGS(Optimizer):
                 del state.S[0]
                 del state.YS[0]
 
-        Optimizer.move(self, problem, state, x1, Px1, y1, g1, Pg1, r1)
+        Optimizer.move(self, problem, state, prop)
 
         state.D = self.diag_update(problem.vs, state)
+
+        if len(state.Y) < self.m and len(state.Y) > 1:
+            # started building the hessian, then
+            # must have a 'good' approximation before ending
+            # Watch out: if > 0 is not protected we will not
+            # terminated on a converged GD step.
+            state.converged = False
+
+        if state.Pgnorm <= problem.gtol:
+            # but if gnorm is small, converged too
+            state.converged = True
 
     def single_iteration(self, problem, state):
         """ Line by line translation of the LBFGS on wikipedia """
@@ -280,9 +294,9 @@ class LBFGS(Optimizer):
             print('Y', state.Y)
             print('S', state.S)
             """
-            x1_and_Px1, y1, g1_and_Pg1, r1 = self.linesearch(problem, state, z, 1.0)
+            prop, r1 = self.linesearch(problem, state, z, 1.0)
 
-            if x1_and_Px1 is None: # failed line search
+            if prop is None: # failed line search
                 raise StopIteration
 
         except StopIteration:
@@ -294,28 +308,10 @@ class LBFGS(Optimizer):
 
             z = addmul(0, state.Pg, 1 / state.Pgnorm)
 
-            x1_and_Px1, y1, g1_and_Pg1, r1 = self.linesearch(problem, state, state.Pg, 1.0 / state.Pgnorm)
+            prop, r1 = self.linesearch(problem, state, state.Pg, 1.0 / state.Pgnorm)
 
-            if x1_and_Px1 is None: raise ValueError("Line search failed.")
-
-        x1, Px1 = x1_and_Px1
-
-        if g1_and_Pg1 is None:
-            g1, Pg1 = problem.g(x1)
-            state.gev = state.gev + 1
-        else:
-            g1, Pg1 = g1_and_Pg1
+            if prop is None: raise ValueError("Line search failed.")
 
         state.z = z
-        self.post_single_iteration(problem, state, x1, Px1, y1, g1, Pg1, r1)
 
-        if len(state.Y) < self.m and len(state.Y) > 1:
-            # started building the hessian, then
-            # must have a 'good' approximation before ending
-            # Watch out: if > 0 is not protected we will not
-            # terminated on a converged GD step.
-            state.converged = False
-
-        if state.Pgnorm <= problem.gtol:
-            # but if gnorm is small, converged too
-            state.converged = True
+        return prop

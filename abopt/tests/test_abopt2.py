@@ -49,10 +49,9 @@ def test_abopt_gd_minpack():
     assert_allclose(s.x, 0.5, rtol=1e-4)
 
 def test_abopt_gd_exact():
-    gd = GradientDescent(linesearch=exact)
+    gd = GradientDescent(linesearch=exact, maxiter=10)
     
-    s = minimize(gd, quad, quad_der, x0)
-    print(s)
+    s = minimize(gd, quad, quad_der, x0, monitor=print)
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
 

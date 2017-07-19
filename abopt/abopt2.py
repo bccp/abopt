@@ -34,6 +34,51 @@ class State(object):
         d = dict([(k, self[k]) for k in ['nit', 'fev', 'gev', 'dy', 'converged', 'y', 'xnorm', 'gnorm']])
         return str(d)
 
+class Proposal(object):
+    def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None):
+        """ A proposal is a collection of variable and gradients.
+
+            We will generate the variables if they are not provided.
+
+        """
+        if x is None and Px is not None:
+            x = problem.Px2x(Px)
+
+        if Pg is None and g is not None:
+            Pg = problem.g2Pg(g)
+
+        self.y = y
+        self.x = x
+        self.Px = Px
+        self.g = g
+        self.Pg = Pg
+        self.problem = problem
+
+    def complete(self, state):
+        self.complete_y(state)
+        self.complete_g(state)
+        return self
+
+    def complete_y(self, state):
+        problem = self.problem
+
+        if self.y is None:
+            self.y = problem.f(self.x)
+            state.fev = state.fev + 1
+        return self
+
+    def complete_g(self, state):
+        problem = self.problem
+
+        # fill missing values in prop
+        if self.g is None:
+            self.g = problem.g(self.x)
+            state.gev = state.gev + 1
+
+        if self.Pg is None:
+            self.Pg = problem.g2Pg(self.g)
+        return self
+
 class Preconditioner(object):
     """ A preconditioner has three functions:
 
@@ -80,13 +125,19 @@ class Problem(object):
         self.precond = precond
         self.vs = vs
 
+    def Px2x(self, Px):
+        return self.precond.vQp(Px)
+
+    def g2Pg(self, g):
+        return self.precond.Qvp(g)
+
     def f(self, x):
         return self.objective(x)
 
     def g(self, x):
-        """ This returns the gradient for the original variable and the gradient for the preconditioned variable """
+        """ This returns the gradient for the original variable"""
         g = self.gradient(x)
-        return g, self.precond.Qvp(g)
+        return g
 
     def Hvp(self, x, v):
         """ This returns the hessian product of the preconditioned variable against
@@ -106,67 +157,72 @@ class Optimizer(object):
         self.__dict__.update(kwargs)
 
     def terminated(self, problem, state):
+        if state.converged : return True
+
         if state.dy is None: return False
 
         if state.nit > self.maxiter: return True
 
-        if state.converged : return True
-
         return False
 
-    def move(self, problem, state, x1, Px1, y1, g1, Pg1, r1):
+    def move(self, problem, state, prop):
         dot = problem.vs.dot
 
-        if state.nit > 0:
-            state.dy = y1 - state.y
+        prop.complete(state) # filling in all missing values
 
-        state.y_.append(y1)
-        if len(state.y_) > 2:
+        if state.nit > 0:
+            state.dy = prop.y - state.y
+            state.converged = check_convergence(state, prop.y, atol=problem.atol, rtol=problem.rtol)
+        else:
+            state.converged = False
+
+        state.y_.append(prop.y)
+        if len(state.y_) > 2: # only store a short history
             del state.y_[0]
-        state.y = y1
-        state.Px = Px1
-        state.rate = r1
-        state.Pxnorm = dot(Px1, Px1) ** 0.5
-        state.Pg = Pg1
-        state.Pgnorm = dot(Pg1, Pg1) ** 0.5
+
+        state.y = prop.y
+        state.Px = prop.Px
+        state.Pg = prop.Pg
 
         # now move the un-preconditioned variables
-        state.x = x1
-        state.g = g1
+        state.x = prop.x
+        state.g = prop.g
 
-        if problem.precond is not NullPrecondition:
-            state.xnorm = dot(state.x, state.x) ** 0.5
-            state.gnorm = dot(state.g, state.g) ** 0.5
-        else:
-            state.xnorm = state.Pxnorm
-            state.gnorm = state.Pgnorm
+        state.Pxnorm = dot(state.Px, state.Px) ** 0.5
+        state.Pgnorm = dot(state.Pg, state.Pg) ** 0.5
+        state.xnorm = dot(state.x, state.x) ** 0.5
+        state.gnorm = dot(state.g, state.g) ** 0.5
+
+        if state.gnorm <= problem.gtol:
+            state.converged = True
 
     def single_iteration(self, problem, state):
+        # it shall return a Proposal object
         raise NotImplementedError
-
-    def post_single_iteration(self, problem, state, x1, Px1, y1, g1, Pg1, r1):
-
-        state.converged = check_convergence(state, y1, atol=problem.atol, rtol=problem.rtol)
-        state.nit = state.nit + 1
-        self.move(problem, state, x1, Px1, y1, g1, Pg1, r1)
 
     def minimize(optimizer, problem, x0, monitor=None):
         state = State()
 
         Px0 = problem.precond.Pvp(x0)
-
         y0 = problem.f(x0)
-        g0, Pg0 = problem.g(x0)
+        g0 = problem.g(x0)
         state.fev = 1
         state.gev = 1
 
-        optimizer.move(problem, state, x0, Px0, y0, g0, Pg0, 1.0)
+        prop = Proposal(problem, y=y0, x=x0, Px=Px0, g=g0)
+
+        optimizer.move(problem, state, prop)
 
         if monitor is not None:
             monitor(state)
 
         while not optimizer.terminated(problem, state):
-            optimizer.single_iteration(problem, state)
+
+            prop = optimizer.single_iteration(problem, state)
+
+            optimizer.move(problem, state, prop)
+
+            state.nit = state.nit + 1
 
             if monitor is not None:
                 monitor(state)
@@ -184,25 +240,27 @@ class GradientDescent(Optimizer):
             'linesearch' : backtrace
     }
 
+    def move(self, problem, state, prop):
+        if hasattr(prop, "rate"):
+            state.rate = prop.rate
+        else:
+            state.rate = 1.0
+
+        Optimizer.move(self, problem, state, prop)
+
+        if state.Pgnorm == 0:
+            # cannot move if Pgnorm is 0
+            self.converged = True
+
     def single_iteration(self, problem, state):
         mul = problem.vs.mul
 
-        z = mul(state.Pg, 1 / state.gnorm)
+        z = mul(state.Pg, 1 / state.Pgnorm)
 
-        x1_and_Px1, y1, g1_and_Pg1, r1 = self.linesearch(problem, state, z, state.rate * 2)
+        prop, r1 = self.linesearch(problem, state, z, state.rate * 2)
 
-        x1, Px1 = x1_and_Px1
-
-        if g1_and_Pg1 is None:
-            g1, Pg1 = problem.g(x1)
-            state.gev = state.gev + 1
-        else:
-            g1, Pg1 = g1_and_Pg1
-
-        self.post_single_iteration(problem, state, x1, Px1, y1, g1, Pg1, r1)
-
-        if state.gnorm <= problem.gtol: 
-            state.converged = True
+        prop.rate = r1
+        return prop
 
 
 def check_convergence(state, y1, rtol, atol):
