@@ -207,6 +207,18 @@ class LBFGS(Optimizer):
         'rescale_diag' : False,
     }
 
+    def assess(self, problem, state, prop):
+        if state.nit > 0:
+            state.dy = prop.y - state.y
+            converged = problem.check_convergence(state.y, prop.y)
+        else:
+            converged = False
+
+        if state.gnorm <= problem.gtol:
+            converged = True
+
+        return converged
+
     def move(self, problem, state, prop):
 
         addmul = problem.vs.addmul

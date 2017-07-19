@@ -29,12 +29,13 @@ class TrustRegion(Optimizer):
 
         Px1 = addmul(state.Px, z, 1)
         x1 = problem.precond.vQp(Px1)
+        y1 = problem.f(x1)
 
-        fdiff = problem.f(x1) - state.f
+        fdiff = y1 - state.y
 
         rho = fdiff / mdiff
 
-        interior = dot(state.s, state.s) ** 0.5 < 0.9 * state.radius
+        interior = dot(z, z) ** 0.5 < 0.9 * state.radius
 
         if rho < self.eta2:
             radius1 = self.t1 * state.radius
@@ -44,14 +45,19 @@ class TrustRegion(Optimizer):
             radius1 = state.radius
 
         if rho > self.eta3:
-            accept
+            prop = Proposal(problem, Px=Px1, x=x1, y=y1)
         else:
-            decline
+            prop = Proposal(problem, Px=Px1, x=x1, y=y1)
 
-        self.post_single_iteration(problem, state, x1, Px1, y1, g1, Pg1, r1)
+        prop.radius = radius1
 
-        if state.gnorm <= problem.gtol: 
-            state.converged = True
+    def move(self, problem, state, prop):
+        if state.nit == 0:
+            state.radius = self.maxradius
+        else:
+            state.radius = prop.radius
+
+        Optimizer.move(self, problem, state, prop)
 
 def cg_steihaug(vs, Avp, z, Delta, rtol, monitor=None):
     """ best effort solving for y = A^{-1} g with cg,

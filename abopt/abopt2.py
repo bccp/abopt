@@ -55,6 +55,9 @@ class Proposal(object):
         self.problem = problem
 
     def complete(self, state):
+        dot = self.problem.vs.dot
+        self.xnorm = dot(self.x, self.x) ** 0.5
+        self.Pxnorm = dot(self.Px, self.Px) ** 0.5
         self.complete_y(state)
         self.complete_g(state)
         return self
@@ -68,6 +71,7 @@ class Proposal(object):
         return self
 
     def complete_g(self, state):
+        dot = self.problem.vs.dot
         problem = self.problem
 
         # fill missing values in prop
@@ -77,6 +81,10 @@ class Proposal(object):
 
         if self.Pg is None:
             self.Pg = problem.g2Pg(self.g)
+
+        self.Pgnorm = dot(self.Pg, self.Pg) ** 0.5
+        self.gnorm = dot(self.g, self.g) ** 0.5
+
         return self
 
 class Preconditioner(object):
@@ -146,6 +154,16 @@ class Problem(object):
         vQ = self.precond.vQp(v)
         return self.precond.Qvp(self.hessian_vector_product(x, vQ))
 
+    def check_convergence(self, y0, y1):
+        valmax = max(abs(y0), abs(y1))
+        thresh = self.rtol * max(valmax, 1.0) + self.atol
+
+        if y1 > y0 : return False
+        if abs(y0 - y1) < thresh: return True
+
+        return False
+
+
 class Optimizer(object):
     problem_defaults = {}
 
@@ -166,39 +184,37 @@ class Optimizer(object):
         return False
 
     def move(self, problem, state, prop):
-        dot = problem.vs.dot
-
-        prop.complete(state) # filling in all missing values
-
-        if state.nit > 0:
-            state.dy = prop.y - state.y
-            state.converged = check_convergence(state, prop.y, atol=problem.atol, rtol=problem.rtol)
-        else:
-            state.converged = False
 
         state.y_.append(prop.y)
+
         if len(state.y_) > 2: # only store a short history
             del state.y_[0]
 
         state.y = prop.y
+
+        state.x = prop.x
+        state.g = prop.g
         state.Px = prop.Px
         state.Pg = prop.Pg
 
-        # now move the un-preconditioned variables
-        state.x = prop.x
-        state.g = prop.g
+        state.xnorm = prop.xnorm
+        state.gnorm = prop.gnorm
+        state.Pxnorm = prop.Pxnorm
+        state.Pgnorm = prop.Pgnorm
 
-        state.Pxnorm = dot(state.Px, state.Px) ** 0.5
-        state.Pgnorm = dot(state.Pg, state.Pg) ** 0.5
-        state.xnorm = dot(state.x, state.x) ** 0.5
-        state.gnorm = dot(state.g, state.g) ** 0.5
-
+    def assess(self, problem, state, prop):
+        raise NotImplementedError
+        # here is an example
         if state.gnorm <= problem.gtol:
-            state.converged = True
+            converged = True
+
+        return converged
 
     def single_iteration(self, problem, state):
         # it shall return a Proposal object
         raise NotImplementedError
+        # here is an example that doesn't yield a new solution
+        return Proposal(Px=state.Px)
 
     def minimize(optimizer, problem, x0, monitor=None):
         state = State()
@@ -210,6 +226,7 @@ class Optimizer(object):
         state.gev = 1
 
         prop = Proposal(problem, y=y0, x=x0, Px=Px0, g=g0)
+        prop.complete(state) # filling in all missing values
 
         optimizer.move(problem, state, prop)
 
@@ -219,6 +236,10 @@ class Optimizer(object):
         while not optimizer.terminated(problem, state):
 
             prop = optimizer.single_iteration(problem, state)
+
+            prop.complete(state) # filling in all missing values
+
+            state.converged = optimizer.assess(problem, state, prop)
 
             optimizer.move(problem, state, prop)
 
@@ -240,17 +261,29 @@ class GradientDescent(Optimizer):
             'linesearch' : backtrace
     }
 
-    def move(self, problem, state, prop):
-        if hasattr(prop, "rate"):
-            state.rate = prop.rate
+    def assess(self, problem, state, prop):
+        if state.nit > 0:
+            state.dy = prop.y - state.y
+            converged = problem.check_convergence(state.y, prop.y)
         else:
+            converged = False
+
+        if prop.Pgnorm == 0:
+            # cannot move if Pgnorm is 0
+            converged = True
+
+        if prop.gnorm <= problem.gtol:
+            converged = True
+
+        return converged
+
+    def move(self, problem, state, prop):
+        if state.nit == 0:
             state.rate = 1.0
+        else:
+            state.rate = prop.rate
 
         Optimizer.move(self, problem, state, prop)
-
-        if state.Pgnorm == 0:
-            # cannot move if Pgnorm is 0
-            self.converged = True
 
     def single_iteration(self, problem, state):
         mul = problem.vs.mul
@@ -262,15 +295,6 @@ class GradientDescent(Optimizer):
         prop.rate = r1
         return prop
 
-
-def check_convergence(state, y1, rtol, atol):
-    valmax = max(abs(state.y), abs(y1))
-    thresh = rtol * max(valmax, 1.0) + atol
-
-    if y1 > state.y : return False
-    if abs(state.y - y1) < thresh: return True
-
-    return False
 
 from .lbfgs import LBFGS
 
