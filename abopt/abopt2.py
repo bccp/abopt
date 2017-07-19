@@ -84,10 +84,14 @@ class Problem(object):
         return self.objective(x)
 
     def g(self, x):
+        """ This returns the gradient for the original variable and the gradient for the preconditioned variable """
         g = self.gradient(x)
         return g, self.precond.Qvp(g)
 
     def Hvp(self, x, v):
+        """ This returns the hessian product of the preconditioned variable against
+            a vector of the preconditioned variable.
+        """
         vQ = self.precond.vQp(v)
         return self.precond.Qvp(self.hessian_vector_product(x, vQ))
 

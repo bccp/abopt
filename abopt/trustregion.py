@@ -8,9 +8,9 @@
 from .abopt2 import Optimizer, Problem
 
 class TrustRegion(Optimizer):
-    problem_defaults = {'eta1' : 0.75,
+    problem_defaults = {'eta1' : 0.1,
                         'eta2' : 0.25,
-                        'eta3' : 0.1,
+                        'eta3' : 0.75,
                         't1' : 0.25,
                         't2' : 2.0,
                         }
@@ -19,24 +19,42 @@ class TrustRegion(Optimizer):
     def single_iteration(self, problem, state):
         mul = problem.vs.mul
 
-        z = mul(state.Pg, 1 / state.gnorm)
-
         def Hvp(v):
-            return problem.Hvp(state.Px, v)
+            return problem.Hvp(state.x, v)
 
-        Px1, y1, Pg1, r1 = self.linesearch(problem, state, z, state.rate * 2)
+        z = cg_steihaug(problem.vs, Hvp, state.Pg, state.radius, rtol)
 
-        if Pg1 is None:
-            Pg1 = problem.g(Px1)
-            state.gev = state.gev + 1
+        mdiff = 0.5 * dot(z, Hvp(z)) + dot(g, z)
+        assert mdiff < 0
 
-        self.post_single_iteration(problem, state, Px1, y1, Pg1, r1)
+        Px1 = addmul(state.Px, z, 1)
+        x1 = problem.precond.vQp(Px1)
+
+        fdiff = problem.f(x1) - state.f
+
+        rho = fdiff / mdiff
+
+        interior = dot(state.s, state.s) ** 0.5 < 0.9 * state.radius
+
+        if rho < self.eta2:
+            radius1 = self.t1 * state.radius
+        elif rho > self.eta3 and interior:
+            radius1 = min(state.radius * self.t2, self.max_radius)
+        else:
+            radius1 = state.radius
+
+        if rho > self.eta3:
+            accept
+        else:
+            decline
+
+        self.post_single_iteration(problem, state, x1, Px1, y1, g1, Pg1, r1)
 
         if state.gnorm <= problem.gtol: 
             state.converged = True
 
-def cg_steihaug(vs, Bvp, g, Delta, rtol, monitor=None):
-    """ best effort solving for y = A^{-1} b with cg,
+def cg_steihaug(vs, Avp, z, Delta, rtol, monitor=None):
+    """ best effort solving for y = A^{-1} g with cg,
         given by trust-region constraint.
 
         ported from Jeff Regier's
@@ -61,7 +79,7 @@ def cg_steihaug(vs, Bvp, g, Delta, rtol, monitor=None):
     rho0 = rho_init
 
     while True:
-        Bd0 = Bvp(d0)
+        Bd0 = Avp(d0)
         dBd0 = dot(d0, Bd0)
 
         alpha = rho0 / dBd0
@@ -102,4 +120,4 @@ def cg_steihaug(vs, Bvp, g, Delta, rtol, monitor=None):
 
         j = j + 1
 
-    return 
+    return z0
