@@ -154,11 +154,20 @@ class Problem(object):
         vQ = self.precond.vQp(v)
         return self.precond.Qvp(self.hessian_vector_product(x, vQ))
 
-    def check_convergence(self, y0, y1):
-        valmax = max(abs(y0), abs(y1))
-        thresh = self.rtol * max(valmax, 1.0) + self.atol
+    def get_tol(self, y):
+        thresh = self.rtol * abs(y) + self.atol
+        return thresh
 
-        if y1 > y0 : return False
+    def check_convergence(self, y0, y1):
+        if y1 > y0 :
+            return False
+            # probably shall do this
+            # raise RuntimeError("new proposal is larger than previous value")
+
+        valmax = max(abs(y0), abs(y1))
+
+        thresh = self.get_tol(valmax)
+
         if abs(y0 - y1) < thresh: return True
 
         return False

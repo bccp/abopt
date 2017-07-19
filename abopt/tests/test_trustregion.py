@@ -1,5 +1,10 @@
-from abopt.trustregion import cg_steihaug
+from abopt.abopt2 import Problem
+from abopt.trustregion import cg_steihaug, TrustRegionCG
 from abopt.vectorspace import real_vector_space
+import numpy
+from numpy.testing import assert_allclose
+from scipy.optimize import rosen, rosen_der, rosen_hess_prod
+
 
 def test_cg_steigaug():
     import numpy
@@ -11,8 +16,15 @@ def test_cg_steigaug():
     def Bvp(v):
         return Hessian.dot(v)
 
-    def monitor(it, rho0, r0, d0, z0):
-        print(it, rho0, r0, d0, z0)
+    z = cg_steihaug(real_vector_space, Bvp, g, Delta, rtol, monitor=print)
 
-    cg_steihaug(real_vector_space, Bvp, g, Delta, rtol, monitor=monitor)
+    assert_allclose(Hessian.dot(z), -g)
+
+def test_tr():
+    trcg = TrustRegionCG(maxradius=0.01)
+    problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod)
+
+    x0 = numpy.zeros(2)
+    trcg.minimize(problem, x0, monitor=print)
+
 
