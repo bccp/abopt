@@ -41,15 +41,16 @@ def test_tr_precond():
 
 def test_gaussnewton():
     trcg = TrustRegionCG(maxradius=10., maxiter=10)
-    J = numpy.diag([1, 2, 3, 4e2])
+    JT = numpy.diag([1, 2, 3, 4e2])
     def f(x):
-        return J.dot(x)
+        return JT.dot(x)
 
+    # watchout JT is differently indexed due to the poor name choice in vmad.
     def vjp(x, v):
-        return J.dot(v)
+        return JT.dot(v)
 
     def jvp(x, v):
-        return v.dot(J)
+        return v.dot(JT)
 
     def objective(x):
         y = f(x)
@@ -59,10 +60,10 @@ def test_gaussnewton():
         y = f(x)
         return vjp(x, y - 1.0) * 2
 
-    def JTJvp(x, v):
+    def jTjvp(x, v):
         return jvp(x, vjp(x, v))
 
-    problem = Problem(objective=objective, gradient=gradient, hessian_vector_product=JTJvp, cg_rtol=1e-2)
+    problem = Problem(objective=objective, gradient=gradient, hessian_vector_product=jTjvp, cg_rtol=1e-2)
 
     x0 = numpy.zeros(4)
     r = trcg.minimize(problem, x0, monitor=print)
