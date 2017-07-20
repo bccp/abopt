@@ -1,4 +1,4 @@
-from abopt.abopt2 import Problem
+from abopt.abopt2 import Problem, Preconditioner
 from abopt.trustregion import cg_steihaug, TrustRegionCG
 from abopt.vectorspace import real_vector_space
 import numpy
@@ -21,10 +21,17 @@ def test_cg_steigaug():
     assert_allclose(Hessian.dot(z), -g)
 
 def test_tr():
-    trcg = TrustRegionCG(maxradius=0.01)
+    trcg = TrustRegionCG(maxradius=10.)
     problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod)
 
     x0 = numpy.zeros(2)
     trcg.minimize(problem, x0, monitor=print)
 
+def test_tr_precond():
+    trcg = TrustRegionCG(maxradius=10., maxiter=100)
+    precond = Preconditioner(Pvp=lambda x: 2 * x, vQp=lambda x: 0.5 * x, Qvp=lambda x: 0.5 * x)
+    problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod, precond=precond)
+
+    x0 = numpy.zeros(2)
+    trcg.minimize(problem, x0, monitor=print)
 

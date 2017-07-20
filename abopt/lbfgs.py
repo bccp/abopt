@@ -208,16 +208,23 @@ class LBFGS(Optimizer):
     }
 
     def assess(self, problem, state, prop):
+        if len(state.Y) < self.m and len(state.Y) > 1:
+            # started building the hessian, then
+            # must have a 'good' approximation before ending
+            # Watch out: if > 0 is not protected we will not
+            # terminated on a converged GD step.
+            return
+
         if state.nit > 0:
-            state.dy = prop.y - state.y
-            converged = problem.check_convergence(state.y, prop.y)
-        else:
-            converged = False
+            if problem.check_convergence(state.y, prop.y):
+                return True, "Objective stopped improving"
 
-        if state.gnorm <= problem.gtol:
-            converged = True
+        if prop.gnorm <= problem.gtol:
+            return True, "Gradient is sufficiently small"
 
-        return converged
+        if prop.Pgnorm == 0:
+            return False, "Preconditioned gradient vanishes"
+
 
     def move(self, problem, state, prop):
 
@@ -247,17 +254,6 @@ class LBFGS(Optimizer):
         Optimizer.move(self, problem, state, prop)
 
         state.D = self.diag_update(problem.vs, state)
-
-        if len(state.Y) < self.m and len(state.Y) > 1:
-            # started building the hessian, then
-            # must have a 'good' approximation before ending
-            # Watch out: if > 0 is not protected we will not
-            # terminated on a converged GD step.
-            state.converged = False
-
-        if state.Pgnorm <= problem.gtol:
-            # but if gnorm is small, converged too
-            state.converged = True
 
     def single_iteration(self, problem, state):
         """ Line by line translation of the LBFGS on wikipedia """

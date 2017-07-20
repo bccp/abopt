@@ -13,6 +13,12 @@ from .vectorspace import VectorSpace
 from .vectorspace import real_vector_space
 from .vectorspace import complex_vector_space
 
+class Assessment(object):
+    def __init__(self, converged, message):
+        self.converged = converged
+        self.message = message
+    def __repr__(self): return repr(self.message)
+
 def NullPrecondition(x): return x
 
 def NotImplementedHvp(x):
@@ -24,6 +30,7 @@ class State(object):
         self.fev = 0
         self.gev = 0
         self.dy = None
+        self.assessment = None
         self.converged = False
         self.y_ = []
 
@@ -31,8 +38,8 @@ class State(object):
         return getattr(self, key)
 
     def __repr__(self):
-        d = dict([(k, self[k]) for k in ['nit', 'fev', 'gev', 'dy', 'converged', 'y', 'xnorm', 'gnorm']])
-        return str(d)
+        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'dy', 'converged', 'assessment', 'y', 'xnorm', 'gnorm']]
+        return repr(d)
 
 class Proposal(object):
     def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None):
@@ -184,15 +191,16 @@ class Optimizer(object):
         self.__dict__.update(kwargs)
 
     def terminated(self, problem, state):
-        if state.converged : return True
-
-        if state.dy is None: return False
-
+        if state.assessment is not None: return True
         if state.nit > self.maxiter: return True
+        if state.dy is None: return False
 
         return False
 
     def move(self, problem, state, prop):
+
+        if state.nit > 0:
+            state.dy = prop.y - state.y
 
         state.y_.append(prop.y)
 
@@ -214,10 +222,10 @@ class Optimizer(object):
     def assess(self, problem, state, prop):
         raise NotImplementedError
         # here is an example
-        if state.gnorm <= problem.gtol:
-            converged = True
+        if prop.gnorm <= problem.gtol:
+            return True, "Gradient less than norm"
 
-        return converged
+        return None # can be omitted
 
     def single_iteration(self, problem, state):
         # it shall return a Proposal object
@@ -248,7 +256,13 @@ class Optimizer(object):
 
             prop.complete(state) # filling in all missing values
 
-            state.converged = optimizer.assess(problem, state, prop)
+            assessment = optimizer.assess(problem, state, prop)
+            if assessment is None:
+                state.assessment = None
+                state.converged = False
+            else:
+                state.assessment = Assessment(*assessment)
+                state.converged = state.assessment.converged
 
             optimizer.move(problem, state, prop)
 
@@ -272,19 +286,15 @@ class GradientDescent(Optimizer):
 
     def assess(self, problem, state, prop):
         if state.nit > 0:
-            state.dy = prop.y - state.y
-            converged = problem.check_convergence(state.y, prop.y)
-        else:
-            converged = False
+            if problem.check_convergence(state.y, prop.y):
+                return True, "Objective stopped improving"
+
+        if prop.gnorm <= problem.gtol:
+            return True, "Gradient is sufficiently small"
 
         if prop.Pgnorm == 0:
             # cannot move if Pgnorm is 0
-            converged = True
-
-        if prop.gnorm <= problem.gtol:
-            converged = True
-
-        return converged
+            return False, "Preconditioned Gradient vanishes"
 
     def move(self, problem, state, prop):
         if state.nit == 0:

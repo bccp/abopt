@@ -78,7 +78,7 @@ def scalar_search_wolfe2(phi, derphi=None, phi0=None,
 
     i = 0
     while alpha0 < amax:
-        print('alpha0', alpha0)
+        #print('alpha0', alpha0)
         if alpha1 == 0:
             break
         if (phi_a1 > phi0 + c1 * alpha1 * derphi0) or \
@@ -131,7 +131,7 @@ def _zoom(a_lo, a_hi, phi_lo, phi_hi, derphi_lo,
     Part of the optimization algorithm in `scalar_search_wolfe2`.
     """
 
-    print('_zoom', a_lo, a_hi, phi_lo, phi_hi)
+    #print('_zoom', a_lo, a_hi, phi_lo, phi_hi)
     i = 0
     delta1 = 0.2  # cubic interpolant check
     delta2 = 0.1  # quadratic interpolant check
@@ -195,7 +195,7 @@ def _zoom(a_lo, a_hi, phi_lo, phi_hi, derphi_lo,
             a_lo = a_j
             phi_lo = phi_aj
             derphi_lo = derphi_aj
-        print(a_j, phi_aj, a_lo, a_hi, phi0)
+        #print(a_j, phi_aj, a_lo, a_hi, phi0)
         i += 1
         if (i > maxiter):
             # Failed to find a conforming step size

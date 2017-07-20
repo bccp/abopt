@@ -52,7 +52,7 @@ class TrustRegionCG(Optimizer):
         else:
             radius1 = state.radius
 
-        if rho > self.eta3:
+        if rho > self.eta1:
             prop = Proposal(problem, Px=Px1, x=x1, y=y1)
         else:
             prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y)
@@ -63,10 +63,10 @@ class TrustRegionCG(Optimizer):
     def assess(self, problem, state, prop):
         print("assess radius", state.radius, 'tol', problem.get_tol(state.y), 'gnorm', prop.gnorm, 'gtol', problem.gtol)
         if prop.radius <= problem.get_tol(state.y):
-            return True
+            return Assessment(True, "Trust region is sufficiently small")
 
         if prop.gnorm <= problem.gtol:
-            return True
+            return Assessment(True, "Gradient is sufficiently small")
 
     def move(self, problem, state, prop):
         if state.nit == 0:
@@ -74,6 +74,7 @@ class TrustRegionCG(Optimizer):
         else:
             state.radius = prop.radius
 
+        print('move', prop.y)
         Optimizer.move(self, problem, state, prop)
 
 def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None):
