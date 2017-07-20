@@ -8,6 +8,14 @@
     A ``Problem`` is ``Preconditioned``, the ``Optimizer`` only operates on preconditioned variables.
     An ``Optimizer`` implements a minimization policy (algorithm)
 
+    Problem parameters and Optimizer parameters
+    -------------------------------------------
+    Problem parameters are affected by the scale of the problem.
+    Optimizer parameters only controls the behavior of the optimizer.
+
+    An easy way to see this is that if we redefine the vector variable by a factor of 10,
+    if a parameters shall be adjusted, then it belongs to the problem;
+    if it shall not be adjusted, then it belongs to the optimizer.
 """
 from .vectorspace import VectorSpace
 from .vectorspace import real_vector_space
@@ -19,16 +27,12 @@ class Assessment(object):
         self.message = message
     def __repr__(self): return repr(self.message)
 
-def NullPrecondition(x): return x
-
-def NotImplementedHvp(x):
-    raise NotImplementedError("HessianVectorProduct is not implemented. Use a method that does not require it")
-
 class State(object):
     def __init__(self):
         self.nit = 0
         self.fev = 0
         self.gev = 0
+        self.hev = 0
         self.dy = None
         self.assessment = None
         self.converged = False
@@ -38,7 +42,7 @@ class State(object):
         return getattr(self, key)
 
     def __repr__(self):
-        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'dy', 'converged', 'assessment', 'y', 'xnorm', 'gnorm']]
+        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'gnorm', 'converged', 'assessment', ]]
         return repr(d)
 
 class Proposal(object):
@@ -111,25 +115,23 @@ class Preconditioner(object):
         self.Qvp = Qvp
         self.vQp = vQp
 
-NullPreconditioner = Preconditioner(lambda x:x, lambda x:x, lambda x:x)
-
 class Problem(object):
+    """ Defines a problem.
 
+        additional problem arguments are passed in with kwargs.
+
+    """
     def __init__(self, objective, gradient,
-        hessian_vector_product=NotImplementedHvp,
+        hessian_vector_product=None,
         vs=real_vector_space,
         atol=1e-7,
         rtol=1e-7,
         gtol=0,
-        precond=NullPreconditioner,
+        precond=None,
+        **kwargs
         ):
-
-        self.objective = objective
-        self.gradient = gradient
-        self.hessian_vector_product = hessian_vector_product
-        self.atol = atol
-        self.rtol = rtol
-        self.gtol = gtol
+        if precond is None:
+            precond = Preconditioner(lambda x:x, lambda x:x, lambda x:x)
 
         if not isinstance(vs, VectorSpace):
             raise TypeError("expecting a VectorSpace object for vs, got type(vs) = %s", repr(type(vs)))
@@ -139,6 +141,15 @@ class Problem(object):
 
         self.precond = precond
         self.vs = vs
+
+        self.objective = objective
+        self.gradient = gradient
+        self.hessian_vector_product = hessian_vector_product
+        self.atol = atol
+        self.rtol = rtol
+        self.gtol = gtol
+
+        self.__dict__.update(kwargs)
 
     def Px2x(self, Px):
         return self.precond.vQp(Px)
@@ -154,10 +165,12 @@ class Problem(object):
         g = self.gradient(x)
         return g
 
-    def Hvp(self, x, v):
+    def PHvp(self, x, v):
         """ This returns the hessian product of the preconditioned variable against
             a vector of the preconditioned variable.
         """
+        if self.hessian_vector_product is None:
+            raise ValueError("hessian vector product is not defined")
         vQ = self.precond.vQp(v)
         return self.precond.Qvp(self.hessian_vector_product(x, vQ))
 
@@ -181,13 +194,12 @@ class Problem(object):
 
 
 class Optimizer(object):
+    optimizer_defaults = {}
     problem_defaults = {}
 
     def __init__(self, **kwargs):
-        self.maxiter = 1000
-
         # this updates the attributes
-        self.__dict__.update(type(self).problem_defaults)
+        self.__dict__.update(type(self).optimizer_defaults)
         self.__dict__.update(kwargs)
 
     def terminated(self, problem, state):
@@ -234,39 +246,44 @@ class Optimizer(object):
         return Proposal(Px=state.Px)
 
     def minimize(optimizer, problem, x0, monitor=None):
+        # first make sure the default problem parameters are set
+        # FIXME: this is ugly but otherwise either
+        # - problem must be defined after optimizer, or
+        # - problem.get must take optimizer as argument, or
+        # - we need to add 'config' object that is built from problem and optimizer
+        for key, value in optimizer.problem_defaults.items():
+            problem.__dict__.setdefault(key, value)
+
         state = State()
 
-        Px0 = problem.precond.Pvp(x0)
-        y0 = problem.f(x0)
-        g0 = problem.g(x0)
-        state.fev = 1
-        state.gev = 1
+        Px0 = problem.precond.Pvp(x0) # the only place we convert from x to Px
 
-        prop = Proposal(problem, y=y0, x=x0, Px=Px0, g=g0)
-        prop.complete(state) # filling in all missing values
+        # make a full proposal with x and g
+        prop = Proposal(problem, x=x0, Px=Px0).complete(state)
 
         optimizer.move(problem, state, prop)
+        state.nit = state.nit + 1
 
         if monitor is not None:
             monitor(state)
 
         while not optimizer.terminated(problem, state):
 
-            prop = optimizer.single_iteration(problem, state)
+            prop = optimizer.single_iteration(problem, state).complete(state)
 
-            prop.complete(state) # filling in all missing values
-
+            # assessment must be before the move, for it needs to
+            # see dy
             assessment = optimizer.assess(problem, state, prop)
+
+            optimizer.move(problem, state, prop)
+            state.nit = state.nit + 1
+
             if assessment is None:
                 state.assessment = None
                 state.converged = False
             else:
                 state.assessment = Assessment(*assessment)
                 state.converged = state.assessment.converged
-
-            optimizer.move(problem, state, prop)
-
-            state.nit = state.nit + 1
 
             if monitor is not None:
                 monitor(state)
@@ -280,8 +297,9 @@ class TrustRegionOptimizer(Optimizer):
 class GradientDescent(Optimizer):
     from .linesearch import backtrace
 
-    problem_defaults = {
-            'linesearch' : backtrace
+    optimizer_defaults = {
+        'maxiter' : 1000,
+        'linesearch' : backtrace,
     }
 
     def assess(self, problem, state, prop):
@@ -317,8 +335,8 @@ class GradientDescent(Optimizer):
 
 from .lbfgs import LBFGS
 
-def minimize(optimizer, objective, gradient, x0, hessian_vector_product=NotImplementedHvp,
-    monitor=None, vs=real_vector_space, precond=NullPreconditioner):
+def minimize(optimizer, objective, gradient, x0, hessian_vector_product=None,
+    monitor=None, vs=real_vector_space, precond=None):
 
     problem = Problem(objective, gradient, hessian_vector_product=hessian_vector_product, vs=vs, precond=precond)
 

@@ -200,7 +200,8 @@ def post_scaled_inverse_dfp(vs, state):
 class LBFGS(Optimizer):
     from .linesearch import backtrace
 
-    problem_defaults = {
+    optimizer_defaults = {
+        'maxiter' : 1000,
         'm' : 6,
         'linesearch' : backtrace,
         'diag_update' : post_scaled_direct_bfgs,

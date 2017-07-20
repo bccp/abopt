@@ -8,27 +8,33 @@
 from .abopt2 import Optimizer, Problem, Proposal
 
 class TrustRegionCG(Optimizer):
-    problem_defaults = {'eta1' : 0.1,
+    optimizer_defaults = {'eta1' : 0.1,
                         'eta2' : 0.25,
                         'eta3' : 0.75,
                         't1' : 0.25,
                         't2' : 2.0,
-                        'cg_rtol' : 1e-4,
-                        'maxradius' : 0.4
+                        'maxiter' : 1000,
                         }
 
+    problem_defaults = {
+                        'cg_rtol' : 1e-2,
+                        'maxradius' : 100.
+                    }
 
     def single_iteration(self, problem, state):
         mul = problem.vs.mul
         dot = problem.vs.dot
         addmul = problem.vs.addmul
+        def Avp(v):
+            state.hev = state.hev + 1
+            return problem.PHvp(state.x, v)
 
-        def Hvp(v):
-            return problem.Hvp(state.x, v)
+        def cg_monitor(*kwargs):
+            pass
 
-        z = cg_steihaug(problem.vs, Hvp, state.Pg, state.radius, self.cg_rtol, monitor=print)
+        z = cg_steihaug(problem.vs, Avp, state.Pg, state.radius, problem.cg_rtol, monitor=cg_monitor)
 
-        mdiff = 0.5 * dot(z, Hvp(z)) + dot(state.Pg, z)
+        mdiff = 0.5 * dot(z, Avp(z)) + dot(state.Pg, z)
 
         Px1 = addmul(state.Px, z, 1)
         x1 = problem.precond.vQp(Px1)
@@ -44,33 +50,37 @@ class TrustRegionCG(Optimizer):
 
         interior = dot(z, z) ** 0.5 < 0.9 * state.radius
 
-        print('rho', rho)
+        #print('rho', rho)
         if rho < self.eta2: # poor approximation
             radius1 = self.t1 * state.radius
-        elif rho > self.eta3 and not interior:
-            radius1 = min(state.radius * self.t2, self.maxradius)
-        else:
+        elif rho > self.eta3 and not interior: # good and too conservative
+            radius1 = min(state.radius* self.t2, problem.maxradius)
+        else: # about right
             radius1 = state.radius
 
-        if rho > self.eta1:
+        if rho > self.eta1: # sufficient quadratic, move
             prop = Proposal(problem, Px=Px1, x=x1, y=y1)
-        else:
+        else: # poor, stay and adjust the radius
             prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y)
 
         prop.radius = radius1
         return prop
 
     def assess(self, problem, state, prop):
-        print("assess radius", state.radius, 'tol', problem.get_tol(state.y), 'gnorm', prop.gnorm, 'gtol', problem.gtol)
+        #print("assess radius", state.radius, 'tol', problem.get_tol(state.y), 'gnorm', prop.gnorm, 'gtol', problem.gtol)
         if prop.radius <= problem.get_tol(state.y):
-            return Assessment(True, "Trust region is sufficiently small")
+            return True, "Trust region is sufficiently small"
 
         if prop.gnorm <= problem.gtol:
-            return Assessment(True, "Gradient is sufficiently small")
+            return True, "Gradient is sufficiently small"
+
+        if prop.Pgnorm == 0:
+            return False, "Preconditioned gradient vanishes"
 
     def move(self, problem, state, prop):
         if state.nit == 0:
-            state.radius = self.maxradius
+            # initial radius is the norm of the gradient.
+            state.radius = prop.Pgnorm
         else:
             state.radius = prop.radius
 
