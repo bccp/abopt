@@ -40,9 +40,11 @@ class State(object):
 
     def __getitem__(self, key):
         return getattr(self, key)
+    def __contains__(self, key):
+        return hasattr(self, key)
 
     def __repr__(self):
-        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'gnorm', 'converged', 'assessment', ]]
+        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'gnorm', 'converged', 'assessment', 'radius'] if k in self]
         return repr(d)
 
 class Proposal(object):

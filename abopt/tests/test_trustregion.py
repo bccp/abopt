@@ -6,11 +6,11 @@ from numpy.testing import assert_allclose
 from scipy.optimize import rosen, rosen_der, rosen_hess_prod
 
 
-def test_cg_steigaug():
+def test_cg_steihaug():
     import numpy
-    Hessian = numpy.diag([1, 2, 3, 4])
-    g = numpy.zeros(4) + 0.5
-
+    Hessian = numpy.diag([1, 2, 3, 400.**2])
+    g = numpy.zeros(4) + 1.0
+    g[...] = [  1.67362208e-02,  3.10101278e-09,  2.50026433e-02,  5.14557305e-02]
     Delta = 10000.
     rtol = 1e-8
     def Bvp(v):
@@ -25,7 +25,9 @@ def test_tr():
     problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod)
 
     x0 = numpy.zeros(2)
-    trcg.minimize(problem, x0, monitor=print)
+    r = trcg.minimize(problem, x0, monitor=print)
+    assert r.converged
+    assert_allclose(r.x, 1.0)
 
 def test_tr_precond():
     trcg = TrustRegionCG(maxradius=10., maxiter=100)
@@ -33,5 +35,36 @@ def test_tr_precond():
     problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod, precond=precond)
 
     x0 = numpy.zeros(2)
-    trcg.minimize(problem, x0, monitor=print)
+    r = trcg.minimize(problem, x0, monitor=print)
+    assert r.converged
+    assert_allclose(r.x, 1.0)
 
+def test_gaussnewton():
+    trcg = TrustRegionCG(maxradius=10., maxiter=10)
+    J = numpy.diag([1, 2, 3, 4e2])
+    def f(x):
+        return J.dot(x)
+
+    def vjp(x, v):
+        return J.dot(v)
+
+    def jvp(x, v):
+        return v.dot(J)
+
+    def objective(x):
+        y = f(x)
+        return numpy.sum((y - 1.0) ** 2)
+
+    def gradient(x):
+        y = f(x)
+        return vjp(x, y - 1.0) * 2
+
+    def JTJvp(x, v):
+        return jvp(x, vjp(x, v))
+
+    problem = Problem(objective=objective, gradient=gradient, hessian_vector_product=JTJvp, cg_rtol=1e-2)
+
+    x0 = numpy.zeros(4)
+    r = trcg.minimize(problem, x0, monitor=print)
+    assert r.converged
+    print(r.x)

@@ -30,14 +30,16 @@ class TrustRegionCG(Optimizer):
             return problem.PHvp(state.x, v)
 
         def cg_monitor(*kwargs):
+            #print(*kwargs)
             pass
 
-        z = cg_steihaug(problem.vs, Avp, state.Pg, state.radius, problem.cg_rtol, monitor=cg_monitor)
+        # solve H z = 0.5 g constrained by the radius
+        z = cg_steihaug(problem.vs, Avp, mul(state.Pg, 0.5), state.radius, problem.cg_rtol, monitor=cg_monitor)
 
         mdiff = 0.5 * dot(z, Avp(z)) + dot(state.Pg, z)
 
         Px1 = addmul(state.Px, z, 1)
-        x1 = problem.precond.vQp(Px1)
+        x1 = problem.Px2x(Px1)
         y1 = problem.f(x1)
         state.fev = state.fev + 1
 
@@ -48,13 +50,17 @@ class TrustRegionCG(Optimizer):
         else:
             rho = 0
 
+#        print(y1, x1)
+#        print(state.y, state.x)
+        #print(rho, fdiff, mdiff, Avp(z), state.Pg, dot(z, z) ** 0.5, state.radius)
+
         interior = dot(z, z) ** 0.5 < 0.9 * state.radius
 
-        #print('rho', rho)
         if rho < self.eta2: # poor approximation
-            radius1 = self.t1 * state.radius
+            # reinialize radius from the gradient norm if needed
+            radius1 = min(self.t1 * state.radius, state.Pgnorm)
         elif rho > self.eta3 and not interior: # good and too conservative
-            radius1 = min(state.radius* self.t2, problem.maxradius)
+            radius1 = min(state.radius * self.t2, problem.maxradius)
         else: # about right
             radius1 = state.radius
 
@@ -84,7 +90,7 @@ class TrustRegionCG(Optimizer):
         else:
             state.radius = prop.radius
 
-        print('move', prop.y)
+        #print('move', prop.y)
         Optimizer.move(self, problem, state, prop)
 
 def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None):
