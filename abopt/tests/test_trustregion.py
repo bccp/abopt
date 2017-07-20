@@ -10,7 +10,6 @@ def test_cg_steihaug():
     import numpy
     Hessian = numpy.diag([1, 2, 3, 400.**2])
     g = numpy.zeros(4) + 1.0
-    g[...] = [  1.67362208e-02,  3.10101278e-09,  2.50026433e-02,  5.14557305e-02]
     Delta = 10000.
     rtol = 1e-8
     def Bvp(v):
@@ -27,20 +26,20 @@ def test_tr():
     x0 = numpy.zeros(2)
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
-    assert_allclose(r.x, 1.0)
+    assert_allclose(r.x, 1.0, rtol=1e-4)
 
 def test_tr_precond():
     trcg = TrustRegionCG(maxradius=10., maxiter=100)
-    precond = Preconditioner(Pvp=lambda x: 2 * x, vQp=lambda x: 0.5 * x, Qvp=lambda x: 0.5 * x)
+    precond = Preconditioner(Pvp=lambda x: 20 * x, vQp=lambda x: 0.05 * x, Qvp=lambda x: 0.05 * x)
     problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod, precond=precond)
 
     x0 = numpy.zeros(2)
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
-    assert_allclose(r.x, 1.0)
+    assert_allclose(r.x, 1.0, rtol=1e-4)
 
 def test_gaussnewton():
-    trcg = TrustRegionCG(maxradius=10., maxiter=10)
+    trcg = TrustRegionCG(maxiter=10)
     JT = numpy.diag([1, 2, 3, 4e2])
     def f(x):
         return JT.dot(x)
@@ -68,4 +67,4 @@ def test_gaussnewton():
     x0 = numpy.zeros(4)
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
-    print(r.x)
+    assert_allclose(f(r.x), 1.0, rtol=1e-4)

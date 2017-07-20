@@ -74,8 +74,11 @@ class TrustRegionCG(Optimizer):
 
     def assess(self, problem, state, prop):
         #print("assess radius", state.radius, 'tol', problem.get_tol(state.y), 'gnorm', prop.gnorm, 'gtol', problem.gtol)
-        if prop.radius <= problem.get_tol(state.y):
-            return True, "Trust region is sufficiently small"
+        if prop.radius >= state.radius:
+            if problem.check_convergence(state.y, prop.y):
+                return True, "Objective is not improving in trust region"
+            if prop.dxnorm <= problem.xtol:
+                return True, "Solution is not moving in trust region"
 
         if prop.gnorm <= problem.gtol:
             return True, "Gradient is sufficiently small"

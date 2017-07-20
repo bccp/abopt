@@ -216,9 +216,11 @@ class LBFGS(Optimizer):
             # terminated on a converged GD step.
             return
 
-        if state.nit > 0:
-            if problem.check_convergence(state.y, prop.y):
-                return True, "Objective stopped improving"
+        if prop.dxnorm <= problem.xtol:
+            return True, "Solution stopped moving"
+
+        if problem.check_convergence(state.y, prop.y):
+            return True, "Objective stopped improving"
 
         if prop.gnorm <= problem.gtol:
             return True, "Gradient is sufficiently small"

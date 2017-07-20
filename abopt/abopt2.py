@@ -34,6 +34,7 @@ class State(object):
         self.gev = 0
         self.hev = 0
         self.dy = None
+        self.dxnorm = None
         self.assessment = None
         self.converged = False
         self.y_ = []
@@ -44,7 +45,7 @@ class State(object):
         return hasattr(self, key)
 
     def __repr__(self):
-        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'gnorm', 'converged', 'assessment', 'radius'] if k in self]
+        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'assessment', 'radius'] if k in self]
         return repr(d)
 
 class Proposal(object):
@@ -69,10 +70,19 @@ class Proposal(object):
 
     def complete(self, state):
         dot = self.problem.vs.dot
+        addmul = self.problem.vs.addmul
         self.xnorm = dot(self.x, self.x) ** 0.5
         self.Pxnorm = dot(self.Px, self.Px) ** 0.5
         self.complete_y(state)
         self.complete_g(state)
+
+        if state.nit > 0:
+            self.dy = self.y - state.y
+            dx = addmul(self.x, state.x, -1)
+            self.dxnorm = dot(dx, dx) ** 0.5
+        else:
+            self.dy = None
+            self.dxnorm = None
         return self
 
     def complete_y(self, state):
@@ -126,8 +136,9 @@ class Problem(object):
     def __init__(self, objective, gradient,
         hessian_vector_product=None,
         vs=real_vector_space,
-        atol=1e-7,
+        atol=0,
         rtol=1e-7,
+        xtol=1e-7,
         gtol=0,
         precond=None,
         **kwargs
@@ -149,6 +160,7 @@ class Problem(object):
         self.hessian_vector_product = hessian_vector_product
         self.atol = atol
         self.rtol = rtol
+        self.xtol = xtol
         self.gtol = gtol
 
         self.__dict__.update(kwargs)
@@ -176,7 +188,7 @@ class Problem(object):
         vQ = self.precond.vQp(v)
         return self.precond.Qvp(self.hessian_vector_product(x, vQ))
 
-    def get_tol(self, y):
+    def get_ytol(self, y):
         thresh = self.rtol * abs(y) + self.atol
         return thresh
 
@@ -188,7 +200,7 @@ class Problem(object):
 
         valmax = max(abs(y0), abs(y1))
 
-        thresh = self.get_tol(valmax)
+        thresh = self.get_ytol(valmax)
 
         if abs(y0 - y1) < thresh: return True
 
@@ -213,15 +225,13 @@ class Optimizer(object):
 
     def move(self, problem, state, prop):
 
-        if state.nit > 0:
-            state.dy = prop.y - state.y
-
         state.y_.append(prop.y)
 
         if len(state.y_) > 2: # only store a short history
             del state.y_[0]
 
         state.y = prop.y
+        state.dy = prop.dy
 
         state.x = prop.x
         state.g = prop.g
@@ -232,6 +242,7 @@ class Optimizer(object):
         state.gnorm = prop.gnorm
         state.Pxnorm = prop.Pxnorm
         state.Pgnorm = prop.Pgnorm
+        state.dxnorm = prop.dxnorm
 
     def assess(self, problem, state, prop):
         raise NotImplementedError
@@ -305,9 +316,11 @@ class GradientDescent(Optimizer):
     }
 
     def assess(self, problem, state, prop):
-        if state.nit > 0:
-            if problem.check_convergence(state.y, prop.y):
-                return True, "Objective stopped improving"
+        if prop.dxnorm <= problem.xtol:
+            return True, "Solution stopped moving"
+
+        if problem.check_convergence(state.y, prop.y):
+            return True, "Objective stopped improving"
 
         if prop.gnorm <= problem.gtol:
             return True, "Gradient is sufficiently small"
