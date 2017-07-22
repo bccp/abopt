@@ -58,34 +58,39 @@ def test_tr_precond():
 
 def test_gaussnewton():
     trcg = TrustRegionCG(maxiter=10)
-    J = numpy.array([[0, 0, 0, 1],
-                      [0, 0, 2, 0],
-                      [0, 1, 0, 0],
-                      [1, 0, 0, 0]])
-    def f(x): return J.dot(x)
-    def vjp(x, v): return v.dot(J)
-    def jvp(x, v): return J.dot(v)
+    J = numpy.array([ [0, 0,     2,  1],
+                      [0,  10,   2,  0],
+                      [40, 100,  0,  0],
+                      [400, 0,   0,  0]])
+    alpha = 0.5
+    def phi(x): return x + alpha * x ** 2
+    def phiprime(x): return 1 + 2 * alpha * x
+    def f(x): return J.dot(phi(x))
+    def vjp(x, v): return v.dot(J) * phiprime(x)
+    def jvp(x, v): return J.dot(v * phiprime(x))
 
     def objective(x):
         y = f(x)
-        return numpy.sum((y - 1.0) ** 2)
+        return numpy.sum((y - 1.0) ** 2) + numpy.sum(x**2)
 
     def gradient(x):
         y = f(x)
-        return vjp(x, y - 1.0) * 2
+        return vjp(x, y - 1.0) * 2 + 2 * x
 
     def hessian(x, v):
-        return vjp(x, jvp(x, v)) * 2
+        v = numpy.array(v)
+        return vjp(x, jvp(x, v)) * 2 + v * 2
 
-    problem = Problem(objective=objective, gradient=gradient, hessian_vector_product=hessian, cg_rtol=1e-4, maxradius=8000)
-
-    print("Hessian")
-    print(hessian(None, [1, 0, 0, 0]))
-    print(hessian(None, [0, 1, 0, 0]))
-    print(hessian(None, [0, 0, 1, 0]))
-    print(hessian(None, [0, 0, 0, 1]))
+    problem = Problem(objective=objective, gradient=gradient, hessian_vector_product=hessian, cg_rtol=1e-4, maxradius=80)
 
     x0 = numpy.zeros(4)
+    print("Hessian")
+    print(hessian(x0, [1, 0, 0, 0]))
+    print(hessian(x0, [0, 1, 0, 0]))
+    print(hessian(x0, [0, 0, 1, 0]))
+    print(hessian(x0, [0, 0, 0, 1]))
+
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
-    assert_allclose(f(r.x), 1.0, rtol=1e-4)
+#    assert_allclose(f(r.x), 1.0, rtol=1e-4)
+    assert_allclose(vjp(r.x, f(r.x) - 1.0), -r.x, rtol=1e-4)
