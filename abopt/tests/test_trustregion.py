@@ -1,4 +1,5 @@
 from abopt.abopt2 import Problem, Preconditioner
+from abopt.lbfgs import LBFGSHessian
 from abopt.trustregion import cg_steihaug, TrustRegionCG
 from abopt.vectorspace import real_vector_space
 import numpy
@@ -33,9 +34,46 @@ def test_cg_steihaug():
     Delta = 8000.
     rtol = 1e-8
 
-    z = cg_steihaug(real_vector_space, hessian, g, Delta, rtol, monitor=print)
+    def Avp(v):
+        return hessian(0, v)
 
-    assert_allclose(Bvp(z), -g)
+    z = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print)
+
+    assert_allclose(Avp(z), -g)
+
+def test_cg_steihaug_lbfgs():
+    import numpy
+    J = numpy.array([[0, 0, 0, 1],
+                      [0, 0, 2, 0], 
+                      [0, 3, 0, 0], 
+                      [400, 0, 0, 0]])
+    def f(x): return J.dot(x)
+    def vjp(x, v): return v.dot(J)
+    def jvp(x, v): return J.dot(v)
+
+    def objective(x):
+        y = f(x)
+        return numpy.sum((y - 1.0) ** 2)
+
+    def gradient(x):
+        y = f(x)
+        return vjp(x, y - 1.0) * 2
+
+    def hessian(x, v):
+        return vjp(x, jvp(x, v)) * 2
+
+    def Avp(v):
+        return hessian(0, v)
+
+    g = numpy.zeros(4) + 1.0
+    g[...] = [  -2.,   -4.,   -6., -800.]
+    Delta = 8000.
+    rtol = 1e-8
+    B = LBFGSHessian(real_vector_space, 5, numpy.ones_like(g))
+    z = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print, B=B)
+
+    assert_allclose(B.hvp(g), -z, rtol=1e-3)
+    assert_allclose(Avp(z), -g)
 
 def test_tr():
     trcg = TrustRegionCG(maxradius=10.)

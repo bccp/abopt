@@ -182,6 +182,7 @@ class Problem(object):
     def PHvp(self, x, v):
         """ This returns the hessian product of the preconditioned variable against
             a vector of the preconditioned variable.
+            uppercase H means Hessian, not Hessian inverse.
         """
         if self.hessian_vector_product is None:
             raise ValueError("hessian vector product is not defined")

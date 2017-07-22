@@ -196,7 +196,7 @@ def post_scaled_inverse_dfp(vs, hessian):
     return inverse_dfp(vs, hessian, post_scaled=True)
 
 class LBFGSHessian(object):
-    def __init__(self, vs, m, D, diag_update, rescale_diag):
+    def __init__(self, vs, m, D, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
         """ D is a vector represents the initial diagonal. """
         self.m = m
         self.Y = [] # Delta G
@@ -208,8 +208,8 @@ class LBFGSHessian(object):
         self.diag_update = diag_update
         self.rescale_diag = rescale_diag
 
-    def Hvp(self, v):
-        """ Inverse of Hessian dot any vector """
+    def hvp(self, v):
+        """ Inverse of Hessian dot any vector; lowercase h indicates it is the inverse """
         q = v
 
         dot = self.vs.dot
@@ -241,13 +241,13 @@ class LBFGSHessian(object):
             z = addmul(z, self.S[i], (alpha[i] - beta[i]))
         return z
 
-    def update(self, state, prop):
+    def update(self, Px0, Px1, Pg0, Pg1):
         dot = self.vs.dot
         addmul = self.vs.addmul
         mul = self.vs.mul
 
-        self.Y.append(addmul(prop.Pg, state.Pg, -1))
-        self.S.append(addmul(prop.Px, state.Px, -1))
+        self.Y.append(addmul(Pg1, Pg0, -1))
+        self.S.append(addmul(Px1, Px0, -1))
         self.YS.append(dot(self.Y[-1], self.S[-1]))
         self.YY.append(dot(self.Y[-1], self.Y[-1]))
 
@@ -308,7 +308,7 @@ class LBFGS(Optimizer):
         else:
             state.B = prop.B
             state.z = prop.z
-            state.B.update(prop, state)
+            state.B.update(state.Px, prop.Px, state.Pg, prop.Pg)
 
         Optimizer.move(self, problem, state, prop)
 
@@ -324,9 +324,9 @@ class LBFGS(Optimizer):
         try:
             # use old LBFGSHessian, and update it
             B = state.B
-            z = B.Hvp(state.Pg)
+            z = B.hvp(state.Pg)
 
-            # Hvp cannot be computed, recover
+            # hvp cannot be computed, recover
             if z is None: raise StopIteration
 
             prop, r1 = self.linesearch(problem, state, z, 1.0)
@@ -338,7 +338,7 @@ class LBFGS(Optimizer):
             # LBFGS failed. Abandon LBFGS and restart with GD
             B = self._newLBFGSHessian(problem, state.Px)
 
-            z = B.Hvp(state.Pg)
+            z = B.hvp(state.Pg)
 
             prop, r1 = self.linesearch(problem, state, state.Pg, 1.0)
 

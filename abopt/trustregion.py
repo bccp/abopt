@@ -96,17 +96,24 @@ class TrustRegionCG(Optimizer):
         #print('move', prop.y)
         Optimizer.move(self, problem, state, prop)
 
-def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None):
+def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None):
     """ best effort solving for y = - A^{-1} g with cg,
-        given by trust-region constraint.
+        given the trust-region constraint.
 
-        ported from Jeff Regier's
+        This is roughly ported from Jeff Regier's
 
-        https://github.com/jeff-regier/Celeste.jl/blob/master/src/cg_trust_region.jl
+            https://github.com/jeff-regier/Celeste.jl/blob/master/src/cg_trust_region.jl
 
-        the algorithm is identical to the one or NWU wiki.
+        the algorithm is almost identical to the one on NWU wiki,
+
+            https://optimization.mccormick.northwestern.edu/index.php/Trust-region_methods
+
+        if given B, update approximated Hessian, see Morale and Nocedal, 2000
+
+            http://epubs.siam.org/doi/abs/10.1137/S1052623497327854
 
     """
+
     dot = vs.dot
     mul = vs.mul
     addmul = vs.addmul
@@ -154,13 +161,16 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None):
 
             d1 = addmul(r1, d0, rho1 / rho0)
 
+        if B is not None:
+            B.update(z0, z1, r0, r1)
+
         r0 = r1
         d0 = d1
         z0 = z1
         rho0 = rho1
 
         if monitor is not None:
-            monitor(j, rho0, r0, d0, z0, Avp(z0), g)
+            monitor(j, rho0, r0, d0, z0, Avp(z0), g, B)
 
         if rho1 / rho_init < rtol ** 2:
             break
