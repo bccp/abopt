@@ -23,7 +23,7 @@ class TrustRegionCG(Optimizer):
                     }
 
     def _newHessianApprox(self, problem, Px):
-        return LBFGSHessian(problem.vs, 6, problem.vs.ones_like(Px))
+        return LBFGSHessian(problem, m=6)
 
     def single_iteration(self, problem, state):
         mul = problem.vs.mul

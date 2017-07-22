@@ -19,10 +19,12 @@ def quad_der(x):
     return (x - 0.5) * 2
 
 def crosen(x):
+    x = numpy.atleast_1d(x)
     v = numpy.concatenate([x.real, x.imag], axis=0)
     return rosen(v)
 
 def crosen_der(x):
+    x = numpy.atleast_1d(x)
     s = x.shape[0]
     v = numpy.concatenate([x.real, x.imag], axis=0)
     v = rosen_der(v)

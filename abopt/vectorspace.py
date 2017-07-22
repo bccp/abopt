@@ -90,11 +90,22 @@ class RealVectorSpace(VectorSpace):
 def _c2r(a):
     # complex vector space needs numpy
     import numpy
-    if numpy.isscalar(a): return a
+    # in abopt, a scalar almost always means Identity * scalar
+    # it must be real; use numpy's broadcast
+    if numpy.isscalar(a):
+        assert numpy.imag(a) == 0
+        return a
     a = numpy.concatenate([numpy.real(a), numpy.imag(a)], axis=0)
     return a
 
+
 def _r2c(a):
+    import numpy
+    # in abopt, a scalar almost always means Identity * scalar
+    # it must be real; use numpy's broadcast
+    if numpy.isscalar(a): 
+        assert numpy.imag(a) == 0
+        return a
     h = a.shape[0] // 2
     return a[:h] + a[h:] * 1j
 

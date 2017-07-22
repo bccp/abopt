@@ -69,20 +69,20 @@ def test_cg_steihaug_lbfgs():
     g[...] = [  -2.,   -4.,   -6., -800.]
     Delta = 8000.
     rtol = 1e-8
-    B = LBFGSHessian(real_vector_space, 5, numpy.ones_like(g))
+    B = LBFGSHessian(real_vector_space, 5)
     z = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print, B=B)
 
     assert_allclose(B.hvp(g), -z, rtol=1e-3)
     assert_allclose(Avp(z), -g)
 
     print('-------', "run cg with the preconditioner")
-    B2 = LBFGSHessian(real_vector_space, 5, numpy.ones_like(g))
+    B2 = LBFGSHessian(real_vector_space, 5)
     z2 = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print, B=B2, mvp=B.hvp)
     assert_allclose(B2.hvp(g), -z, rtol=1e-3)
     #assert_allclose(z, z2)
 
     print('-------', "run cg with the new preconditioner")
-    B3 = LBFGSHessian(real_vector_space, 5, numpy.ones_like(g))
+    B3 = LBFGSHessian(real_vector_space, 5)
     z3 = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print, B=B3, mvp=B2.hvp)
     assert_allclose(B3.hvp(g), -z, rtol=1e-3)
 

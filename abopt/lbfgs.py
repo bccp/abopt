@@ -65,13 +65,12 @@ def scalar(vs, hessian):
 
     assert len(hessian.S) > 0
 
-    D0 = hessian.D
     s = hessian.S[-1]
     y = hessian.Y[-1]
     ys = hessian.YS[-1]
     yy = hessian.YY[-1]
 
-    D1 = vs.mul(vs.ones_like(D0), ys / yy)
+    D1 = ys / yy
     return D1
 
 def inverse_bfgs(vs, hessian):
@@ -93,13 +92,13 @@ def inverse_bfgs(vs, hessian):
     pow = vs.pow
     addmul = vs.addmul
 
-    Dy = mul(D0, y)
+    Dy = mul(y, D0)
     Dyy = dot(Dy, y)
 
-    a3 = mul(mul(D0, y), s)
+    a3 = mul(mul(y, D0), s)
 
     D1 = addmul(D0, pow(s, 2), (1 / ys  + Dyy / ys ** 2))
-    D1 = addmul(D1, mul(mul(D0, y), s), -2.0 / ys)
+    D1 = addmul(D1, mul(mul(y, D0), s), -2.0 / ys)
 
     return D1
 
@@ -124,18 +123,18 @@ def direct_bfgs(vs, hessian, pre_scaled=False, post_scaled=False):
 
     D0yy = dot(mul(y, D0), y)
 
-    if pre_scaled: D0 = mul(D0, ys / D0yy)
+    if pre_scaled: D0 = mul(ys / D0yy, D0)
 
     invD0 = pow(D0, -1)
 
     t = addmul(invD0, pow(y, 2), 1 / ys)
-    t = addmul(t, pow(mul(s, invD0), 2), -1 / dot(mul(invD0, s), s))
+    t = addmul(t, pow(mul(s, invD0), 2), -1 / dot(mul(s, invD0), s))
 
     D1 = pow(t, -1)
 
     if post_scaled:
         D1yy = dot(mul(y, D1), y)
-        D1 = mul(D1, ys / D1yy)
+        D1 = mul(ys / D1yy, D1)
 
     return D1
 
@@ -171,7 +170,7 @@ def inverse_dfp(vs, hessian, pre_scaled=False, post_scaled=False):
     yD0 = mul(y, D0)
     D0yy = dot(yD0, y)
 
-    if pre_scaled: D0 = mul(D0, ys / D0yy)
+    if pre_scaled: D0 = mul(ys / D0yy, D0)
 
     t = addmul(D0, pow(s, 2), 1 / ys)
     t = addmul(t,  pow(yD0, 2), 1/ D0yy)
@@ -181,7 +180,7 @@ def inverse_dfp(vs, hessian, pre_scaled=False, post_scaled=False):
     if post_scaled:
         yD1 = mul(y, D1)
         D1yy = dot(yD1, y)
-        D1 = mul(D1, ys / D1yy)
+        D1 = mul(ys / D1yy, D1)
 
     return D1
 
@@ -196,14 +195,14 @@ def post_scaled_inverse_dfp(vs, hessian):
     return inverse_dfp(vs, hessian, post_scaled=True)
 
 class LBFGSHessian(object):
-    def __init__(self, vs, m, D, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
+    def __init__(self, vs, m, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
         """ D is a vector represents the initial diagonal. """
         self.m = m
         self.Y = [] # Delta G
         self.S = [] # Delta S
         self.YS = []
         self.YY = []
-        self.D = D
+        self.D = 1.
         self.vs = vs
         self.diag_update = diag_update
         self.rescale_diag = rescale_diag
@@ -217,7 +216,7 @@ class LBFGSHessian(object):
         mul = self.vs.mul
 
         if len(self.Y) == 0: # first step
-            return mul(self.D, v)
+            return mul(v, self.D)
 
         alpha = list(range(len(self.Y)))
         beta = list(range(len(self.Y)))
@@ -233,7 +232,7 @@ class LBFGSHessian(object):
 
         if self.rescale_diag:
             Dyy = dot(mul(self.Y[-1], D), self.Y[-1])
-            D = mul(D, self.YS[-1]/ Dyy)
+            D = mul(self.YS[-1]/ Dyy, D)
 
         z = addmul(0, q, D)
         for i in range(len(self.Y)):
@@ -274,8 +273,8 @@ class LBFGS(Optimizer):
         'rescale_diag' : False,
     }
 
-    def _newLBFGSHessian(self, problem, Px):
-        return LBFGSHessian(problem.vs, self.m, problem.vs.ones_like(Px), self.diag_update, self.rescale_diag)
+    def _newLBFGSHessian(self, problem):
+        return LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
 
     def assess(self, problem, state, prop):
         # gradient assessment is before miniter requirement
@@ -303,7 +302,7 @@ class LBFGS(Optimizer):
         prop.complete(state)
 
         if state.nit == 0:
-            state.B = self._newLBFGSHessian(problem, prop.Px)
+            state.B = self._newLBFGSHessian(problem)
             state.z = prop.Pg
         else:
             state.B = prop.B
@@ -336,7 +335,7 @@ class LBFGS(Optimizer):
 
         except StopIteration:
             # LBFGS failed. Abandon LBFGS and restart with GD
-            B = self._newLBFGSHessian(problem, state.Px)
+            B = self._newLBFGSHessian(problem)
 
             z = B.hvp(state.Pg)
 
