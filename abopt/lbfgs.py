@@ -207,8 +207,6 @@ class LBFGSHessian(object):
         self.vs = vs
         self.diag_update = diag_update
         self.rescale_diag = rescale_diag
-    def __len__(self):
-        return len(self.Y)
 
     def Hvp(self, v):
         """ Inverse of Hessian dot any vector """
@@ -261,11 +259,15 @@ class LBFGSHessian(object):
 
         self.D = self.diag_update(self.vs, self)
 
+    def __repr__(self):
+        return "LBFGSHessian(len(Y)=%d, m=%d)" % (len(self.Y), self.m)
+
 class LBFGS(Optimizer):
     from .linesearch import backtrace
 
     optimizer_defaults = {
         'maxiter' : 1000,
+        'miniter' : 6,
         'm' : 6,
         'linesearch' : backtrace,
         'diag_update' : post_scaled_direct_bfgs,
@@ -276,11 +278,15 @@ class LBFGS(Optimizer):
         return LBFGSHessian(problem.vs, self.m, problem.vs.ones_like(Px), self.diag_update, self.rescale_diag)
 
     def assess(self, problem, state, prop):
-        if len(state.B) < self.m and len(state.B) > 1:
-            # started building the hessian, then
-            # must have a 'good' approximation before ending
-            # Watch out: if > 0 is not protected we will not
-            # terminated on a converged GD step.
+        # gradient assessment is before miniter requirement
+        if prop.gnorm <= problem.gtol:
+            return True, "Gradient is sufficiently small"
+
+        if prop.Pgnorm == 0:
+            return False, "Preconditioned gradient vanishes"
+
+        if state['nit'] < self.miniter and len(state.B.Y) != 0:
+            # do not stop too early, unless we are stuck with GD
             return
 
         if prop.dxnorm <= problem.xtol:
@@ -288,12 +294,6 @@ class LBFGS(Optimizer):
 
         if problem.check_convergence(state.y, prop.y):
             return True, "Objective stopped improving"
-
-        if prop.gnorm <= problem.gtol:
-            return True, "Gradient is sufficiently small"
-
-        if prop.Pgnorm == 0:
-            return False, "Preconditioned gradient vanishes"
 
 
     def move(self, problem, state, prop):

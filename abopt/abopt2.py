@@ -45,7 +45,7 @@ class State(object):
         return hasattr(self, key)
 
     def __repr__(self):
-        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'assessment', 'radius'] if k in self]
+        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'assessment', 'radius', 'B', 'rate'] if k in self]
         return repr(d)
 
 class Proposal(object):
