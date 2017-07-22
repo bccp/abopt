@@ -56,37 +56,37 @@
 
 from .abopt2 import Optimizer
 
-def scalar(vs, state):
+def scalar(vs, hessian):
     """ M1QN2.A in GL.  EQ 4.1;
         This is L-BFGS when people refers to it.
         wikipedia version of L-BFGS
 
     """
 
-    if len(state.S) == 0: return vs.ones_like(state.Px)
+    assert len(hessian.S) > 0
 
-    D0 = state.D
-    s = state.S[-1]
-    y = state.Y[-1]
-    ys = state.YS[-1]
-    yy = state.YY[-1]
+    D0 = hessian.D
+    s = hessian.S[-1]
+    y = hessian.Y[-1]
+    ys = hessian.YS[-1]
+    yy = hessian.YY[-1]
 
-    D1 = vs.mul(vs.ones_like(state.Px), ys / yy)
+    D1 = vs.mul(vs.ones_like(D0), ys / yy)
     return D1
 
-def inverse_bfgs(vs, state):
+def inverse_bfgs(vs, hessian):
     """ 
         M1QN3.A in GL Equation 4.6.
         This is bad.  D grows rapidly over iterations.
 
     """
-    if len(state.S) == 0: return vs.ones_like(state.Px)
+    assert len(hessian.S) > 0
 
-    D0 = state.D
-    s = state.S[-1]
-    y = state.Y[-1]
-    ys = state.YS[-1]
-    yy = state.YY[-1]
+    D0 = hessian.D
+    s = hessian.S[-1]
+    y = hessian.Y[-1]
+    ys = hessian.YS[-1]
+    yy = hessian.YY[-1]
 
     dot = vs.dot
     mul = vs.mul
@@ -103,19 +103,19 @@ def inverse_bfgs(vs, state):
 
     return D1
 
-def direct_bfgs(vs, state, pre_scaled=False, post_scaled=False):
+def direct_bfgs(vs, hessian, pre_scaled=False, post_scaled=False):
     """ 
         M1QN3.B, M1QN3.B2, GL Equation 4.7, 4.9
         and VAF post update scaling.
     """
-    if len(state.S) == 0: return vs.ones_like(state.Px)
+    assert len(hessian.S) > 0
 
-    D0 = state.D
+    D0 = hessian.D
 
-    s = state.S[-1]
-    y = state.Y[-1]
-    ys = state.YS[-1]
-    yy = state.YY[-1]
+    s = hessian.S[-1]
+    y = hessian.Y[-1]
+    ys = hessian.YS[-1]
+    yy = hessian.YY[-1]
 
     dot = vs.dot
     addmul= vs.addmul
@@ -139,31 +139,29 @@ def direct_bfgs(vs, state, pre_scaled=False, post_scaled=False):
 
     return D1
 
-def pre_scaled_direct_bfgs(vs, state):
+def pre_scaled_direct_bfgs(vs, hessian):
     """ M1QN3.B2 """
-    return direct_bfgs(vs, state, pre_scaled=True)
+    return direct_bfgs(vs, hessian, pre_scaled=True)
 
-def post_scaled_direct_bfgs(vs, state):
+def post_scaled_direct_bfgs(vs, hessian):
     """ Modified from M1QN3.B2; Recommended by 
         VEERSE, AUROUX & FISHER, for fewer iterations.
     """
-    return direct_bfgs(vs, state, post_scaled=True)
+    return direct_bfgs(vs, hessian, post_scaled=True)
 
-def inverse_dfp(vs, state, pre_scaled=False, post_scaled=False):
+def inverse_dfp(vs, hessian, pre_scaled=False, post_scaled=False):
     """ 
         M1QN3.C and M1QN3.C2 in GL Equation 4.8, 4.10;
         and VAF post update scaling.
         This is not applicable since we do not implement DFP.
     """
-    D1 = vs.mul(state.x, 0.0)
+    assert len(hessian.S) > 0
 
-    if len(state.S) == 0: return vs.ones_like(state.x)
-
-    D0 = state.D
-    s = state.S[-1]
-    y = state.Y[-1]
-    ys = state.YS[-1]
-    yy = state.YY[-1]
+    D0 = hessian.D
+    s = hessian.S[-1]
+    y = hessian.Y[-1]
+    ys = hessian.YS[-1]
+    yy = hessian.YY[-1]
 
     dot = vs.dot
     mul = vs.mul
@@ -187,15 +185,81 @@ def inverse_dfp(vs, state, pre_scaled=False, post_scaled=False):
 
     return D1
 
-def pre_scaled_inverse_dfp(vs, state):
+def pre_scaled_inverse_dfp(vs, hessian):
     """ M1QN3.C2, we didn't implement DFP."""
 
-    return inverse_dfp(vs, state, pre_scaled=True)
+    return inverse_dfp(vs, hessian, pre_scaled=True)
 
-def post_scaled_inverse_dfp(vs, state):
+def post_scaled_inverse_dfp(vs, hessian):
     """ post-update version of M1QN3.C2.  we didn't implement DFP."""
 
-    return inverse_dfp(vs, state, post_scaled=True)
+    return inverse_dfp(vs, hessian, post_scaled=True)
+
+class LBFGSHessian(object):
+    def __init__(self, vs, m, D, diag_update, rescale_diag):
+        """ D is a vector represents the initial diagonal. """
+        self.m = m
+        self.Y = [] # Delta G
+        self.S = [] # Delta S
+        self.YS = []
+        self.YY = []
+        self.D = D
+        self.vs = vs
+        self.diag_update = diag_update
+        self.rescale_diag = rescale_diag
+    def __len__(self):
+        return len(self.Y)
+
+    def Hvp(self, v):
+        """ Inverse of Hessian dot any vector """
+        q = v
+
+        dot = self.vs.dot
+        addmul = self.vs.addmul
+        mul = self.vs.mul
+
+        if len(self.Y) == 0: # first step
+            return mul(self.D, v)
+
+        alpha = list(range(len(self.Y)))
+        beta = list(range(len(self.Y)))
+
+        if self.YY[-1] == 0 or self.YS[-1] == 0: # failed LBFGS
+            return None
+
+        for i in range(len(self.Y) - 1, -1, -1):
+            alpha[i] = dot(self.S[i], q) / self.YS[i]
+            q = addmul(q, self.Y[i], -alpha[i])
+
+        D = self.D
+
+        if self.rescale_diag:
+            Dyy = dot(mul(self.Y[-1], D), self.Y[-1])
+            D = mul(D, self.YS[-1]/ Dyy)
+
+        z = addmul(0, q, D)
+        for i in range(len(self.Y)):
+            beta[i] = 1.0 / self.YS[i] * dot(self.Y[i], z)
+            z = addmul(z, self.S[i], (alpha[i] - beta[i]))
+        return z
+
+    def update(self, state, prop):
+        dot = self.vs.dot
+        addmul = self.vs.addmul
+        mul = self.vs.mul
+
+        self.Y.append(addmul(prop.Pg, state.Pg, -1))
+        self.S.append(addmul(prop.Px, state.Px, -1))
+        self.YS.append(dot(self.Y[-1], self.S[-1]))
+        self.YY.append(dot(self.Y[-1], self.Y[-1]))
+
+        if len(self.Y) > self.m:
+            del self.Y[0]
+            del self.S[0]
+            del self.YS[0]
+            del self.YY[0]
+
+        self.D = self.diag_update(self.vs, self)
 
 class LBFGS(Optimizer):
     from .linesearch import backtrace
@@ -208,8 +272,11 @@ class LBFGS(Optimizer):
         'rescale_diag' : False,
     }
 
+    def _newLBFGSHessian(self, problem, Px):
+        return LBFGSHessian(problem.vs, self.m, problem.vs.ones_like(Px), self.diag_update, self.rescale_diag)
+
     def assess(self, problem, state, prop):
-        if len(state.Y) < self.m and len(state.Y) > 1:
+        if len(state.B) < self.m and len(state.B) > 1:
             # started building the hessian, then
             # must have a 'good' approximation before ending
             # Watch out: if > 0 is not protected we will not
@@ -230,33 +297,20 @@ class LBFGS(Optimizer):
 
 
     def move(self, problem, state, prop):
-
         addmul = problem.vs.addmul
         dot = problem.vs.dot
 
         prop.complete(state)
 
         if state.nit == 0:
-            state.Y = [] # Delta G
-            state.S = [] # Delta S
-            state.YS = []
-            state.YY = []
+            state.B = self._newLBFGSHessian(problem, prop.Px)
             state.z = prop.Pg
         else:
-            state.Y.append(addmul(prop.Pg, state.Pg, -1))
-            state.S.append(addmul(prop.Px, state.Px, -1))
-            state.YS.append(dot(state.Y[-1], state.S[-1]))
-            state.YY.append(dot(state.Y[-1], state.Y[-1]))
-
-
-            if len(state.Y) > self.m:
-                del state.Y[0]
-                del state.S[0]
-                del state.YS[0]
+            state.B = prop.B
+            state.z = prop.z
+            state.B.update(prop, state)
 
         Optimizer.move(self, problem, state, prop)
-
-        state.D = self.diag_update(problem.vs, state)
 
     def single_iteration(self, problem, state):
         """ Line by line translation of the LBFGS on wikipedia """
@@ -268,61 +322,30 @@ class LBFGS(Optimizer):
             raise RuntimeError("gnorm is zero. This shall not happen because terminated() checks for this")
 
         try:
-            q = state.Pg
+            # use old LBFGSHessian, and update it
+            B = state.B
+            z = B.Hvp(state.Pg)
 
-            if len(state.Y) == 0: # first step
-                raise StopIteration
+            # Hvp cannot be computed, recover
+            if z is None: raise StopIteration
 
-            alpha = list(range(len(state.Y)))
-            beta = list(range(len(state.Y)))
-
-            if state.YY[-1] == 0 or state.YS[-1] == 0: # failed LBFGS
-                raise StopIteration
-
-            for i in range(len(state.Y) - 1, -1, -1):
-                alpha[i] = dot(state.S[i], q) / state.YS[i]
-                q = addmul(q, state.Y[i], -alpha[i])
-
-            D = state.D
-
-            if self.rescale_diag:
-                Dyy = dot(mul(state.Y[-1], D), state.Y[-1])
-                D = mul(D, state.YS[-1]/ Dyy)
-
-            z = addmul(0, q, D)
-            for i in range(len(state.Y)):
-                beta[i] = 1.0 / state.YS[i] * dot(state.Y[i], z)
-                z = addmul(z, state.S[i], (alpha[i] - beta[i]))
-
-            """
-            print('-----')
-            print('alpha', alpha)
-            print('YS', state.YS)
-            print('q', q)
-            print('z', z)
-            print('x', state.x)
-            print('D', state.D)
-            print('Y', state.Y)
-            print('S', state.S)
-            """
             prop, r1 = self.linesearch(problem, state, z, 1.0)
 
-            if prop is None: # failed line search
-                raise StopIteration
+            # failed line search, recover
+            if prop is None: raise StopIteration
 
         except StopIteration:
             # LBFGS failed. Abandon LBFGS and restart with GD
-            state.Y = []
-            state.S = []
-            state.YS = []
-            state.YY = []
+            B = self._newLBFGSHessian(problem, state.Px)
 
-            z = addmul(0, state.Pg, 1 / state.Pgnorm)
+            z = B.Hvp(state.Pg)
 
-            prop, r1 = self.linesearch(problem, state, state.Pg, 1.0 / state.Pgnorm)
+            prop, r1 = self.linesearch(problem, state, state.Pg, 1.0)
 
-            if prop is None: raise ValueError("Line search failed.")
+            # failed GD, die without a proposal
+            if prop is None: return None
 
-        state.z = z
+        prop.B = B
+        prop.z = z
 
         return prop

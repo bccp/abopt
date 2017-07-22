@@ -284,12 +284,15 @@ class Optimizer(object):
 
             prop = optimizer.single_iteration(problem, state).complete(state)
 
-            # assessment must be before the move, for it needs to
-            # see dy
-            assessment = optimizer.assess(problem, state, prop)
+            if prop is not None: # a proposal is made
+                # assessment must be before the move, for it needs to see dy
+                assessment = optimizer.assess(problem, state, prop)
 
-            optimizer.move(problem, state, prop)
-            state.nit = state.nit + 1
+                optimizer.move(problem, state, prop)
+                state.nit = state.nit + 1
+            else:
+                # no proposal is possible
+                assesment = (False, "Failed to propose a new solution")
 
             if assessment is None:
                 state.assessment = None
