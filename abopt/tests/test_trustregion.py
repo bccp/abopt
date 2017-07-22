@@ -8,16 +8,34 @@ from scipy.optimize import rosen, rosen_der, rosen_hess_prod
 
 def test_cg_steihaug():
     import numpy
-    Hessian = numpy.diag([1, 2, 3, 400.**2])
+    #Hessian = numpy.diag([1, 2, 3, 400.**2])
+    J = numpy.array([[0, 0, 0, 1],
+                      [0, 0, 2, 0], 
+                      [0, 3, 0, 0], 
+                      [400, 0, 0, 0]])
+    def f(x): return J.dot(x)
+    def vjp(x, v): return v.dot(J)
+    def jvp(x, v): return J.dot(v)
+
+    def objective(x):
+        y = f(x)
+        return numpy.sum((y - 1.0) ** 2)
+
+    def gradient(x):
+        y = f(x)
+        return vjp(x, y - 1.0) * 2
+
+    def hessian(x, v):
+        return vjp(x, jvp(x, v)) * 2
+
     g = numpy.zeros(4) + 1.0
-    Delta = 10000.
+    g[...] = [  -2.,   -4.,   -6., -800.]
+    Delta = 8000.
     rtol = 1e-8
-    def Bvp(v):
-        return Hessian.dot(v)
 
-    z = cg_steihaug(real_vector_space, Bvp, g, Delta, rtol, monitor=print)
+    z = cg_steihaug(real_vector_space, hessian, g, Delta, rtol, monitor=print)
 
-    assert_allclose(Hessian.dot(z), -g)
+    assert_allclose(Bvp(z), -g)
 
 def test_tr():
     trcg = TrustRegionCG(maxradius=10.)
@@ -40,16 +58,13 @@ def test_tr_precond():
 
 def test_gaussnewton():
     trcg = TrustRegionCG(maxiter=10)
-    JT = numpy.diag([1, 2, 3, 4e2])
-    def f(x):
-        return JT.dot(x)
-
-    # watchout JT is differently indexed due to the poor name choice in vmad.
-    def vjp(x, v):
-        return JT.dot(v)
-
-    def jvp(x, v):
-        return v.dot(JT)
+    J = numpy.array([[0, 0, 0, 1],
+                      [0, 0, 2, 0],
+                      [0, 1, 0, 0],
+                      [1, 0, 0, 0]])
+    def f(x): return J.dot(x)
+    def vjp(x, v): return v.dot(J)
+    def jvp(x, v): return J.dot(v)
 
     def objective(x):
         y = f(x)
@@ -59,10 +74,16 @@ def test_gaussnewton():
         y = f(x)
         return vjp(x, y - 1.0) * 2
 
-    def jTjvp(x, v):
-        return jvp(x, vjp(x, v))
+    def hessian(x, v):
+        return vjp(x, jvp(x, v)) * 2
 
-    problem = Problem(objective=objective, gradient=gradient, hessian_vector_product=jTjvp, cg_rtol=1e-2)
+    problem = Problem(objective=objective, gradient=gradient, hessian_vector_product=hessian, cg_rtol=1e-4, maxradius=8000)
+
+    print("Hessian")
+    print(hessian(None, [1, 0, 0, 0]))
+    print(hessian(None, [0, 1, 0, 0]))
+    print(hessian(None, [0, 0, 1, 0]))
+    print(hessian(None, [0, 0, 0, 1]))
 
     x0 = numpy.zeros(4)
     r = trcg.minimize(problem, x0, monitor=print)

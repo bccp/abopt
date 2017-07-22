@@ -139,7 +139,7 @@ class Problem(object):
         atol=0,
         rtol=1e-7,
         xtol=1e-7,
-        gtol=0,
+        gtol=1e-8,
         precond=None,
         **kwargs
         ):

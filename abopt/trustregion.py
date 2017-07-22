@@ -33,8 +33,8 @@ class TrustRegionCG(Optimizer):
             #print(*kwargs)
             pass
 
-        # solve H z = 0.5 g constrained by the radius
-        z = cg_steihaug(problem.vs, Avp, mul(state.Pg, 0.5), state.radius, problem.cg_rtol, monitor=cg_monitor)
+        # solve H z = g constrained by the radius
+        z = cg_steihaug(problem.vs, Avp, state.Pg, state.radius, problem.cg_rtol, monitor=cg_monitor)
 
         mdiff = 0.5 * dot(z, Avp(z)) + dot(state.Pg, z)
 
@@ -52,7 +52,7 @@ class TrustRegionCG(Optimizer):
 
 #        print(y1, x1)
 #        print(state.y, state.x)
-        #print(rho, fdiff, mdiff, Avp(z), state.Pg, dot(z, z) ** 0.5, state.radius)
+        print('rho', rho, 'fdiff', fdiff, 'mdiff', mdiff, 'Avp(z)', Avp(z), 'Pg', state.Pg, 'znorm', dot(z, z) ** 0.5, 'radius', state.radius)
 
         interior = dot(z, z) ** 0.5 < 0.9 * state.radius
 
