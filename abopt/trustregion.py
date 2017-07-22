@@ -6,6 +6,7 @@
 """
 
 from .abopt2 import Optimizer, Problem, Proposal
+from .lbfgs import post_scaled_direct_bfgs, LBFGSHessian
 
 class TrustRegionCG(Optimizer):
     optimizer_defaults = {'eta1' : 0.1,
@@ -14,7 +15,10 @@ class TrustRegionCG(Optimizer):
                         't1' : 0.25,
                         't2' : 2.0,
                         'maxiter' : 1000,
-                        'autoprecondition' : True,
+                        'lbfgs_precondition' : True,
+                        'm' : 6,
+                        'diag_update' : post_scaled_direct_bfgs,
+                        'rescale_diag' : False,
                         }
 
     problem_defaults = {
@@ -22,8 +26,8 @@ class TrustRegionCG(Optimizer):
                         'maxradius' : 100.
                     }
 
-    def _newHessianApprox(self, problem, Px):
-        return LBFGSHessian(problem, m=6)
+    def _newHessianApprox(self, problem):
+        return LBFGSHessian(problem.vs, m=self.m, diag_update=self.diag_update, rescale_diag=self.rescale_diag)
 
     def single_iteration(self, problem, state):
         mul = problem.vs.mul
@@ -37,10 +41,9 @@ class TrustRegionCG(Optimizer):
             #print(*kwargs)
             pass
 
-        if self.autoprecondition:
-            B1 = self._newHessianArppox(problem.vs, state.Pg)
-            B = state.B
-            mvp = B.hvp
+        if self.lbfgs_precondition:
+            B1 = self._newHessianApprox(problem)
+            mvp = state.B.hvp
         else:
             B1 = None
             mvp = None
@@ -103,7 +106,7 @@ class TrustRegionCG(Optimizer):
         if state.nit == 0:
             # initial radius is the norm of the gradient.
             state.radius = prop.Pgnorm
-            state.B = self._newHessianApprox(problem, prop.Pg)
+            state.B = self._newHessianApprox(problem)
         else:
             state.radius = prop.radius
             state.B = prop.B
@@ -182,8 +185,8 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None, mvp=None):
             d1 = addmul(mr1, d0, rho1 / rho0)
 
 
-        if B is not None:
-            B.update(z0, z1, r0, r1)
+            if B is not None:
+                B.update(z0, z1, r0, r1)
 
         r0 = r1
         mr0 = mr1

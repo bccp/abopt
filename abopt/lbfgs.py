@@ -250,6 +250,9 @@ class LBFGSHessian(object):
         self.YS.append(dot(self.Y[-1], self.S[-1]))
         self.YY.append(dot(self.Y[-1], self.Y[-1]))
 
+        if self.YY[-1] == 0 or self.YS[-1] == 0: # failed LBFGS
+            raise
+
         if len(self.Y) > self.m:
             del self.Y[0]
             del self.S[0]

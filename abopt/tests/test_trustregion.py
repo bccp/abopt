@@ -87,20 +87,29 @@ def test_cg_steihaug_lbfgs():
     assert_allclose(B3.hvp(g), -z, rtol=1e-3)
 
 def test_tr():
-    trcg = TrustRegionCG(maxradius=10.)
+    trcg = TrustRegionCG(maxradius=10., maxiter=100, lbfgs_precondition=False)
     problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod)
+
+    x0 = numpy.zeros(20)
+    r = trcg.minimize(problem, x0, monitor=print)
+    assert r.converged
+    assert_allclose(r.x, 1.0, rtol=1e-4)
+
+def test_tr_precond():
+    trcg = TrustRegionCG(maxradius=10., maxiter=100, lbfgs_precondition=False)
+    precond = Preconditioner(Pvp=lambda x: 20 * x, vQp=lambda x: 0.05 * x, Qvp=lambda x: 0.05 * x)
+    problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod, precond=precond)
 
     x0 = numpy.zeros(2)
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
     assert_allclose(r.x, 1.0, rtol=1e-4)
 
-def test_tr_precond():
-    trcg = TrustRegionCG(maxradius=10., maxiter=100)
-    precond = Preconditioner(Pvp=lambda x: 20 * x, vQp=lambda x: 0.05 * x, Qvp=lambda x: 0.05 * x)
-    problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod, precond=precond)
+def test_tr_lbfgs():
+    trcg = TrustRegionCG(maxradius=10., maxiter=100, lbfgs_precondition=True)
+    problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod)
 
-    x0 = numpy.zeros(2)
+    x0 = numpy.zeros(20)
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
     assert_allclose(r.x, 1.0, rtol=1e-4)
