@@ -14,12 +14,16 @@ class TrustRegionCG(Optimizer):
                         't1' : 0.25,
                         't2' : 2.0,
                         'maxiter' : 1000,
+                        'autoprecondition' : True,
                         }
 
     problem_defaults = {
                         'cg_rtol' : 1e-2,
                         'maxradius' : 100.
                     }
+
+    def _newHessianApprox(self, problem, Px):
+        return LBFGSHessian(problem.vs, 6, problem.vs.ones_like(Px))
 
     def single_iteration(self, problem, state):
         mul = problem.vs.mul
@@ -33,8 +37,16 @@ class TrustRegionCG(Optimizer):
             #print(*kwargs)
             pass
 
+        if self.autoprecondition:
+            B1 = self._newHessianArppox(problem.vs, state.Pg)
+            B = state.B
+            mvp = B.hvp
+        else:
+            B1 = None
+            mvp = None
+
         # solve H z = g constrained by the radius
-        z = cg_steihaug(problem.vs, Avp, state.Pg, state.radius, problem.cg_rtol, monitor=cg_monitor)
+        z = cg_steihaug(problem.vs, Avp, state.Pg, state.radius, problem.cg_rtol, monitor=cg_monitor, B=B1, mvp=mvp)
 
         mdiff = 0.5 * dot(z, Avp(z)) + dot(state.Pg, z)
 
@@ -70,6 +82,7 @@ class TrustRegionCG(Optimizer):
             prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y)
 
         prop.radius = radius1
+        prop.B = B1
         return prop
 
     def assess(self, problem, state, prop):
@@ -90,13 +103,15 @@ class TrustRegionCG(Optimizer):
         if state.nit == 0:
             # initial radius is the norm of the gradient.
             state.radius = prop.Pgnorm
+            state.B = self._newHessianApprox(problem, prop.Pg)
         else:
             state.radius = prop.radius
+            state.B = prop.B
 
         #print('move', prop.y)
         Optimizer.move(self, problem, state, prop)
 
-def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None):
+def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None, mvp=None):
     """ best effort solving for y = - A^{-1} g with cg,
         given the trust-region constraint.
 
@@ -112,19 +127,22 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None):
 
             http://epubs.siam.org/doi/abs/10.1137/S1052623497327854
 
+        mvp is the preconditioner operator. M^{-1}.
     """
 
+    if mvp is None: mvp = lambda x:x
     dot = vs.dot
     mul = vs.mul
     addmul = vs.addmul
 
     z0 = vs.zeros_like(g)
     r0 = g
-    d0 = g
+    mr0 = mvp(r0)
+    d0 = mr0
 
     j = 0
 
-    rho_init = dot(r0, r0)
+    rho_init = dot(mr0, r0)
 
     rho0 = rho_init
 
@@ -137,7 +155,7 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None):
         p0 = addmul(z0, d0, -alpha)
 
         if abs(dBd0) < 1e-15:
-            #print("bad dBd0")
+            print("bad dBd0")
             break
 
         if dBd0 <= 0 or dot(p0, p0) ** 0.5 >= Delta:
@@ -150,21 +168,25 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None):
             c_ = dot(z0, z0) - Delta ** 2
             tau = (- b_ + (b_ **2 - 4 * a_ * c_) ** 0.5) / (2 * a_)
             z1 = addmul(z0, d0, -tau)
-            rho1 = 0
+            rho1 = 0 # will terminate
             r1 = r0
+            mr1 = mr0
             d1 = d0
         else:
             z1 = addmul(z0, d0, -alpha)
             r1 = addmul(r0, Bd0, -alpha)
+            mr1 = mvp(r1)
 
-            rho1 = dot(r1, r1)
+            rho1 = dot(mr1, r1)
 
-            d1 = addmul(r1, d0, rho1 / rho0)
+            d1 = addmul(mr1, d0, rho1 / rho0)
+
 
         if B is not None:
             B.update(z0, z1, r0, r1)
 
         r0 = r1
+        mr0 = mr1
         d0 = d1
         z0 = z1
         rho0 = rho1
@@ -173,6 +195,7 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None):
             monitor(j, rho0, r0, d0, z0, Avp(z0), g, B)
 
         if rho1 / rho_init < rtol ** 2:
+            print("rho1 / rho_init", rho1 / rho_init, rtol ** 2)
             break
 
         j = j + 1

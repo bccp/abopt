@@ -43,10 +43,10 @@ def test_cg_steihaug():
 
 def test_cg_steihaug_lbfgs():
     import numpy
-    J = numpy.array([[0, 0, 0, 1],
-                      [0, 0, 2, 0], 
+    J = numpy.array([[0, 0, 4, 1],
+                      [0, 2, 2, 0], 
                       [0, 3, 0, 0], 
-                      [400, 0, 0, 0]])
+                      [400, 0, 9, 0]])
     def f(x): return J.dot(x)
     def vjp(x, v): return v.dot(J)
     def jvp(x, v): return J.dot(v)
@@ -74,6 +74,17 @@ def test_cg_steihaug_lbfgs():
 
     assert_allclose(B.hvp(g), -z, rtol=1e-3)
     assert_allclose(Avp(z), -g)
+
+    print('-------', "run cg with the preconditioner")
+    B2 = LBFGSHessian(real_vector_space, 5, numpy.ones_like(g))
+    z2 = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print, B=B2, mvp=B.hvp)
+    assert_allclose(B2.hvp(g), -z, rtol=1e-3)
+    #assert_allclose(z, z2)
+
+    print('-------', "run cg with the new preconditioner")
+    B3 = LBFGSHessian(real_vector_space, 5, numpy.ones_like(g))
+    z3 = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print, B=B3, mvp=B2.hvp)
+    assert_allclose(B3.hvp(g), -z, rtol=1e-3)
 
 def test_tr():
     trcg = TrustRegionCG(maxradius=10.)
