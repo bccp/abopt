@@ -21,14 +21,18 @@ class VectorSpace(object):
             self.dot = dot
 
     def copy(self, a):
-        return self.addmul(0, a, 1)
+        r = self.addmul(0, a, 1)
+        assert type(r) is type(a)
+        return r
 
     def ones_like(self, b):
         r = self.addmul(1, b, 0)
+        assert type(r) is type(b)
         return r
 
     def zeros_like(self, b):
         r = self.addmul(0, b, 0)
+        assert type(r) is type(b)
         return r
 
     def mul(self, b, c, p=1):

@@ -134,7 +134,7 @@ def direct_bfgs(vs, hessian, pre_scaled=False, post_scaled=False):
 
     if post_scaled:
         D1yy = dot(mul(y, D1), y)
-        D1 = mul(ys / D1yy, D1)
+        D1 = mul(D1, ys / D1yy)
 
     return D1
 
@@ -180,7 +180,7 @@ def inverse_dfp(vs, hessian, pre_scaled=False, post_scaled=False):
     if post_scaled:
         yD1 = mul(y, D1)
         D1yy = dot(yD1, y)
-        D1 = mul(ys / D1yy, D1)
+        D1 = mul(D1, ys / D1yy)
 
     return D1
 
