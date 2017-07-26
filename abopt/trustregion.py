@@ -157,11 +157,14 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None, mvp=None):
 
         p0 = addmul(z0, d0, -alpha)
 
-        if abs(dBd0) < 1e-15:
-            print("bad dBd0")
-            break
+        if dBd0 == 0: # zero Hessian
+            rho1 = 0 # will terminate
+            z1 = z0
+            r1 = r0
+            mr1 = mr0
+            d1 = d0
 
-        if dBd0 <= 0 or dot(p0, p0) ** 0.5 >= Delta:
+        elif dBd0 <= 0 or dot(p0, p0) ** 0.5 >= Delta:
             #print("dBd0", dBd0, "rad", dot(p0, p0) ** 0.5, Delta)
             # negative curvature or too fast
             # find tau such that p = z0 + tau d0 minimizes m(p)
