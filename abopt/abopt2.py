@@ -45,7 +45,7 @@ class State(object):
         return hasattr(self, key)
 
     def __repr__(self):
-        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'assessment', 'radius', 'B', 'rate'] if k in self]
+        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'assessment', 'radius', 'B', 'rate', 'rho'] if k in self]
         return repr(d)
 
 class Proposal(object):
@@ -67,6 +67,7 @@ class Proposal(object):
         self.g = g
         self.Pg = Pg
         self.problem = problem
+        self.init = False
 
     def complete(self, state):
         dot = self.problem.vs.dot
@@ -259,24 +260,9 @@ class Optimizer(object):
         # here is an example that doesn't yield a new solution
         return Proposal(Px=state.Px)
 
-    def minimize(optimizer, problem, x0, monitor=None):
-        # first make sure the default problem parameters are set
-        # FIXME: this is ugly but otherwise either
-        # - problem must be defined after optimizer, or
-        # - problem.get must take optimizer as argument, or
-        # - we need to add 'config' object that is built from problem and optimizer
+    def restart(optimizer, problem, state, monitor=None):
         for key, value in optimizer.problem_defaults.items():
             problem.__dict__.setdefault(key, value)
-
-        state = State()
-
-        Px0 = problem.precond.Pvp(x0) # the only place we convert from x to Px
-
-        # make a full proposal with x and g
-        prop = Proposal(problem, x=x0, Px=Px0).complete(state)
-
-        optimizer.move(problem, state, prop)
-        state.nit = state.nit + 1
 
         if monitor is not None:
             monitor(state)
@@ -307,6 +293,30 @@ class Optimizer(object):
 
         return state
 
+    def minimize(optimizer, problem, x0, monitor=None):
+        # first make sure the default problem parameters are set
+        # FIXME: this is ugly but otherwise either
+        # - problem must be defined after optimizer, or
+        # - problem.get must take optimizer as argument, or
+        # - we need to add 'config' object that is built from problem and optimizer
+        for key, value in optimizer.problem_defaults.items():
+            problem.__dict__.setdefault(key, value)
+
+        state = State()
+
+        Px0 = problem.precond.Pvp(x0) # the only place we convert from x to Px
+
+        # make a full initial proposal with x and g
+        prop = Proposal(problem, x=x0, Px=Px0).complete(state)
+        prop.init = True
+
+        optimizer.move(problem, state, prop)
+        state.nit = state.nit + 1
+
+        optimizer.restart(problem, state, monitor)
+
+        return state
+
 
 class TrustRegionOptimizer(Optimizer):
     pass
@@ -334,7 +344,7 @@ class GradientDescent(Optimizer):
             return False, "Preconditioned Gradient vanishes"
 
     def move(self, problem, state, prop):
-        if state.nit == 0:
+        if prop.init:
             state.rate = 1.0
         else:
             state.rate = prop.rate

@@ -67,7 +67,7 @@ class TrustRegionCG(Optimizer):
 
 #        print(y1, x1)
 #        print(state.y, state.x)
-        print('rho', rho, 'fdiff', fdiff, 'mdiff', mdiff, 'Avp(z)', Avp(z), 'Pg', state.Pg, 'znorm', dot(z, z) ** 0.5, 'radius', state.radius)
+        #print('rho', rho, 'fdiff', fdiff, 'mdiff', mdiff, 'Avp(z)', Avp(z), 'Pg', state.Pg, 'znorm', dot(z, z) ** 0.5, 'radius', state.radius)
 
         interior = dot(z, z) ** 0.5 < 0.9 * state.radius
 
@@ -85,6 +85,7 @@ class TrustRegionCG(Optimizer):
             prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y)
 
         prop.radius = radius1
+        prop.rho = rho
         prop.B = B1
         return prop
 
@@ -103,13 +104,15 @@ class TrustRegionCG(Optimizer):
             return False, "Preconditioned gradient vanishes"
 
     def move(self, problem, state, prop):
-        if state.nit == 0:
+        if prop.init:
             # initial radius is the norm of the gradient.
             state.radius = prop.Pgnorm
             state.B = self._newHessianApprox(problem)
+            state.rho = 1.0
         else:
             state.radius = prop.radius
             state.B = prop.B
+            state.rho = prop.rho
 
         #print('move', prop.y)
         Optimizer.move(self, problem, state, prop)
@@ -201,7 +204,7 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None, mvp=None):
             monitor(j, rho0, r0, d0, z0, Avp(z0), g, B)
 
         if rho1 / rho_init < rtol ** 2:
-            print("rho1 / rho_init", rho1 / rho_init, rtol ** 2)
+            #print("rho1 / rho_init", rho1 / rho_init, rtol ** 2)
             break
 
         j = j + 1

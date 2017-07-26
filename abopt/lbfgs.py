@@ -287,8 +287,8 @@ class LBFGS(Optimizer):
         if prop.Pgnorm == 0:
             return False, "Preconditioned gradient vanishes"
 
-        if state['nit'] < self.miniter and len(state.B.Y) != 0:
-            # do not stop too early, unless we are stuck with GD
+        if state['nit'] < self.miniter: # and len(state.B.Y) != 0:
+            # do not stop too early, #unless we are stuck with GD
             return
 
         if prop.dxnorm <= problem.xtol:
@@ -304,7 +304,7 @@ class LBFGS(Optimizer):
 
         prop.complete(state)
 
-        if state.nit == 0:
+        if prop.init:
             state.B = self._newLBFGSHessian(problem)
             state.z = prop.Pg
         else:
