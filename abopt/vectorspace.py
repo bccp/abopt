@@ -118,10 +118,10 @@ class ComplexVectorSpace(VectorSpace):
         a = _c2r(a)
         b = _c2r(b)
         c = _c2r(c)
-        return _r2c(RealVectorSpace.addmul(self, a, b, c, p))
+        return _r2c(RealVectorSpace.addmul(RealVectorSpace(), a, b, c, p))
 
     def dot(self, a, b):
-        return RealVectorSpace.dot(self, _c2r(a), _c2r(b))
+        return RealVectorSpace.dot(RealVectorSpace(), _c2r(a), _c2r(b))
 
 real_vector_space = RealVectorSpace()
 complex_vector_space = ComplexVectorSpace()
