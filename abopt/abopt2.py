@@ -306,7 +306,7 @@ class Optimizer(object):
 
         # initialize state with args
         for key, value in state_args.items():
-            state[key] = value
+            setattr(state, key, value)
 
         Px0 = problem.precond.Pvp(x0) # the only place we convert from x to Px
 
