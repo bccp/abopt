@@ -314,7 +314,6 @@ class Optimizer(object):
         prop = Proposal(problem, x=x0, Px=Px0, init=True).complete(state)
 
         optimizer.move(problem, state, prop)
-        state.nit = state.nit + 1
 
         optimizer.restart(problem, state, monitor)
 
