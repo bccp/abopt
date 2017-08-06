@@ -49,7 +49,7 @@ class State(object):
         return repr(d)
 
 class Proposal(object):
-    def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None):
+    def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None, init=False):
         """ A proposal is a collection of variable and gradients.
 
             We will generate the variables if they are not provided.
@@ -67,7 +67,7 @@ class Proposal(object):
         self.g = g
         self.Pg = Pg
         self.problem = problem
-        self.init = False
+        self.init = init
 
     def complete(self, state):
         dot = self.problem.vs.dot
@@ -77,7 +77,7 @@ class Proposal(object):
         self.complete_y(state)
         self.complete_g(state)
 
-        if state.nit > 0:
+        if not self.init:
             self.dy = self.y - state.y
             dx = addmul(self.x, state.x, -1)
             self.dxnorm = dot(dx, dx) ** 0.5
@@ -293,7 +293,7 @@ class Optimizer(object):
 
         return state
 
-    def minimize(optimizer, problem, x0, monitor=None):
+    def minimize(optimizer, problem, x0, monitor=None, **state_args):
         # first make sure the default problem parameters are set
         # FIXME: this is ugly but otherwise either
         # - problem must be defined after optimizer, or
@@ -304,11 +304,14 @@ class Optimizer(object):
 
         state = State()
 
+        # initialize state with args
+        for key, value in state_args.items():
+            state[key] = value
+
         Px0 = problem.precond.Pvp(x0) # the only place we convert from x to Px
 
         # make a full initial proposal with x and g
-        prop = Proposal(problem, x=x0, Px=Px0).complete(state)
-        prop.init = True
+        prop = Proposal(problem, x=x0, Px=Px0, init=True).complete(state)
 
         optimizer.move(problem, state, prop)
         state.nit = state.nit + 1
