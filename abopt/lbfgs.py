@@ -266,12 +266,13 @@ class LBFGSHessian(object):
 
 class LBFGS(Optimizer):
     from .linesearch import backtrace
-
+    from .linesearch import simpleregulator
     optimizer_defaults = {
         'maxiter' : 1000,
         'miniter' : 6,
         'm' : 6,
         'linesearch' : backtrace,
+        'regulator' : simpleregulator,
         'diag_update' : post_scaled_direct_bfgs,
         'rescale_diag' : False,
     }
@@ -335,7 +336,12 @@ class LBFGS(Optimizer):
             # hvp cannot be computed, recover
             if z is None: raise StopIteration
 
-            prop, r1 = self.linesearch(problem, state, z, 1.0)
+            if len(B.Y) < 0.5 * B.m:
+                # hessian likely poor, regulate the step size
+                rmax = self.regulator(problem, state, z)
+            else:
+                rmax = 1.
+            prop, r1 = self.linesearch(problem, state, z, rmax)
 
             # failed line search, recover
             if prop is None: raise StopIteration
@@ -346,13 +352,7 @@ class LBFGS(Optimizer):
 
             z = state.Pg
 
-            # The purpose of GD is to estimate the Hessian,
-            # thus we do not want to move too far yet
-            # limit it to 10 x of the original proposal
-            if state.Pxnorm != 0:
-                rmax = min(10 * state.Pxnorm / state.Pgnorm, 1.0)
-            else:
-                rmax = 1.0
+            rmax = self.regulator(problem, state, z)
 
             prop, r1 = self.linesearch(problem, state, state.Pg, rmax)
 
