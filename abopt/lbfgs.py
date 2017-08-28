@@ -326,6 +326,10 @@ class LBFGS(Optimizer):
         try:
             # use old LBFGSHessian, and update it
             B = state.B
+
+            # no hessian approximation yet, use GD
+            if len(B.Y) == 0: raise StopIteration
+
             z = B.hvp(state.Pg)
 
             # hvp cannot be computed, recover
@@ -340,9 +344,17 @@ class LBFGS(Optimizer):
             # LBFGS failed. Abandon LBFGS and restart with GD
             B = self._newLBFGSHessian(problem)
 
-            z = B.hvp(state.Pg)
+            z = state.Pg
 
-            prop, r1 = self.linesearch(problem, state, state.Pg, 1.0)
+            # The purpose of GD is to estimate the Hessian,
+            # thus we do not want to move too far yet
+            # limit it to 10 x of the original proposal
+            if state.Pxnorm != 0:
+                rmax = min(10 * state.Pxnorm / state.Pgnorm, 1.0)
+            else:
+                rmax = 1.0
+
+            prop, r1 = self.linesearch(problem, state, state.Pg, rmax)
 
             # failed GD, die without a proposal
             if prop is None: return None
