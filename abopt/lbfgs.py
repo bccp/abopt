@@ -347,6 +347,10 @@ class LBFGS(Optimizer):
             if problem.check_convergence(state.y, prop.y):
                 raise StopIteration
 
+            #if LBFGS is not moving, try GD
+            if problem.check_convergence(state.y, prop.y):
+                raise StopIteration
+
             # failed line search, recover
             if prop is None: raise StopIteration
 
