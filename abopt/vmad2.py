@@ -858,7 +858,8 @@ def nodes_to_graph(nodes, depth=0, **kwargs):
 
         if depth > 0 and isinstance(node, CodeSegNode):
             # render the programme nodes as subgraphs
-            codeseg = node.codeseg
+            
+            codeseg = node.get_codeseg()
             subgraph, inputs, outputs = nodes_to_graph(codeseg.nodes, depth - 1)
             subgraph.name = 'cluster_' + str(node.primitive)
             subgraph.attr('graph', label=label)
@@ -883,10 +884,12 @@ def nodes_to_graph(nodes, depth=0, **kwargs):
                 attrs['taillabel'] = '<' + str(from_arg.name) + '>'
                 attrs['tail_lp'] = "12"
             else:
-                from_nodeid = nodeid + str(arg.value)
+                from_nodeid = nodeid + unique(arg.value)
                 graph.node(from_nodeid, label=str(arg.value))
-                inputs[arg.value.name] = from_nodeid
 
+                if not isinstance(arg.value, Literal):
+                    inputs[arg.value.name] = from_nodeid
+                          
             if nodeid in subgraphs:
                 nodeid = subgraphs[nodeid][0][arg.name]
 
