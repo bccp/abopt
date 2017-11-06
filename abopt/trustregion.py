@@ -9,16 +9,18 @@ from .abopt2 import Optimizer, Problem, Proposal
 from .lbfgs import post_scaled_direct_bfgs, LBFGSHessian
 
 class TrustRegionCG(Optimizer):
+    from .linesearch import backtrace
     optimizer_defaults = {'eta1' : 0.1,
                         'eta2' : 0.25,
                         'eta3' : 0.75,
                         't1' : 0.25,
                         't2' : 2.0,
                         'maxiter' : 1000,
-                        'lbfgs_precondition' : True,
+                        'lbfgs_precondition' : False,
                         'm' : 6,
                         'diag_update' : post_scaled_direct_bfgs,
                         'rescale_diag' : False,
+                        'linesearch' : backtrace,
                         }
 
     problem_defaults = {
@@ -87,15 +89,33 @@ class TrustRegionCG(Optimizer):
         prop.radius = radius1
         prop.rho = rho
         prop.B = B1
+
+        #if TrustRegion is not moving, try GD
+        if rho > self.eta1 and problem.check_convergence(state.y, prop.y):
+            print("fall back to GD", state.y, prop.y)
+            mul = problem.vs.mul
+
+            z = mul(state.Pg, 1 / state.Pgnorm)
+
+            prop, r1 = self.linesearch(problem, state, z, 2.0 * radius1)
+            # reinit.
+            prop.radius = r1
+            prop.reinit = True
+
         return prop
 
     def assess(self, problem, state, prop):
         #print("assess radius", state.radius, 'tol', problem.get_tol(state.y), 'gnorm', prop.gnorm, 'gtol', problem.gtol)
-        if prop.radius >= state.radius:
+        if hasattr(prop, 'reinit') and prop.reinit:
             if problem.check_convergence(state.y, prop.y):
-                return True, "Objective is not improving in trust region"
-            if prop.dxnorm <= problem.xtol:
-                return True, "Solution is not moving in trust region"
+                return True, "Objective is not improving in GD"
+
+        else:
+            if prop.radius >= state.radius:
+                if problem.check_convergence(state.y, prop.y):
+                    return True, "Objective is not improving in trust region"
+                if prop.dxnorm <= problem.xtol:
+                    return True, "Solution is not moving in trust region"
 
         if prop.gnorm <= problem.gtol:
             return True, "Gradient is sufficiently small"
@@ -104,7 +124,7 @@ class TrustRegionCG(Optimizer):
             return False, "Preconditioned gradient vanishes"
 
     def move(self, problem, state, prop):
-        if prop.init:
+        if prop.init or (hasattr(prop, 'reinit') and prop.reinit):
             # initial radius is the norm of the gradient.
             state.radius = prop.Pgnorm
             state.B = self._newHessianApprox(problem)
