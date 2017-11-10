@@ -190,6 +190,15 @@ class Problem(object):
         vQ = self.precond.vQp(v)
         return self.precond.Qvp(self.hessian_vector_product(x, vQ))
 
+    def Hvp(self, x, v):
+        """ This returns the hessian product of the unpreconditioned variable against
+            a vector of the unpreconditioned variable.
+            uppercase H means Hessian, not Hessian inverse.
+        """
+        if self.hessian_vector_product is None:
+            raise ValueError("hessian vector product is not defined")
+        return self.hessian_vector_product(x, v)
+
     def get_ytol(self, y):
         thresh = self.rtol * abs(y) + self.atol
         return thresh

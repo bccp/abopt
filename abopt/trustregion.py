@@ -25,7 +25,8 @@ class TrustRegionCG(Optimizer):
 
     problem_defaults = {
                         'cg_rtol' : 1e-2,
-                        'maxradius' : 100.
+                        'maxradius' : 100.,
+                        'initradius' : None,
                     }
 
     def _newHessianApprox(self, problem):
@@ -51,7 +52,10 @@ class TrustRegionCG(Optimizer):
             mvp = None
 
         # solve H z = g constrained by the radius
-        z = cg_steihaug(problem.vs, Avp, state.Pg, state.radius, problem.cg_rtol, monitor=cg_monitor, B=B1, mvp=mvp)
+        radius1 = state.radius
+
+        z = cg_steihaug(problem.vs, Avp, state.Pg, radius1,
+                problem.cg_rtol, monitor=cg_monitor, B=B1, mvp=mvp)
 
         mdiff = 0.5 * dot(z, Avp(z)) + dot(state.Pg, z)
 
@@ -69,21 +73,22 @@ class TrustRegionCG(Optimizer):
 
 #        print(y1, x1)
 #        print(state.y, state.x)
-        #print('rho', rho, 'fdiff', fdiff, 'mdiff', mdiff, 'Avp(z)', Avp(z), 'Pg', state.Pg, 'znorm', dot(z, z) ** 0.5, 'radius', state.radius)
+        #print('rho', rho, 'fdiff', fdiff, 'mdiff', mdiff, 'Avp(z)', Avp(z), 'Pg', state.Pg, 'znorm', dot(z, z) ** 0.5, 'radius', radius1)
 
-        interior = dot(z, z) ** 0.5 < 0.9 * state.radius
+        interior = dot(z, z) ** 0.5 < 0.9 * radius1
 
         if rho < self.eta2: # poor approximation
             # reinialize radius from the gradient norm if needed
-            radius1 = min(self.t1 * state.radius, state.Pgnorm)
+            radius1 = min(self.t1 * radius1, state.Pgnorm)
         elif rho > self.eta3 and not interior: # good and too conservative
-            radius1 = min(state.radius * self.t2, problem.maxradius)
+            radius1 = min(radius1 * self.t2, problem.maxradius)
         else: # about right
-            radius1 = state.radius
+            radius1 = radius1
 
         if rho > self.eta1: # sufficient quadratic, move
             prop = Proposal(problem, Px=Px1, x=x1, y=y1)
-        else: # poor, stay and adjust the radius
+        else: # poor, stay and use the shrunk radius
+            # restart from the previus cg_steihaug result.
             prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y)
 
         prop.radius = radius1
@@ -92,7 +97,6 @@ class TrustRegionCG(Optimizer):
 
         #if TrustRegion is not moving, try GD
         if rho > self.eta1 and problem.check_convergence(state.y, prop.y):
-            print("fall back to GD", state.y, prop.y)
             mul = problem.vs.mul
 
             z = mul(state.Pg, 1 / state.Pgnorm)
@@ -126,7 +130,10 @@ class TrustRegionCG(Optimizer):
     def move(self, problem, state, prop):
         if prop.init or (hasattr(prop, 'reinit') and prop.reinit):
             # initial radius is the norm of the gradient.
-            state.radius = prop.Pgnorm
+            if problem.initradius is None:
+                state.radius = min(prop.Pgnorm, problem.maxradius)
+            else:
+                state.radius = problem.initradius
             state.B = self._newHessianApprox(problem)
             state.rho = 1.0
         else:
@@ -139,7 +146,7 @@ class TrustRegionCG(Optimizer):
 
 def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None, mvp=None):
     """ best effort solving for y = - A^{-1} g with cg,
-        given the trust-region constraint.
+        given the trust-region constraint;
 
         This is roughly ported from Jeff Regier's
 
@@ -197,7 +204,10 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None, mvp=None):
             c_ = dot(z0, z0) - Delta ** 2
             tau = (- b_ + (b_ **2 - 4 * a_ * c_) ** 0.5) / (2 * a_)
             z1 = addmul(z0, d0, -tau)
-            rho1 = 0 # will terminate
+            if dBd0 <= 0:
+                rho1 = -1 # will terminate
+            else:
+                rho1 = 0
             r1 = r0
             mr1 = mr0
             d1 = d0
@@ -221,7 +231,8 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None, mvp=None):
         rho0 = rho1
 
         if monitor is not None:
-            monitor(j, rho0, r0, d0, z0, Avp(z0), g, B)
+#            monitor(j, rho0, r0, d0, z0, Avp(z0), g, B)
+            monitor(j, rho0, rtol)
 
         if rho1 / rho_init < rtol ** 2:
             #print("rho1 / rho_init", rho1 / rho_init, rtol ** 2)
