@@ -73,7 +73,7 @@ def _make_primitive(operator, func, impl, argnames=None):
     def zerobypass(self, **kwargs):
         ain = type(self).ain
         aout = type(self).aout
-        if all(kwargs[argname] == 0 for argname in ain):
+        if all(kwargs[argname] is 0 for argname in ain):
             d = {}
             for argname in aout:
                 d[argname] = 0
