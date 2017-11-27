@@ -14,6 +14,22 @@ def find_primitive_type(p, func):
     if func == 'vjp': return p.operator.vjp
     if func == 'opr': return p.operator.opr
 
+def prepare_opr_kwargs(record, model):
+    p = record.node
+    impl_kwargs = record.impl_kwargs
+
+    kwargs = {}
+    kwargs.update(p.kwargs)
+
+    # convert original arguments to literals
+    for k, v in impl_kwargs.items():
+        if k in p.varin:
+            kwargs[k] = Literal(model, v)
+        else:
+            kwargs[k] = v
+
+    return kwargs
+
 def vjp(tape):
     model = Model()
     for var in tape.model._vout:
@@ -25,15 +41,7 @@ def vjp(tape):
 
         vjp_of_p = find_primitive_type(p, func='vjp')
 
-        kwargs = {}
-        kwargs.update(p.kwargs)
-
-        # convert original arguments to literals
-        for k, v in impl_kwargs.items():
-            if k in p.varin:
-                kwargs[k] = Literal(model, v)
-            else:
-                kwargs[k] = v
+        kwargs = prepare_opr_kwargs(record, model)
 
         # initialize 'v'
         for argname, var in p.varout.items():
@@ -87,22 +95,13 @@ def jvp(tape):
     for var in tape.model._vin:
         model.input(var.jvp_name)
 
-    print('init', model._syms)
     for i, record in enumerate(tape):
         p = record.node
         impl_kwargs = record.impl_kwargs
 
         jvp_of_p = find_primitive_type(p, func='jvp')
 
-        kwargs = {}
-        kwargs.update(p.kwargs)
-
-        # convert original arguments to literals
-        for k, v in impl_kwargs.items():
-            if k in p.varin:
-                kwargs[k] = Literal(model, v)
-            else:
-                kwargs[k] = v
+        kwargs = prepare_opr_kwargs(record, model)
 
         # initialize 'v'
         for argname, var in p.varin.items():
