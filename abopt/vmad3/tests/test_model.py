@@ -1,10 +1,9 @@
 from pprint import pprint
-from abopt.vmad3.operator import add, to_scalar
+from abopt.vmad3.operator import add, to_scalar, operator
 from abopt.vmad3.model import ModelBuilder
 from abopt.vmad3.error import ModelError
 from abopt.vmad3.context import Context
 import pytest
-
 def test_model():
     with ModelBuilder() as m:
         a, b = m.input('a', 'b')
@@ -110,3 +109,27 @@ def test_model_errors():
 
         with pytest.raises(ModelError):
             add(x2=1)
+def test_model_extra_args():
+    @operator
+    class extra_args:
+        ain = {'x' : '*'}
+        aout = {'y' : '*'}
+
+        def opr(self, x, p):
+            return dict(y = x * p)
+
+        def vjp(self, x, _x, _y, p):
+            return dict(_x = _y * p)
+
+        def jvp(self, x, x_, y_, p):
+            return dict(y_ = x_ * p)
+
+    with ModelBuilder() as m:
+        a, = m.input('a')
+        b, = extra_args(x=a, p=2.0)
+        m.output(b=b)
+
+    ctx = Context(a = 1.0)
+    b = ctx.compute(m, vout='b', monitor=print)
+    assert b == 2.0
+

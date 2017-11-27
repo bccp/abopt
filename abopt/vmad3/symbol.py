@@ -18,6 +18,14 @@ class Symbol(object):
         self.references.append(weakref.ref(node))
 
     @property
+    def vjp_name(self):
+        return '_' + self.name
+
+    @property
+    def jvp_name(self):
+        return self.name + '_'
+
+    @property
     def model(self):
         return self._model()
 

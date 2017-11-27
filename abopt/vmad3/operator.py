@@ -43,6 +43,7 @@ def _make_primitive(operator, func, impl):
                 func     = func,
                 ain      = ain,
                 aout     = aout,
+                argnames = argnames,
                 operator = operator,
             ))
     return primitive
@@ -72,10 +73,10 @@ class add:
     def opr(self, x1, x2):
         return dict(y = x1 + x2)
 
-    def vjp(self, _y, x1, x2):
+    def vjp(self, _y):
         return dict(_x1 = _y, _x2 = _y)
 
-    def jvp(self, x1_, x2_, x1, x2, y):
+    def jvp(self, x1_, x2_):
         return dict(y_ = x1_ + x2_)
 
 # special operator used for check-gradients

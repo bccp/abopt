@@ -96,6 +96,11 @@ class Primitive(object):
         for argname, var in self.varin.items():
             kwargs[argname] = var.resolve(context)
 
+        # add the extra arguments used by the impl
+        for argname in self.argnames:
+            if argname not in kwargs:
+                kwargs[argname] = self.kwargs[argname]
+
         tape.append(self, kwargs)
 
         r = type(self).impl(self, **kwargs)
