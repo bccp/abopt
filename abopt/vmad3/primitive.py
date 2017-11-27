@@ -95,16 +95,18 @@ class Primitive(object):
         return "%s(%s=>%s)" % (self._name, self.varin, self.varout)
 
     def execute(self, context, tape):
-        kwargs = {}
+        resolved = {}
         for argname, var in self.varin.items():
-            kwargs[argname] = var.resolve(context)
+            resolved[argname] = var.resolve(context)
 
+        kwargs = {}
+        kwargs.update(resolved)
         # add the extra arguments used by the impl
         for argname in self.argnames:
             if argname not in kwargs:
                 kwargs[argname] = self.kwargs[argname]
 
-        tape.append(self, kwargs)
+        tape.append(self, resolved)
 
         r = type(self).impl(self, **kwargs)
         for argname, var in self.varout.items():

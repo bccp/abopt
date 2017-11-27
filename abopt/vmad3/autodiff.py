@@ -15,18 +15,22 @@ def find_primitive_type(p, func):
     if func == 'opr': return p.operator.opr
 
 def prepare_opr_kwargs(record, model):
+    """ generate a first guess of kwargs based on the record.
+
+    """
     p = record.node
-    impl_kwargs = record.impl_kwargs
+    resolved = record.resolved
 
     kwargs = {}
+
     kwargs.update(p.kwargs)
 
-    # convert original arguments to literals
-    for k, v in impl_kwargs.items():
-        if k in p.varin:
-            kwargs[k] = Literal(model, v)
-        else:
-            kwargs[k] = v
+    # add resolved symbols as literals
+    for k, v in resolved.items():
+        # v is a python object
+        assert k in p.varin
+        # if we expect an input, convert it to a literal
+        kwargs[k] = Literal(model, v)
 
     return kwargs
 
@@ -37,7 +41,7 @@ def vjp(tape):
 
     for i, record in enumerate(tape[::-1]):
         p = record.node
-        impl_kwargs = record.impl_kwargs
+        resolved = record.resolved
 
         vjp_of_p = find_primitive_type(p, func='vjp')
 
@@ -97,7 +101,7 @@ def jvp(tape):
 
     for i, record in enumerate(tape):
         p = record.node
-        impl_kwargs = record.impl_kwargs
+        resolved = record.resolved
 
         jvp_of_p = find_primitive_type(p, func='jvp')
 

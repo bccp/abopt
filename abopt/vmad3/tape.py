@@ -1,18 +1,18 @@
 from .autodiff import vjp, jvp
 
 class Record(object):
-    def __init__(self, node, impl_kwargs):
+    def __init__(self, node, resolved):
         self.node = node
-        self.impl_kwargs = impl_kwargs
+        self.resolved = resolved
     def __repr__(self):
-        return '%s / %s' % (self.node, self.impl_kwargs)
+        return '%s / %s' % (self.node, self.resolved)
 
 class Tape(list):
     def __init__(self, model):
         self.model = model
 
-    def append(self, node, impl_kwargs):
-        list.append(self, Record(node, impl_kwargs))
+    def append(self, node, resolved):
+        list.append(self, Record(node, resolved))
 
     def get_vjp(self):
         return vjp(self)

@@ -147,7 +147,8 @@ def test_tape_unused():
     b, tape = ctx.compute(m, vout='b', monitor=print, return_tape=True)
     assert b == 2.0
     assert isinstance(tape[0].node, add.opr)
-    assert 'j' not in tape[0].impl_kwargs
+    assert 'j' not in tape[0].resolved
+    assert 'j' in tape[0].node.kwargs
 
     pprint(tape[:])
 
@@ -177,7 +178,8 @@ def test_model_extra_args():
 
     assert b == 2.0
     assert isinstance(tape[0].node, extra_args.opr)
-    assert 'p' in tape[0].impl_kwargs
+    assert 'p' not in tape[0].resolved
+    assert 'p' in tape[0].node.kwargs
 
 def test_model_nasty():
     # assert used extra args are recored on the tape
