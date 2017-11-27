@@ -6,12 +6,24 @@ from .symbol import Symbol, Literal
 class Primitive(object):
     """ Instantiation of a primitive creates a node on a model """
 
-    def _infer_model(self, **kwargs):
+    def _infer_model(self, kwargs):
         kls = type(self)
         model = None
 
         for argname in kls.ain:
             if not argname in kwargs: raise MissingArgument("input argument '%s' not provided" % argname)
+
+            var = kwargs[argname]
+
+            # unpack the primitive result
+            # see __iter__ if explict unpack (a, b = primitive(...))
+            # is used.
+
+            if isinstance(var, Primitive):
+                if len(var.varout) > 1:
+                    raise ModelError("More than one output variable, need to unpack them")
+                var = next(iter(var.varout.values()))
+                kwargs[argname] = var
 
             var = kwargs[argname]
             if isinstance(var, Symbol):
@@ -40,11 +52,14 @@ class Primitive(object):
         self.varout = {}
         self.kwargs = {}
 
-        model = self._infer_model(**kwargs)
+        kwargs = kwargs.copy() # will modify
+
+        model = self._infer_model(kwargs)
         self._name = model.unique_name(kls.__name__)
 
         for argname in kls.ain:
             var = kwargs[argname]
+
 
             if not isinstance(var, Symbol):
                 # automaticlaly make literal symbols

@@ -55,6 +55,7 @@ def _make_primitive(operator, func, impl, argnames=None):
 
     """
     from .primitive import Primitive
+    from .symbol import Symbol
 
     assert func in ('opr', 'vjp', 'jvp')
 
@@ -90,20 +91,22 @@ def _make_primitive(operator, func, impl, argnames=None):
         for arg in kls.aout:
             aout[arg + '_'] = kls.aout[arg]
 
-    bases = (Primitive,)
-
-    primitive = type(operator.__name__ + '-' + func,
-            bases,
-            dict(
+    members =  dict(
                 impl     = impl,
                 func     = func,
                 ain      = ain,
                 aout     = aout,
                 argnames = argnames,
                 operator = operator,
-            ))
-    return primitive
+                )
 
+    bases = (Primitive,)
+
+    primitive = type(operator.__name__ + '-' + func,
+            bases,
+            members
+            )
+    return primitive
 
 # special operator used for partial gradient summation
 @operator

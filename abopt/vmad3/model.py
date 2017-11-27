@@ -23,6 +23,8 @@ class Model(list):
     def input(self, *args):
         r = [self.define(a) for a in args]
         self._vin.extend(r)
+        if len(args) == 1:
+            r = r[0]
         return r
 
     def output(self, **kwargs):

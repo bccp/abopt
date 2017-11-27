@@ -10,9 +10,9 @@ def test_model():
     with ModelBuilder() as m:
         a, b = m.input('a', 'b')
 
-        t1, = add(x1=a, x2=a)
-        t2, = add(x1=b, x2=0)
-        c, = add(x1=t1, x2=t2)
+        t1 = add(x1=a, x2=a)
+        t2 = add(x1=b, x2=0)
+        c = add(x1=t1, x2=t2)
 
         m.output(c=c)
 
@@ -52,8 +52,8 @@ def test_model():
 
 def test_model_partial():
     with ModelBuilder() as m:
-        a, = m.input('a')
-        t1, = add(x1=a, x2=a)
+        a = m.input('a')
+        t1 = add(x1=a, x2=a)
         m.output(c=t1)
 
     ctx = Context(a=3)
@@ -93,8 +93,8 @@ def test_model_unused():
 
 def test_model_partial_out():
     with ModelBuilder() as m:
-        a, = m.input('a')
-        t1, = add(x1=a, x2=a)
+        a = m.input('a')
+        t1 = add(x1=a, x2=a)
         m.output(c=t1)
         m.output(a=a)
 
@@ -123,7 +123,7 @@ def test_model_partial_out():
 
 def test_model_errors():
     with ModelBuilder() as m:
-        a, = m.input('a')
+        a = m.input('a')
         with pytest.raises(ModelError):
             m.output(a=a)
             m.output(a=a)
@@ -140,8 +140,8 @@ def test_model_errors():
 def test_tape_unused():
     # assert unused extra args are not recorded on the tape.
     with ModelBuilder() as m:
-        a, = m.input('a')
-        b, = add(x1=a, x2=a, j=3)
+        a = m.input('a')
+        b = add(x1=a, x2=a, j=3)
         m.output(b=b)
 
     ctx = Context(a = 1.0)
@@ -170,8 +170,8 @@ def test_model_extra_args():
             return dict(y_ = x_ * p)
 
     with ModelBuilder() as m:
-        a, = m.input('a')
-        b, = extra_args(x=a, p=2.0)
+        a = m.input('a')
+        b = extra_args(x=a, p=2.0)
         m.output(b=b)
 
     ctx = Context(a = 1.0)
@@ -186,9 +186,9 @@ def test_model_nasty():
     # assert used extra args are recored on the tape
     n = 2
     with ModelBuilder() as m:
-        x, = m.input('x')
+        x = m.input('x')
         for i in range(2):
-            x, = add(x1=x, x2=x)
+            x = add(x1=x, x2=x)
 
         m.output(y=x)
 
@@ -209,17 +209,17 @@ def test_model_nested():
 
         def model(self, x, n):
             with ModelBuilder() as m:
-                x, = m.input('x')
+                x = m.input('x')
                 for i in range(n):
-                    x, = add(x1=x, x2=x)
+                    x = add(x1=x, x2=x)
 
                 m.output(y=x)
 
             return m
 
     with ModelBuilder() as m:
-        a, = m.input('a')
-        b, = nested(x=a, n=2)
+        a = m.input('a')
+        b = nested(x=a, n=2)
         m.output(b=b)
 
     ctx = Context(a = 1.0)
