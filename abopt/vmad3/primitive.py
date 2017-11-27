@@ -138,9 +138,10 @@ class Primitive(object):
         """ execute the primitive on the context, recording the
             resolved arguments to the tape for replay / gradients.
         """
-        resolved_args = []
+
         resolved = {}
-        for argname, var in self.varin.items():
+        for argname, ref in self.varin.items():
+            var = ref.symbol
             resolved[argname] = var.resolve(context)
 
         kwargs = {}
