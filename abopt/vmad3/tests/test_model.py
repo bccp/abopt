@@ -202,24 +202,12 @@ def test_model_nasty():
     assert _x == 4.0
 
 def test_model_nested():
-    @nestedoperator
-    class nested:
-        ain = {'x' : '*'}
-        aout = {'y' : '*'}
 
-        def model(self, x, n):
-            with ModelBuilder() as m:
-                x = m.input('x')
-                for i in range(n):
-                    x = add(x1=x, x2=x)
-
-                m.output(y=x)
-
-            return m
+    from abopt.vmad3.nested import example
 
     with ModelBuilder() as m:
         a = m.input('a')
-        b = nested(x=a, n=2)
+        b = example(x=a, n=2)
         m.output(b=b)
 
     ctx = Context(a = 1.0)
