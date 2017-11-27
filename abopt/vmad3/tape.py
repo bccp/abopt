@@ -1,6 +1,11 @@
 from .autodiff import vjp, jvp
 
 class Record(object):
+    """ A record on the tape. 
+
+        A record contains the node and the resolved arg symbols to the node.
+
+    """
     def __init__(self, node, resolved):
         self.node = node
         self.resolved = resolved
