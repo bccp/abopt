@@ -1,3 +1,4 @@
+from .error import ResolveError
 import weakref
 
 class Symbol(object):
@@ -47,6 +48,8 @@ class Symbol(object):
         return "[%s:]" % self.name
 
     def resolve(self, context):
+        if self.name not in context:
+            raise ResolveError("Symbol %s does not exist in the context" % self.name)
         return context[self.name]
 
 class Literal(Symbol):

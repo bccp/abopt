@@ -1,4 +1,5 @@
 from .operator import terminal
+from .error import UnexpectedOutput
 from .tape import Tape
 
 class Context(dict):
@@ -31,8 +32,15 @@ class Context(dict):
 
         if isinstance(vout, str):
             single_return = True
+            vout = [vout]
         else:
             single_return = False
+
+        _voutnames = set([var.name for var in model._vout])
+
+        for varname in vout:
+            if varname not in _voutnames:
+                raise UnexpectedOutput("Requested vout %s is not defined by the model as an output" % varname)
 
         r = {}
         for i, p in enumerate(model):
@@ -48,10 +56,10 @@ class Context(dict):
             if monitor is not None:
                 monitor(p, self)
 
+        r = [r[varname] for varname in vout]
+
         if single_return:
-            r = r[vout]
-        else:
-            r = [r[varname] for varname in vout]
+            r = r[0]
 
         if return_tape:
             r = r, tape

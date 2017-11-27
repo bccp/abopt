@@ -1,6 +1,6 @@
 import weakref
 
-from .error import ModelError, OverwritePrecaution, MissingArgument
+from .error import InferError, UnpackError, OverwritePrecaution, MissingArgument
 from .symbol import Symbol, Literal
 
 class Primitive(object):
@@ -21,7 +21,7 @@ class Primitive(object):
 
             if isinstance(var, Primitive):
                 if len(var.varout) > 1:
-                    raise ModelError("More than one output variable, need to unpack them")
+                    raise UnpackError("More than one output variable, need to unpack them")
                 var = next(iter(var.varout.values()))
                 kwargs[argname] = var
 
@@ -39,7 +39,7 @@ class Primitive(object):
                     self._model = weakref.ref(model)
 
         if model is None:
-            raise ModelError("Cannot infer model from variables -- try to mark at least one literal argument explicitly as Literal")
+            raise InferError("Cannot infer model from variables -- try to mark at least one literal argument explicitly as Literal")
 
         return model
 

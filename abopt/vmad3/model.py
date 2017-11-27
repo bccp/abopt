@@ -1,6 +1,6 @@
 from .symbol import Symbol, Literal
 from .operator import terminal
-from .error import ModelError
+from .error import DuplicatedOutput
 
 class Model(list):
     def __init__(self):
@@ -31,7 +31,7 @@ class Model(list):
         for varname, oldvar in kwargs.items():
             for var in self._vout:
                 if var.name == varname:
-                    raise ModelError("Variable %s is already marked as an output" % varname)
+                    raise DuplicatedOutput("Variable %s is already marked as an output" % varname)
 
             var = self.define(varname)
             terminal.opr(x=oldvar, y=var)
@@ -46,6 +46,9 @@ class Model(list):
     def __repr__(self):
         return "Model: %s => %s" % (self._vin, self._vout)
 
-class ModelBuilder(Model):
+class Builder(Model):
+    """ A context manager to signify the process of buildig a model.
+
+    """
     def __enter__(self): return self
     def __exit__(self, *args): self.compile()

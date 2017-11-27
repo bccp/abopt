@@ -1,13 +1,12 @@
 from pprint import pprint
 from abopt.vmad3.operator import add, to_scalar, operator
 from abopt.vmad3.nested import nestedoperator
-from abopt.vmad3.model import ModelBuilder
-from abopt.vmad3.error import ModelError
+from abopt.vmad3.model import Builder
 from abopt.vmad3.context import Context
 import pytest
 
 def test_model():
-    with ModelBuilder() as m:
+    with Builder() as m:
         a, b = m.input('a', 'b')
 
         t1 = add(x1=a, x2=a)
@@ -51,7 +50,7 @@ def test_model():
     print('c_ = ', c_)
 
 def test_model_partial():
-    with ModelBuilder() as m:
+    with Builder() as m:
         a = m.input('a')
         t1 = add(x1=a, x2=a)
         m.output(c=t1)
@@ -72,7 +71,7 @@ def test_model_partial():
     assert c_ == 2.0
 
 def test_model_unused():
-    with ModelBuilder() as m:
+    with Builder() as m:
         a, b = m.input('a', 'b')
         m.output(c=1.0)
 
@@ -92,7 +91,7 @@ def test_model_unused():
     assert c_ == 0
 
 def test_model_partial_out():
-    with ModelBuilder() as m:
+    with Builder() as m:
         a = m.input('a')
         t1 = add(x1=a, x2=a)
         m.output(c=t1)
@@ -121,25 +120,9 @@ def test_model_partial_out():
     assert c_ == 2.0
     assert a_ == 1.0
 
-def test_model_errors():
-    with ModelBuilder() as m:
-        a = m.input('a')
-        with pytest.raises(ModelError):
-            m.output(a=a)
-            m.output(a=a)
-
-        with pytest.raises(ModelError):
-            add(x1=1, x2=1)
-
-        with pytest.raises(ModelError):
-            add(x2=1)
-
-        with pytest.raises(ModelError):
-            add(x1=a, x2=a, y=a)
-
 def test_tape_unused():
     # assert unused extra args are not recorded on the tape.
-    with ModelBuilder() as m:
+    with Builder() as m:
         a = m.input('a')
         b = add(x1=a, x2=a, j=3)
         m.output(b=b)
@@ -169,7 +152,7 @@ def test_model_extra_args():
         def jvp(self, x, x_, y_, p):
             return dict(y_ = x_ * p)
 
-    with ModelBuilder() as m:
+    with Builder() as m:
         a = m.input('a')
         b = extra_args(x=a, p=2.0)
         m.output(b=b)
@@ -185,7 +168,7 @@ def test_model_extra_args():
 def test_model_nasty():
     # assert used extra args are recored on the tape
     n = 2
-    with ModelBuilder() as m:
+    with Builder() as m:
         x = m.input('x')
         for i in range(2):
             x = add(x1=x, x2=x)
@@ -205,7 +188,7 @@ def test_model_nested():
 
     from abopt.vmad3.nested import example
 
-    with ModelBuilder() as m:
+    with Builder() as m:
         a = m.input('a')
         b = example(x=a, n=2)
         m.output(b=b)
@@ -225,3 +208,11 @@ def test_model_nested():
     b_ = ctx.compute(jvp, vout='b_', monitor=print)
     assert b_ == 4.0
 
+def test_model_nested_build():
+
+    from abopt.vmad3.nested import example
+
+    m = example.build(n=2)
+    ctx = Context(x = 1.0)
+    y, tape = ctx.compute(m, vout='y', monitor=print, return_tape=True)
+    assert y == 4.0

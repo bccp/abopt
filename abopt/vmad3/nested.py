@@ -1,6 +1,6 @@
 from .operator import _make_primitive, Operator
 from .context import Context
-from .model import ModelBuilder
+from .model import Builder
 
 def nestedoperator(kls):
     """ Create a nested operator
@@ -25,15 +25,23 @@ def nestedoperator(kls):
     for argname in kls.ain:
         argnames_jvp.append(argname + '_')
 
-    def model(kwargs):
-        model_args = {}
-        for argname in argnames:
-            model_args[argname] = kwargs[argname]
+    def _build(kwargs):
 
-        with ModelBuilder() as m:
+        model_args = {}
+        # copy extra args of the model function
+        for argname in argnames:
+            if argname not in kls.ain:
+                model_args[argname] = kwargs[argname]
+
+        with Builder() as m:
+            # add input args as variables
             for argname in kls.ain:
                 model_args[argname] = m.input(argname)
             r = impl(m, **model_args)
+            # assert outputs are generated
+            for argname in kls.aout:
+                if argname not in r:
+                    raise ModelError("output arg '%s' is not produced by the model" % argname)
             m.output(**r)
         return m
 
@@ -60,12 +68,12 @@ def nestedoperator(kls):
         return r
 
     def opr(self, **kwargs):
-        m = model(kwargs)
+        m = _build(kwargs)
         y = compute(self, m, False, **kwargs)
         return y
 
     def vjp(self, **kwargs):
-        m = model(kwargs)
+        m = _build(kwargs)
         y, tape = compute(self, m, True, **kwargs)
 
         m = tape.get_vjp()
@@ -73,7 +81,7 @@ def nestedoperator(kls):
         return y
 
     def jvp(self, **kwargs):
-        m = model(kwargs)
+        m = _build(kwargs)
         y, tape = compute(self, m, True, **kwargs)
 
         m = tape.get_jvp()
@@ -83,6 +91,17 @@ def nestedoperator(kls):
     kls.opr = _make_primitive(kls, 'opr', opr, argnames=argnames)
     kls.vjp = _make_primitive(kls, 'vjp', vjp, argnames=argnames_vjp)
     kls.jvp = _make_primitive(kls, 'jvp', jvp, argnames=argnames_jvp)
+
+    # FIXME: add docstring / argnames
+    # shall be the list of extra args
+    def build(**kwargs):
+        for argname in kwargs:
+            if argname in kls.ain:
+                raise ModelError("argname %s is an input, shall not be used to produce a model" % argname)
+
+        return _build(kwargs)
+
+    kls.build = build
 
     return type(kls.__name__, (Operator, kls, kls.opr), {})
 
