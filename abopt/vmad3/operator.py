@@ -62,6 +62,10 @@ def operator(kls):
 
     return type(kls.__name__, (Operator, kls, kls.opr), {})
 
+def nestedoperator(kls):
+    kls = type(kls.__name__, (NestedOperator, kls))
+    return operator(kls)
+
 # special operator used for partial gradient summation
 @operator
 class add:

@@ -30,7 +30,10 @@ def vjp(tape):
 
         # convert original arguments to literals
         for k, v in impl_kwargs.items():
-            kwargs[k] = Literal(model, v)
+            if k in p.varin:
+                kwargs[k] = Literal(model, v)
+            else:
+                kwargs[k] = v
 
         # initialize 'v'
         for argname, var in p.varout.items():
@@ -59,13 +62,15 @@ def vjp(tape):
             # bypass literal arguments
             if isinstance(var, Literal): continue
             reference_id = p.varin_info[argname]
-            # cummulate the partials
+            # accummulate the partials
             if reference_id != len(var.references):
-
                 var_f = model.get(var.vjp_name)
                 var_p = model.get(var.vjp_name + '#%d' % reference_id)
+                # create a new symbol for the result, with the same name
+                # because we intent to overwrite it.
+                var_f2 = model.define(var.vjp_name)
 
-                add(x1=var_f, x2=var_p, y=var_f)
+                add(x1=var_f, x2=var_p, y=var_f2)
 
     # mark outputs
     for var in tape.model._vin:
@@ -94,7 +99,10 @@ def jvp(tape):
 
         # convert original arguments to literals
         for k, v in impl_kwargs.items():
-            kwargs[k] = Literal(model, v)
+            if k in p.varin:
+                kwargs[k] = Literal(model, v)
+            else:
+                kwargs[k] = v
 
         # initialize 'v'
         for argname, var in p.varin.items():

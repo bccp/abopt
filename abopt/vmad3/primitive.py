@@ -1,6 +1,6 @@
 import weakref
 
-from .error import ModelError
+from .error import ModelError, OverwritePrecaution, MissingArgument
 from .symbol import Symbol, Literal
 
 class Primitive(object):
@@ -11,7 +11,7 @@ class Primitive(object):
         model = None
 
         for argname in kls.ain:
-            if not argname in kwargs: raise ModelError("input argument '%s' not provided" % argname)
+            if not argname in kwargs: raise MissingArgument("input argument '%s' not provided" % argname)
 
             var = kwargs[argname]
             if isinstance(var, Symbol):
@@ -27,7 +27,7 @@ class Primitive(object):
                     self._model = weakref.ref(model)
 
         if model is None:
-            raise ModelError("Cannot infer model from variables -- avoid using all Literal node")
+            raise ModelError("Cannot infer model from variables -- try to mark at least one literal argument explicitly as Literal")
 
         return model
 
@@ -64,10 +64,13 @@ class Primitive(object):
                 varname = self.name + '-' + argname
                 var = model.define(varname)
             else:
-                # already given a symbol, overwrite it
                 var = kwargs[argname]
+                # already given a symbol, overwrite it
+                # but this doesn't work for gradients
+                if len(var.references) != 0:
+                    raise OverwritePrecaution("Overwritting used symbols is not supported. Because it breaks vjp.")
                 # make a new symbol of the same name
-                var = model.define(var.name)
+                # var = model.define(var.name)
 
             self.varout[argname] = var
 

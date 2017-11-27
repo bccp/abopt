@@ -133,6 +133,9 @@ def test_model_errors():
         with pytest.raises(ModelError):
             add(x2=1)
 
+        with pytest.raises(ModelError):
+            add(x1=a, x2=a, y=a)
+
 def test_tape_unused():
     # assert unused extra args are not recorded on the tape.
     with ModelBuilder() as m:
@@ -175,4 +178,80 @@ def test_model_extra_args():
     assert b == 2.0
     assert isinstance(tape[0].node, extra_args.opr)
     assert 'p' in tape[0].impl_kwargs
+
+def test_model_nasty():
+    # assert used extra args are recored on the tape
+    n = 2
+    with ModelBuilder() as m:
+        x, = m.input('x')
+        for i in range(2):
+            x, = add(x1=x, x2=x)
+
+        m.output(y=x)
+
+    ctx = Context(x=1.0)
+    y, tape = ctx.compute(m, vout='y', return_tape=True)
+    assert y == 4.0
+
+    vjp = tape.get_vjp()
+    ctx = Context(_y = 1.0)
+    _x = ctx.compute(vjp, vout='_x', monitor=print)
+    assert _x == 4.0
+
+def test_model_nested():
+    # assert used extra args are recored on the tape
+    @operator
+    class nested:
+        ain = {'x' : '*'}
+        aout = {'y' : '*'}
+
+        def compute(self, x, n):
+            ctx = Context(x=x)
+
+            with ModelBuilder() as m:
+                x, = m.input('x')
+                for i in range(n):
+                    x, = add(x1=x, x2=x)
+
+                m.output(y=x)
+
+            return ctx.compute(m, vout='y', return_tape=True)
+
+        def opr(self, x, n):
+            y, tape = self.operator.compute(self, x, n)
+            return dict(y=y)
+
+        def vjp(self, x, _y, n):
+            ctx = Context(_y=_y)
+            y, tape = self.operator.compute(self, x, n)
+            vjp = tape.get_vjp()
+            _x = ctx.compute(vjp, vout='_x')
+            return dict(_x=_x)
+
+        def jvp(self, x, x_, n):
+            ctx = Context(x_=x_)
+            y, tape = self.operator.compute(self, x, n)
+            jvp = tape.get_jvp()
+            y_ = ctx.compute(jvp, vout='y_')
+            return dict(y_=y_)
+
+    with ModelBuilder() as m:
+        a, = m.input('a')
+        b, = nested(x=a, n=2)
+        m.output(b=b)
+
+    ctx = Context(a = 1.0)
+    b, tape = ctx.compute(m, vout='b', monitor=print, return_tape=True)
+
+    assert b == 4.0
+
+    vjp = tape.get_vjp()
+    ctx = Context(_b = 1.0)
+    _a = ctx.compute(vjp, vout='_a', monitor=print)
+    assert _a == 4.0
+
+    jvp = tape.get_jvp()
+    ctx = Context(a_ = 1.0)
+    b_ = ctx.compute(jvp, vout='b_', monitor=print)
+    assert b_ == 4.0
 
