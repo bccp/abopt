@@ -9,6 +9,7 @@ class Record(object):
     def __init__(self, node, resolved):
         self.node = node
         self.resolved = resolved
+
     def __repr__(self):
         return '%s / %s' % (self.node, self.resolved)
 

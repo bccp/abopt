@@ -39,6 +39,42 @@ def test_operator_zero():
     c_ = ctx.compute(jvp, vout='c_', monitor=print)
     assert c_ == 0
 
+def test_operator_args():
+    import numpy
+    from numpy.testing import assert_array_equal
+
+    @operator
+    class op:
+        ain = {}
+        # for python 2.x need to use this syntax
+        # to preserve orders
+        aout = [('y', '*'),]
+
+        def opr(self, args, axis):
+            return dict(y=numpy.stack(args, axis=axis))
+
+        def vjp(self, _y, args, axis):
+            return dict(_args=[numpy.take(_y, i, axis=axis) for i in range(numpy.shape(_y)[axis])])
+
+        def jvp(self, args_, args, axis):
+            return dict(y_=numpy.stack(args_, axis))
+
+    with Builder() as m:
+        a = m.input('a')
+        t = op(a, a, a, axis=1)
+        m.output(c=t)
+
+    ctx = Context(a=[1, 2])
+
+    c, tape = ctx.compute(m, vout='c', return_tape=True)
+    assert_array_equal(c, [[1, 1, 1], [2, 2, 2]])
+
+    vjp = tape.get_vjp()
+    ctx = Context(_c=[[1, 1, 1], [1, 1, 1]])
+    _a = ctx.compute(vjp, vout='_a', monitor=print)
+
+    assert_array_equal(_a, [3, 3])
+
 def test_operator_multi_out():
     @operator
     class op:

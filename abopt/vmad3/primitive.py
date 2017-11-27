@@ -3,6 +3,17 @@ import weakref
 from .error import InferError, UnpackError, OverwritePrecaution, MissingArgument, BrokenPrimitive
 from .symbol import Symbol, Literal
 
+def make_symbol(model, var):
+    if isinstance(var, Primitive):
+        if len(var.varout) > 1:
+            raise UnpackError("More than one output variable, need to unpack them")
+        var = next(iter(var.varout.values()))
+
+    if not isinstance(var, Symbol):
+        var = Literal(model, var)
+
+    return var
+
 class Primitive(object):
     """ Primitives are building blocks of models.
 
@@ -27,28 +38,22 @@ class Primitive(object):
             # is used.
 
             if isinstance(var, Primitive):
-                if len(var.varout) > 1:
-                    raise UnpackError("More than one output variable, need to unpack them")
                 var = next(iter(var.varout.values()))
-                kwargs[argname] = var
 
+            if isinstance(var, Symbol):
+                model = var.model
+                self._model = weakref.ref(model)
+                return model
+
+        for argname in kls.aout:
+            if argname not in kwargs: continue
             var = kwargs[argname]
             if isinstance(var, Symbol):
                 model = var.model
                 self._model = weakref.ref(model)
+                return model
 
-        if model is None:
-            for argname in kls.aout:
-                if argname not in kwargs: continue
-                var = kwargs[argname]
-                if isinstance(var, Symbol):
-                    model = var.model
-                    self._model = weakref.ref(model)
-
-        if model is None:
-            raise InferError("Cannot infer model from variables -- try to mark at least one literal argument explicitly as Literal")
-
-        return model
+        raise InferError("Cannot infer model from variables -- try to mark at least one literal argument explicitly as Literal")
 
     def __init__(self, **kwargs):
 
@@ -70,16 +75,10 @@ class Primitive(object):
         self._name = model.unique_name(kls.__name__)
 
         for argname in kls.ain:
-            var = kwargs[argname]
-
-
-            if not isinstance(var, Symbol):
-                # automaticlaly make literal symbols
-                var = Literal(model, var)
+            var = make_symbol(model, kwargs[argname])
 
             # checking symbol references
-            #if not isinstance(var, Literal):
-                #print(self._name, var.name, id(var), id(model.get(var.name)))
+            #print(self._name, var.name, id(var), id(model.get(var.name)))
 
             var.add_reference(self)
             self.varin[argname] = var
@@ -105,7 +104,6 @@ class Primitive(object):
         for k, v in kwargs.items():
             if k not in kls.ain and k not in kls.aout:
                 self.kwargs[k] = v
-            setattr(self, k, v)
 
         model.append(self)
 
@@ -125,12 +123,14 @@ class Primitive(object):
         """ execute the primitive on the context, recording the
             resolved arguments to the tape for replay / gradients.
         """
+        resolved_args = []
         resolved = {}
         for argname, var in self.varin.items():
             resolved[argname] = var.resolve(context)
 
         kwargs = {}
         kwargs.update(resolved)
+
         # add the extra arguments used by the impl
         for argname in self.argnames:
             if argname not in kwargs:
@@ -138,7 +138,8 @@ class Primitive(object):
 
         tape.append(self, resolved)
 
+
         r = type(self).impl(self, **kwargs)
+
         for argname, var in self.varout.items():
             context[var.name] = r[argname]
-
