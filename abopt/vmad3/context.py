@@ -2,6 +2,9 @@ from .operator import terminal
 from .tape import Tape
 
 class Context(dict):
+    """ A context is a collection of python objects referred by symbol names
+
+    """
     def __init__(self, **kwargs):
         self.update(kwargs)
 
@@ -20,6 +23,10 @@ class Context(dict):
             self.pop(key)
 
     def compute(self, model, vout, return_tape=False, monitor=None):
+        """
+            compute a model in the current context (self).
+
+        """
         tape = Tape(model)
 
         if isinstance(vout, str):

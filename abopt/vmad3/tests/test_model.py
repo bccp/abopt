@@ -1,5 +1,6 @@
 from pprint import pprint
 from abopt.vmad3.operator import add, to_scalar, operator
+from abopt.vmad3.nested import nestedoperator
 from abopt.vmad3.model import ModelBuilder
 from abopt.vmad3.error import ModelError
 from abopt.vmad3.context import Context
@@ -201,15 +202,12 @@ def test_model_nasty():
     assert _x == 4.0
 
 def test_model_nested():
-    # assert used extra args are recored on the tape
-    @operator
+    @nestedoperator
     class nested:
         ain = {'x' : '*'}
         aout = {'y' : '*'}
 
-        def compute(self, x, n):
-            ctx = Context(x=x)
-
+        def model(self, x, n):
             with ModelBuilder() as m:
                 x, = m.input('x')
                 for i in range(n):
@@ -217,25 +215,7 @@ def test_model_nested():
 
                 m.output(y=x)
 
-            return ctx.compute(m, vout='y', return_tape=True)
-
-        def opr(self, x, n):
-            y, tape = self.operator.compute(self, x, n)
-            return dict(y=y)
-
-        def vjp(self, x, _y, n):
-            ctx = Context(_y=_y)
-            y, tape = self.operator.compute(self, x, n)
-            vjp = tape.get_vjp()
-            _x = ctx.compute(vjp, vout='_x')
-            return dict(_x=_x)
-
-        def jvp(self, x, x_, n):
-            ctx = Context(x_=x_)
-            y, tape = self.operator.compute(self, x, n)
-            jvp = tape.get_jvp()
-            y_ = ctx.compute(jvp, vout='y_')
-            return dict(y_=y_)
+            return m
 
     with ModelBuilder() as m:
         a, = m.input('a')

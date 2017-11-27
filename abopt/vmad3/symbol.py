@@ -1,6 +1,20 @@
 import weakref
 
 class Symbol(object):
+    """ A symbol for building models.
+
+        A symbol is named.
+
+        A symbol can be resolved to a python object
+        given a context in respect to its name.
+
+        A symbol may be referenced by multiple
+
+        operators if they take the symbol as an input.
+
+        A symbol is bound to a model; this is useful
+        for the operators to infer the model during model construction.
+    """
     def __init__(self, model, name=None):
         from .model import Model
 
@@ -36,6 +50,10 @@ class Symbol(object):
         return context[self.name]
 
 class Literal(Symbol):
+    """ A literal is a special symbol that does not resolve with a context.
+
+        Literals do not participate in gradient propagation.
+    """
     def __init__(self, model, value):
         Symbol.__init__(self, model, None)
         self.value = value
@@ -47,6 +65,9 @@ class Literal(Symbol):
         return self.value
 
 class ZeroLiteral(Literal):
+    """ A ZeroLiteral is specially used to mark zeros in gradient propagation
+
+    """
     def __init__(self, model):
         Symbol.__init__(self, model, None)
 

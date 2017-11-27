@@ -35,6 +35,7 @@ def prepare_opr_kwargs(record, model):
     return kwargs
 
 def vjp(tape):
+    """ generate a vector jacobian product model based on a tape """
     model = Model()
     for var in tape.model._vout:
         model.input(var.vjp_name)
@@ -95,6 +96,7 @@ def vjp(tape):
     return model
 
 def jvp(tape):
+    """ generate a jacobian vector product model based on a tape """
     model = Model()
     for var in tape.model._vin:
         model.input(var.jvp_name)

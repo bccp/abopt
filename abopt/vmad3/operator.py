@@ -1,4 +1,59 @@
-def _make_primitive(operator, func, impl):
+"""
+    Routines to define an operator
+
+    use @operator decorator on a class to define an operator.
+
+    Example: see the source code of :class:`add`
+
+    use @nested.nestedoperator to define a nested operator, where
+    you only need to define a model and the ain, aout
+
+"""
+class Operator(object): pass
+
+def operator(kls):
+    """ Decorator to declare an operator. 
+
+        The decorator is similar to a meta-class. It produces a
+        new class with Operator as a baseclass, and opr, jvp and vjp are
+        converted to primitives.
+
+        An operator must define `ain, aout` and opr, vjp, jvp functions.
+
+        ain : dict(name => type_pattern) describes the input arguments of
+              the operator
+        aout : dict(name => type_pattern) describes the output arguments of
+              the operator
+
+        Currently the type_pattern is not used; the plan is to add multi-dispatch
+        if it is proven to be useful.
+
+        opr : function(self, ...) the operator itself; shall return a dictionary
+              of the evaluated values (exactly the same number of aout).
+              all input arguments are resolved to python objects;
+              it can have extra arguments in addition to ain.
+
+        jvp : function(self, ...) the jacobian vector product. The convention
+              is to use '_' + argname as the name of vectors. used for back-prop.
+
+        vjp : function(self, ...) the vector jacobian product. The convention
+              is to use argname + '_' as the name of vectors. used for foward-prop.
+
+    """
+
+    kls.opr = _make_primitive(kls, 'opr', kls.opr)
+    kls.vjp = _make_primitive(kls, 'vjp', kls.vjp)
+    kls.jvp = _make_primitive(kls, 'jvp', kls.jvp)
+
+    return type(kls.__name__, (Operator, kls, kls.opr), {})
+
+def _make_primitive(operator, func, impl, argnames=None):
+    """ create primitives for the operator.
+
+        This is used to define a primitive based on the unbound method
+        defined in the operator class.
+
+    """
     from .primitive import Primitive
 
     assert func in ('opr', 'vjp', 'jvp')
@@ -7,7 +62,8 @@ def _make_primitive(operator, func, impl):
 
     aout = {}
     ain = {}
-    argnames = impl.__code__.co_varnames[1:impl.__code__.co_argcount]
+    if argnames is None:
+        argnames = impl.__code__.co_varnames[1:impl.__code__.co_argcount]
 
     if func == 'opr':
         ain = kls.ain
@@ -48,23 +104,6 @@ def _make_primitive(operator, func, impl):
             ))
     return primitive
 
-class Operator(object): pass
-
-def operator(kls):
-    """ Decorator to declare an operator. 
-        An operator must define `ain, aout` and opr, vjp, jvp functions.
-
-    """
-
-    kls.opr = _make_primitive(kls, 'opr', kls.opr)
-    kls.vjp = _make_primitive(kls, 'vjp', kls.vjp)
-    kls.jvp = _make_primitive(kls, 'jvp', kls.jvp)
-
-    return type(kls.__name__, (Operator, kls, kls.opr), {})
-
-def nestedoperator(kls):
-    kls = type(kls.__name__, (NestedOperator, kls))
-    return operator(kls)
 
 # special operator used for partial gradient summation
 @operator
