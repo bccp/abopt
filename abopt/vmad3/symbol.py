@@ -55,9 +55,8 @@ class Symbol(object):
 
 class List(Symbol):
     def __init__(self, model, value):
-        from .primitive import make_symbol
         Symbol.__init__(self, model, None)
-        self.value = make_symbol(model, value)
+        self.value = value
 
     def __repr__(self):
         return "%s" % (str(self.value))

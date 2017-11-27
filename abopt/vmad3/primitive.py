@@ -1,7 +1,7 @@
 import weakref
 
 from .error import InferError, UnpackError, OverwritePrecaution, MissingArgument, BrokenPrimitive
-from .symbol import Symbol, Literal
+from .symbol import Symbol, Literal, List
 
 def make_symbol(model, var):
     if isinstance(var, Primitive):
@@ -9,10 +9,33 @@ def make_symbol(model, var):
             raise UnpackError("More than one output variable, need to unpack them")
         var = next(iter(var.varout.values()))
 
+    if isinstance(var, (list, tuple)):
+        var = List(model, [make_symbol(model, v) for v in var])
+
     if not isinstance(var, Symbol):
         var = Literal(model, var)
 
     return var
+
+def _infer_model(var):
+    # unpack the primitive result
+    # see __iter__ if explict unpack (a, b = primitive(...))
+    # is used.
+
+    if isinstance(var, Primitive):
+        var = next(iter(var.varout.values()))
+
+    if isinstance(var, Symbol):
+        model = var.model
+        return model
+
+    if isinstance(var, (list, tuple)):
+        for v in var:
+            model = _infer_model(v)
+            if model is not None:
+                return model
+
+    return None
 
 class Primitive(object):
     """ Primitives are building blocks of models.
@@ -24,7 +47,7 @@ class Primitive(object):
 
     """
 
-    def _infer_model(self, kwargs):
+    def _scan_kwargs(self, kwargs):
         kls = type(self)
         model = None
 
@@ -32,24 +55,18 @@ class Primitive(object):
             if not argname in kwargs: raise MissingArgument("input argument '%s' not provided" % argname)
 
             var = kwargs[argname]
-
-            # unpack the primitive result
-            # see __iter__ if explict unpack (a, b = primitive(...))
-            # is used.
-
-            if isinstance(var, Primitive):
-                var = next(iter(var.varout.values()))
-
-            if isinstance(var, Symbol):
-                model = var.model
+            model = _infer_model(var)
+            if model is not None:
                 self._model = weakref.ref(model)
                 return model
 
         for argname in kls.aout:
+            raise
             if argname not in kwargs: continue
             var = kwargs[argname]
-            if isinstance(var, Symbol):
-                model = var.model
+
+            model = _infer_model(var)
+            if model is not None:
                 self._model = weakref.ref(model)
                 return model
 
@@ -70,7 +87,7 @@ class Primitive(object):
 
         kwargs = kwargs.copy() # will modify
 
-        model = self._infer_model(kwargs)
+        model = self._scan_kwargs(kwargs)
         self._name = model.unique_name(kls.__name__)
 
         for argname in kls.ain:

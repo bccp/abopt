@@ -61,7 +61,7 @@ def test_operator_list():
 
     with Builder() as m:
         a = m.input('a')
-        t = op(a, a, a, axis=1)
+        t = op(args=[a, a, a], axis=1)
         m.output(c=t)
 
     ctx = Context(a=[1, 2])
