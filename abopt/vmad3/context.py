@@ -9,9 +9,10 @@ class Context(dict):
     def __init__(self, **kwargs):
         self.update(kwargs)
 
-    def remove_unused(self, plist):
+    def remove_unused(self, nodes):
+        """ remove objects not used by nodes"""
         used = set()
-        for p in plist:
+        for p in nodes:
             for argname, var in p.varin.items():
                 used.add(var.name)
 

@@ -67,9 +67,20 @@ def _make_primitive(operator, func, impl, argnames=None):
     if argnames is None:
         argnames = impl.__code__.co_varnames[1:impl.__code__.co_argcount]
 
+    def zerobypass(self, **kwargs):
+        ain = type(self).ain
+        aout = type(self).aout
+        if all(kwargs[argname] == 0 for argname in ain):
+            d = {}
+            for argname in aout:
+                d[argname] = 0
+            return d
+        return impl(self, **kwargs)
+
     if func == 'opr':
         ain = kls.ain
         aout = kls.aout
+        realimpl = impl
     elif func == 'vjp' : # in and out are prefixed.
         for arg in argnames:
             if arg in kls.ain: # useful original arguments
@@ -80,6 +91,7 @@ def _make_primitive(operator, func, impl, argnames=None):
 
         for arg in kls.aout:
             ain['_' + arg] = kls.aout[arg]
+        realimpl = zerobypass
 
     elif func == 'jvp' : # in and out are prefixed.
         for arg in argnames:
@@ -91,9 +103,10 @@ def _make_primitive(operator, func, impl, argnames=None):
 
         for arg in kls.aout:
             aout[arg + '_'] = kls.aout[arg]
+        realimpl = zerobypass
 
     members =  dict(
-                impl     = impl,
+                impl     = realimpl,
                 func     = func,
                 ain      = ain,
                 aout     = aout,
