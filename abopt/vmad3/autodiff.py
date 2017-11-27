@@ -1,4 +1,4 @@
-from .symbol import ZeroLiteral, Literal, Symbol
+from .symbol import ZeroLiteral, Literal, Symbol, ListRef, List
 from .model import Model
 from .operator import terminal, add
 
@@ -34,6 +34,55 @@ def prepare_opr_kwargs(record, model):
 
     return kwargs
 
+def create_output_vjp(ref, model):
+
+    # make lists for lists
+    if isinstance(ref, ListRef):
+        return List(model, [
+                    create_output_vjp(r, model)
+                    for r in ref.value]
+                )
+
+    var = ref.symbol
+
+    # bypass literal arguments
+    if isinstance(var, Literal):
+        return None
+
+    if ref.ref_id == len(var.references):
+        # largest reference_id, must be the
+        # first time seeing the partial derivative
+        # define the symbol for the full derivative
+        var_p = model.define(var.vjp_name)
+    else:
+        var_p = model.define(var.vjp_name + '#%d' % ref.ref_id)
+
+    return var_p
+
+def connect_output_vjp(ref, model):
+
+    # make lists for lists
+    if isinstance(ref, ListRef):
+        for r in ref.value:
+            connect_output_vjp(r, model)
+        return
+
+    var = ref.symbol
+
+    # bypass literal arguments
+    if isinstance(var, Literal):
+            return
+
+    # accummulate the partials
+    if ref.ref_id!= len(var.references):
+        var_f = model.get(var.vjp_name)
+        var_p = model.get(var.vjp_name + '#%d' % ref.ref_id)
+        # create a new symbol for the result, with the same name
+        # because we intent to overwrite it.
+        var_f2 = model.define(var.vjp_name)
+
+        add(x1=var_f, x2=var_p, y=var_f2)
+
 def vjp(tape):
     """ generate a vector jacobian product model based on a tape """
     model = Model()
@@ -54,38 +103,18 @@ def vjp(tape):
 
         # create output vjps
         for argname, ref in p.varin.items():
-            var = ref.symbol
-            # bypass literal arguments
-            if isinstance(var, Literal): continue
+            var_p = create_output_vjp(ref, model)
 
-            if ref.ref_id == len(var.references):
-                # largest reference_id, must be the
-                # first time seeing the partial derivative
-                # define the symbol for the full derivative
-                var_p = model.define(var.vjp_name)
-            else:
-                var_p = model.define(var.vjp_name + '#%d' % ref.ref_id)
-
-            kwargs['_' + argname] = var_p
+            if var_p is not None:
+                kwargs['_' + argname] = var_p
 
         node = vjp_of_p(**kwargs)
 
         # combine partial derivatives.
         for argname, ref in p.varin.items():
             var = ref.symbol
-            # bypass literal arguments
-
-            if isinstance(var, Literal): continue
-            # accummulate the partials
-            if ref.ref_id!= len(var.references):
-                var_f = model.get(var.vjp_name)
-                var_p = model.get(var.vjp_name + '#%d' % ref.ref_id)
-                # create a new symbol for the result, with the same name
-                # because we intent to overwrite it.
-                var_f2 = model.define(var.vjp_name)
-
-                add(x1=var_f, x2=var_p, y=var_f2)
-
+            
+            connect_output_vjp(ref, model)
     # mark outputs
     for var in tape.model._vin:
         if not model.has(var.vjp_name):

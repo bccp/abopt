@@ -52,16 +52,23 @@ class Symbol(object):
             raise ResolveError("Symbol %s does not exist in the context" % self.name)
         return context[self.name]
 
+    def store(self, context, value):
+        context[self.name] = value
+
 class List(Symbol):
     def __init__(self, model, value):
         Symbol.__init__(self, model, None)
         self.value = value
 
     def __repr__(self):
-        return "%s" % (str(self.value))
+        return "L%s" % (str(self.value))
 
     def resolve(self, context):
         return [v.resolve(context) for v in self.value]
+
+    def store(self, context, value):
+        for var, v in zip(self.value, value):
+            var.store(context, v)
 
     def add_reference(self, node):
         return ListRef(self, node)
@@ -69,19 +76,21 @@ class List(Symbol):
 class Ref(object):
     def __init__(self, symbol, node):
         self.symbol = symbol
+        self.node = node
+        symbol.references.append(weakref.ref(self))
         self.ref_id = len(symbol.references)
-        symbol.references.append(weakref.ref(node))
 
     def __repr__(self):
-        return "[->%s:]" % self.symbol.name
+        return "&[%s:%d]" % (self.symbol.name, self.ref_id)
 
 class ListRef(object):
-    def __init__(self, list, node):
-        self.symbol = list
-        self.value = [Ref(v, node) for v in list.value]
+    def __init__(self, symbol, node):
+        self.symbol = symbol
+        # make sure the last reference shows up first.
+        self.value = list(reversed([Ref(v, node) for v in reversed(symbol.value)]))
 
     def __repr__(self):
-        return "%s" % (str(self.value))
+        return "& %s" % (str(self.value))
 
 class Literal(Symbol):
     """ A literal is a special symbol that does not resolve with a context.

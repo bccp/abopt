@@ -157,4 +157,4 @@ class Primitive(object):
         r = type(self).impl(self, **kwargs)
 
         for argname, var in self.varout.items():
-            context[var.name] = r[argname]
+            var.store(context, r[argname])
