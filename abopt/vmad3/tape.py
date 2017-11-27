@@ -1,4 +1,5 @@
-from .autodiff import vjp
+from .autodiff import vjp, jvp
+
 class Record(object):
     def __init__(self, node, impl_kwargs):
         self.node = node
@@ -16,3 +17,5 @@ class Tape(list):
     def get_vjp(self):
         return vjp(self)
 
+    def get_jvp(self):
+        return jvp(self)

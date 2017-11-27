@@ -77,3 +77,46 @@ def vjp(tape):
 
     return model
 
+def jvp(tape):
+    model = Model()
+    for var in tape.model._vin:
+        model.input(var.jvp_name)
+
+    print('init', model._syms)
+    for i, record in enumerate(tape):
+        p = record.node
+        impl_kwargs = record.impl_kwargs
+
+        jvp_of_p = find_primitive_type(p, func='jvp')
+
+        kwargs = {}
+        kwargs.update(p.kwargs)
+
+        # convert original arguments to literals
+        for k, v in impl_kwargs.items():
+            kwargs[k] = Literal(model, v)
+
+        # initialize 'v'
+        for argname, var in p.varin.items():
+            if isinstance(var, Literal):
+                jvp_var = ZeroLiteral(model)
+            else:
+                jvp_var = model.get(var.jvp_name)
+            kwargs[argname + '_'] = jvp_var
+
+        # create output symbols
+        for argname, var in p.varout.items():
+            jvp_var = model.define(var.jvp_name)
+            kwargs[argname + '_'] = jvp_var
+
+        jvp_of_p(**kwargs)
+
+    # mark outputs
+    for var in tape.model._vout:
+        if not model.has(var.jvp_name):
+            varout = ZeroLiteral(model)
+        else:
+            varout = model.get(var.jvp_name)
+        model.output(**{var.jvp_name : varout})
+
+    return model

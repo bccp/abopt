@@ -4,6 +4,7 @@ from abopt.vmad3.model import ModelBuilder
 from abopt.vmad3.error import ModelError
 from abopt.vmad3.context import Context
 import pytest
+
 def test_model():
     with ModelBuilder() as m:
         a, b = m.input('a', 'b')
@@ -24,23 +25,29 @@ def test_model():
     c = ctx.compute(m, vout='c')
     print(ctx, c)
 
-    print("----- with tape -----")
+    print("----- tape -----")
     ctx = Context(a=3, b=4)
-
     c, tape = ctx.compute(m, vout='c', return_tape=True)
     print(ctx, c)
-    print("----- tape -----")
     pprint(tape)
 
-    vjp = tape.get_vjp()
-
     print("----- vjp -----")
+    vjp = tape.get_vjp()
     pprint(vjp)
     pprint(vjp[:])
 
     ctx = Context(_c=1.0)
     _a, _b = ctx.compute(vjp, vout=['_a', '_b'], monitor=print)
     print('_a, _b = ', _a, _b)
+
+    print("----- jvp -----")
+    jvp = tape.get_jvp()
+    pprint(jvp)
+    pprint(jvp[:])
+
+    ctx = Context(a_=1.0, b_=1.0)
+    c_, = ctx.compute(jvp, vout=['c_'], monitor=print)
+    print('c_ = ', c_)
 
 def test_model_partial():
     with ModelBuilder() as m:
@@ -54,10 +61,14 @@ def test_model_partial():
     assert c == 6
 
     vjp = tape.get_vjp()
-
     ctx = Context(_c=1.0)
     _a = ctx.compute(vjp, vout='_a', monitor=print)
     assert _a == 2.0
+
+    jvp = tape.get_jvp()
+    ctx = Context(a_=1.0)
+    c_ = ctx.compute(jvp, vout='c_', monitor=print)
+    assert c_ == 2.0
 
 def test_model_unused():
     with ModelBuilder() as m:
@@ -74,6 +85,11 @@ def test_model_unused():
     assert _a == 0
     assert _b == 0
 
+    jvp = tape.get_jvp()
+    ctx = Context(a_=1.0, b_=1.0)
+    c_ = ctx.compute(jvp, vout='c_', monitor=print)
+    assert c_ == 0
+
 def test_model_partial_out():
     with ModelBuilder() as m:
         a, = m.input('a')
@@ -89,6 +105,7 @@ def test_model_partial_out():
 
     vjp = tape.get_vjp()
 
+    # test two outputs individually
     ctx = Context(_c=1.0, _a=0.0)
     _a = ctx.compute(vjp, vout='_a', monitor=print)
     assert _a == 2.0
@@ -96,6 +113,12 @@ def test_model_partial_out():
     ctx = Context(_c=0.0, _a=1.0)
     _a = ctx.compute(vjp, vout='_a', monitor=print)
     assert _a == 1.0
+
+    jvp = tape.get_jvp()
+    ctx = Context(a_=1.0)
+    a_, c_ = ctx.compute(jvp, vout=['a_', 'c_'], monitor=print)
+    assert c_ == 2.0
+    assert a_ == 1.0
 
 def test_model_errors():
     with ModelBuilder() as m:
