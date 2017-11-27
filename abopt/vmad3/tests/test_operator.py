@@ -75,6 +75,12 @@ def test_operator_list():
 
     assert_array_equal(_a, [3, 3])
 
+    jvp = tape.get_jvp()
+    ctx = Context(a_=[1, 1])
+    c_ = ctx.compute(jvp, vout='c_', monitor=print)
+
+    assert_array_equal(c_, [[1, 1, 1], [1, 1, 1]])
+
 def test_operator_multi_out():
     @operator
     class op:
@@ -86,7 +92,6 @@ def test_operator_multi_out():
 
         def opr(self, x):
             return dict(y1=x, y2=2 * x)
-
         def vjp(self, _y1, _y2):
             return dict(_x = _y1 + 2 * _y2)
         def jvp(self, x_):

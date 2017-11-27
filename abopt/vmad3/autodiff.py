@@ -83,6 +83,15 @@ def connect_output_vjp(ref, model):
 
         add(x1=var_f, x2=var_p, y=var_f2)
 
+def create_input_jvp(var, model):
+    if isinstance(var, List):
+        return [create_input_jvp(v, model) for v in var.value]
+
+    if isinstance(var, Literal):
+        return ZeroLiteral(model)
+
+    return model.get(var.jvp_name)
+
 def vjp(tape):
     """ generate a vector jacobian product model based on a tape """
     model = Model()
@@ -112,9 +121,8 @@ def vjp(tape):
 
         # combine partial derivatives.
         for argname, ref in p.varin.items():
-            var = ref.symbol
-            
             connect_output_vjp(ref, model)
+
     # mark outputs
     for var in tape.model._vin:
         if not model.has(var.vjp_name):
@@ -141,11 +149,7 @@ def jvp(tape):
 
         # initialize 'v'
         for argname, ref in p.varin.items():
-            var = ref.symbol
-            if isinstance(var, Literal):
-                jvp_var = ZeroLiteral(model)
-            else:
-                jvp_var = model.get(var.jvp_name)
+            jvp_var = create_input_jvp(ref.symbol, model)
             kwargs[argname + '_'] = jvp_var
 
         # create output symbols
