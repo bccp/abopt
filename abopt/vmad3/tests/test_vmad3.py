@@ -5,6 +5,7 @@ from abopt.vmad3.operator import add
 from pprint import pprint
 
 def test_vmad3_functional():
+    """ this test demonstrates building a model directly """
     with Builder() as m:
         a, b = m.input('a', 'b')
 
