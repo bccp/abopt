@@ -33,12 +33,15 @@ def operator(kls):
               of the evaluated values (exactly the same number of aout).
               all input arguments are resolved to python objects;
               it can have extra arguments in addition to ain.
+              self is the node object that is used in the model
 
         jvp : function(self, ...) the jacobian vector product. The convention
               is to use '_' + argname as the name of vectors. used for back-prop.
+              self is the node object that is used in the model
 
         vjp : function(self, ...) the vector jacobian product. The convention
               is to use argname + '_' as the name of vectors. used for foward-prop.
+              self is the node object that is used in the model
 
     """
 

@@ -7,3 +7,4 @@ class OverwritePrecaution(ModelError): pass
 class UnexpectedOutput(ModelError): pass
 class ResolveError(ModelError): pass
 class InferError(ModelError): pass
+class BrokenPrimitive(ModelError): pass

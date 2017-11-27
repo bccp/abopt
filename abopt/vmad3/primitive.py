@@ -1,10 +1,17 @@
 import weakref
 
-from .error import InferError, UnpackError, OverwritePrecaution, MissingArgument
+from .error import InferError, UnpackError, OverwritePrecaution, MissingArgument, BrokenPrimitive
 from .symbol import Symbol, Literal
 
 class Primitive(object):
-    """ Instantiation of a primitive creates a node on a model """
+    """ Primitives are building blocks of models.
+
+        Instantiation of a primitive creates a node on a model.
+
+        This is the base class for all operators. Primitive classes are generated
+        and attached to the operators classes via the `operator` decorator.
+
+    """
 
     def _infer_model(self, kwargs):
         kls = type(self)
@@ -46,6 +53,11 @@ class Primitive(object):
     def __init__(self, **kwargs):
 
         kls = type(self)
+
+        # assert the primitive is properly defined.
+        for attr in ['ain', 'aout', 'impl', 'func', 'argnames', 'operator']:
+            if not hasattr(kls, attr):
+                raise BrokenPrimitive("primitive class attribute '%s' is not defined" % attr)
 
         self.varin = {}
         self.varin_info = {} # currently only the reference id of the symbol
@@ -110,6 +122,9 @@ class Primitive(object):
         return "%s(%s=>%s)" % (self._name, self.varin, self.varout)
 
     def execute(self, context, tape):
+        """ execute the primitive on the context, recording the
+            resolved arguments to the tape for replay / gradients.
+        """
         resolved = {}
         for argname, var in self.varin.items():
             resolved[argname] = var.resolve(context)
