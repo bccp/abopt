@@ -5,10 +5,11 @@
 
     Example: see the source code of :class:`add`
 
-    use @nested.nestedoperator to define a nested operator, where
+    use @nested.modeloperator to define a nested operator, where
     you only need to define a model and the ain, aout
 
 """
+
 class Operator(object): pass
 
 def operator(kls):

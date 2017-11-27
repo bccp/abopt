@@ -2,7 +2,7 @@ from .operator import _make_primitive, Operator
 from .context import Context
 from .model import Builder
 
-def nestedoperator(kls):
+def modeloperator(kls):
     """ Create a nested operator
 
         ain : input arguments
@@ -12,6 +12,7 @@ def nestedoperator(kls):
 
         see the example below in this file.
     """
+
     impl = kls.model
 
     # use the argnames of the model
@@ -105,14 +106,15 @@ def nestedoperator(kls):
 
     return type(kls.__name__, (Operator, kls, kls.opr), {})
 
-from .operator import add
-@nestedoperator
+@modeloperator
 class example:
     ain  = {'x': '*'}
     aout = {'y': '*'}
 
-    # must declare all arguments
+    # must take both extra parameters and input parameters
     def model(self, x, n):
+        from .operator import add
+
         for i in range(n):
             x = add(x1=x, x2=x)
         return dict(y=x)

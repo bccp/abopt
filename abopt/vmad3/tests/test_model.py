@@ -1,53 +1,8 @@
 from pprint import pprint
 from abopt.vmad3.operator import add, to_scalar, operator
-from abopt.vmad3.nested import nestedoperator
 from abopt.vmad3.model import Builder
 from abopt.vmad3.context import Context
 import pytest
-
-def test_model():
-    with Builder() as m:
-        a, b = m.input('a', 'b')
-
-        t1 = add(x1=a, x2=a)
-        t2 = add(x1=b, x2=0)
-        c = add(x1=t1, x2=t2)
-
-        m.output(c=c)
-
-    print("----- model -----")
-    pprint(m)
-    pprint(m[:])
-
-    print("----- compute -----")
-    ctx = Context(a=3, b=4)
-
-    c = ctx.compute(m, vout='c')
-    print(ctx, c)
-
-    print("----- tape -----")
-    ctx = Context(a=3, b=4)
-    c, tape = ctx.compute(m, vout='c', return_tape=True)
-    print(ctx, c)
-    pprint(tape)
-
-    print("----- vjp -----")
-    vjp = tape.get_vjp()
-    pprint(vjp)
-    pprint(vjp[:])
-
-    ctx = Context(_c=1.0)
-    _a, _b = ctx.compute(vjp, vout=['_a', '_b'], monitor=print)
-    print('_a, _b = ', _a, _b)
-
-    print("----- jvp -----")
-    jvp = tape.get_jvp()
-    pprint(jvp)
-    pprint(jvp[:])
-
-    ctx = Context(a_=1.0, b_=1.0)
-    c_, = ctx.compute(jvp, vout=['c_'], monitor=print)
-    print('c_ = ', c_)
 
 def test_model_partial():
     with Builder() as m:
@@ -165,8 +120,8 @@ def test_model_extra_args():
     assert 'p' not in tape[0].resolved
     assert 'p' in tape[0].node.kwargs
 
-def test_model_nasty():
-    # assert used extra args are recored on the tape
+def test_model_many_rewrites():
+    # this is a nasty model with many variable rewrites.
     n = 2
     with Builder() as m:
         x = m.input('x')
@@ -184,35 +139,3 @@ def test_model_nasty():
     _x = ctx.compute(vjp, vout='_x', monitor=print)
     assert _x == 4.0
 
-def test_model_nested():
-
-    from abopt.vmad3.nested import example
-
-    with Builder() as m:
-        a = m.input('a')
-        b = example(x=a, n=2)
-        m.output(b=b)
-
-    ctx = Context(a = 1.0)
-    b, tape = ctx.compute(m, vout='b', monitor=print, return_tape=True)
-
-    assert b == 4.0
-
-    vjp = tape.get_vjp()
-    ctx = Context(_b = 1.0)
-    _a = ctx.compute(vjp, vout='_a', monitor=print)
-    assert _a == 4.0
-
-    jvp = tape.get_jvp()
-    ctx = Context(a_ = 1.0)
-    b_ = ctx.compute(jvp, vout='b_', monitor=print)
-    assert b_ == 4.0
-
-def test_model_nested_build():
-
-    from abopt.vmad3.nested import example
-
-    m = example.build(n=2)
-    ctx = Context(x = 1.0)
-    y, tape = ctx.compute(m, vout='y', monitor=print, return_tape=True)
-    assert y == 4.0
