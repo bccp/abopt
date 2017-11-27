@@ -109,7 +109,24 @@ def test_model_errors():
 
         with pytest.raises(ModelError):
             add(x2=1)
+
+def test_tape_unused():
+    # assert unused extra args are not recorded on the tape.
+    with ModelBuilder() as m:
+        a, = m.input('a')
+        b, = add(x1=a, x2=a, j=3)
+        m.output(b=b)
+
+    ctx = Context(a = 1.0)
+    b, tape = ctx.compute(m, vout='b', monitor=print, return_tape=True)
+    assert b == 2.0
+    assert isinstance(tape[0].node, add.opr)
+    assert 'j' not in tape[0].impl_kwargs
+
+    pprint(tape[:])
+
 def test_model_extra_args():
+    # assert used extra args are recored on the tape
     @operator
     class extra_args:
         ain = {'x' : '*'}
@@ -130,6 +147,9 @@ def test_model_extra_args():
         m.output(b=b)
 
     ctx = Context(a = 1.0)
-    b = ctx.compute(m, vout='b', monitor=print)
+    b, tape = ctx.compute(m, vout='b', monitor=print, return_tape=True)
+
     assert b == 2.0
+    assert isinstance(tape[0].node, extra_args.opr)
+    assert 'p' in tape[0].impl_kwargs
 

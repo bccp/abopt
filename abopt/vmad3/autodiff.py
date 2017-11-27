@@ -19,7 +19,10 @@ def vjp(tape):
     for var in tape.model._vout:
         model.input(var.vjp_name)
 
-    for i, (p, impl_kwargs) in enumerate(tape[::-1]):
+    for i, record in enumerate(tape[::-1]):
+        p = record.node
+        impl_kwargs = record.impl_kwargs
+
         vjp_of_p = find_primitive_type(p, func='vjp')
 
         kwargs = {}
