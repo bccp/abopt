@@ -60,10 +60,14 @@ def _make_primitive(operator, func, impl, argnames=None):
     """
     from .primitive import Primitive
     from .symbol import Symbol
+    from collections import OrderedDict
 
     assert func in ('opr', 'vjp', 'jvp')
 
     kls = operator
+
+    kls.ain = OrderedDict(kls.ain)
+    kls.aout = OrderedDict(kls.aout)
 
     aout = {}
     ain = {}
