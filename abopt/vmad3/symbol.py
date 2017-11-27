@@ -31,6 +31,7 @@ class Symbol(object):
 
     def add_reference(self, node):
         self.references.append(weakref.ref(node))
+        return Ref(self)
 
     @property
     def vjp_name(self):
@@ -51,6 +52,29 @@ class Symbol(object):
         if self.name not in context:
             raise ResolveError("Symbol %s does not exist in the context" % self.name)
         return context[self.name]
+
+class List(Symbol):
+    def __init__(self, model, value):
+        from .primitive import make_symbol
+        Symbol.__init__(self, model, None)
+        self.value = make_symbol(model, value)
+
+    def __repr__(self):
+        return "%s" % (str(self.value))
+
+    def resolve(self, context):
+        return [v.resolve(context) for v in self.value]
+
+class Ref(object):
+    def __init__(self, symbol):
+        self.symbol = symbol
+        self.ref_id = len(symbol.references)
+
+    def resolve(self, context):
+        return self.symbol.resolve(context)
+
+    def __repr__(self):
+        return "[->%s:]" % self.symbol.name
 
 class Literal(Symbol):
     """ A literal is a special symbol that does not resolve with a context.

@@ -14,7 +14,7 @@ class Context(dict):
         used = set()
         for p in nodes:
             for argname, var in p.varin.items():
-                used.add(var.name)
+                used.add(var.symbol.name)
 
         toremove = []
         for key in self:

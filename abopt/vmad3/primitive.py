@@ -65,7 +65,6 @@ class Primitive(object):
                 raise BrokenPrimitive("primitive class attribute '%s' is not defined" % attr)
 
         self.varin = {}
-        self.varin_info = {} # currently only the reference id of the symbol
         self.varout = {}
         self.kwargs = {}
 
@@ -80,9 +79,8 @@ class Primitive(object):
             # checking symbol references
             #print(self._name, var.name, id(var), id(model.get(var.name)))
 
-            var.add_reference(self)
-            self.varin[argname] = var
-            self.varin_info[argname] = len(var.references)
+            ref = var.add_reference(self)
+            self.varin[argname] = ref
 
         for argname in kls.aout:
             if not argname in kwargs:
@@ -137,7 +135,6 @@ class Primitive(object):
                 kwargs[argname] = self.kwargs[argname]
 
         tape.append(self, resolved)
-
 
         r = type(self).impl(self, **kwargs)
 

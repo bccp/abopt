@@ -39,13 +39,13 @@ def test_operator_zero():
     c_ = ctx.compute(jvp, vout='c_', monitor=print)
     assert c_ == 0
 
-def test_operator_args():
+def test_operator_list():
     import numpy
     from numpy.testing import assert_array_equal
 
     @operator
     class op:
-        ain = {}
+        ain = {('args', '*')}
         # for python 2.x need to use this syntax
         # to preserve orders
         aout = [('y', '*'),]

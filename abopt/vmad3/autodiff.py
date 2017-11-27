@@ -53,32 +53,33 @@ def vjp(tape):
             kwargs['_' + argname] = model.get(var.vjp_name)
 
         # create output vjps
-        for argname, var in p.varin.items():
+        for argname, ref in p.varin.items():
+            var = ref.symbol
             # bypass literal arguments
             if isinstance(var, Literal): continue
 
-            reference_id = p.varin_info[argname]
-            if reference_id == len(var.references):
+            if ref.ref_id == len(var.references):
                 # largest reference_id, must be the
                 # first time seeing the partial derivative
                 # define the symbol for the full derivative
                 var_p = model.define(var.vjp_name)
             else:
-                var_p = model.define(var.vjp_name + '#%d' % reference_id)
+                var_p = model.define(var.vjp_name + '#%d' % ref.ref_id)
 
             kwargs['_' + argname] = var_p
 
         node = vjp_of_p(**kwargs)
 
         # combine partial derivatives.
-        for argname, var in p.varin.items():
+        for argname, ref in p.varin.items():
+            var = ref.symbol
             # bypass literal arguments
+
             if isinstance(var, Literal): continue
-            reference_id = p.varin_info[argname]
             # accummulate the partials
-            if reference_id != len(var.references):
+            if ref.ref_id!= len(var.references):
                 var_f = model.get(var.vjp_name)
-                var_p = model.get(var.vjp_name + '#%d' % reference_id)
+                var_p = model.get(var.vjp_name + '#%d' % ref.ref_id)
                 # create a new symbol for the result, with the same name
                 # because we intent to overwrite it.
                 var_f2 = model.define(var.vjp_name)
@@ -110,7 +111,8 @@ def jvp(tape):
         kwargs = prepare_opr_kwargs(record, model)
 
         # initialize 'v'
-        for argname, var in p.varin.items():
+        for argname, ref in p.varin.items():
+            var = ref.symbol
             if isinstance(var, Literal):
                 jvp_var = ZeroLiteral(model)
             else:
