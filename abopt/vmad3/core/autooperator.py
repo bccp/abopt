@@ -3,7 +3,7 @@ from .model import Builder
 from .context import Context
 
 def autooperator(kls):
-    """ Create an operator with automated differentiate.
+    """ Create an operator with automated differentiation.
 
         ain : input arguments
         aout : output arguments

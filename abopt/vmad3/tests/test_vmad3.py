@@ -52,9 +52,10 @@ def test_vmad3_functional():
     c_, = jvp.compute(init=init, vout=['c_'], monitor=print)
     print('c_ = ', c_)
 
-def test_modeloperator():
-    """ this test demonstrates using modeloperator
-        to build a model that can also be used as an operator.
+def test_autooperator():
+    """ this test demonstrates using autooperator
+        to define an operator based on a model, whose
+        vjp and jvp are obtained via autodiff.
     """
     @autooperator
     class mymodel:
