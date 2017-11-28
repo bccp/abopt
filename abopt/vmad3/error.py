@@ -1,5 +1,6 @@
 class ModelError(Exception): pass
 
+class BadArgument(ModelError): pass
 class UnpackError(ModelError): pass
 class DuplicatedOutput(ModelError): pass
 class MissingArgument(ModelError): pass

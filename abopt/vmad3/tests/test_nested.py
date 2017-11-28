@@ -10,7 +10,7 @@ def test_model_nested():
 
     with Builder() as m:
         a = m.input('a')
-        b = example(x=a, n=2)
+        b = example(a, 2)
         m.output(b=b)
 
     ctx = Context(a = 1.0)

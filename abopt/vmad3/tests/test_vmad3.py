@@ -10,9 +10,9 @@ def test_vmad3_functional():
     with Builder() as m:
         a, b = m.input('a', 'b')
 
-        t1 = add(x1=a, x2=a)
-        t2 = add(x1=b, x2=0)
-        c = add(x1=t1, x2=t2)
+        t1 = add(a, a)
+        t2 = add(b, 0)
+        c = add(t1, t2)
 
         m.output(c=c)
 
@@ -62,10 +62,10 @@ def test_modeloperator():
 
         def model(model, a, b, n):
             for i in range(n):
-                a = add(x1=a, x2=a)
+                a = add(a, a)
 
-            t2 = add(x1=b, x2=0)
-            return dict(c=add(x1=a, x2=t2))
+            t2 = add(b, 0)
+            return dict(c=add(a, t2))
 
     m3 = mymodel.build(n=3)
     print("----- model 2-----")

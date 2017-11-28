@@ -1,6 +1,6 @@
 import weakref
 
-from .error import InferError, UnpackError, OverwritePrecaution, MissingArgument, BrokenPrimitive
+from .error import InferError, UnpackError, OverwritePrecaution, MissingArgument, BrokenPrimitive, BadArgument
 from .symbol import Symbol, Literal, List
 
 def make_symbol(model, var):
@@ -80,7 +80,7 @@ class Primitive(object):
 
         raise InferError("Cannot infer model from variables -- try to mark at least one literal argument explicitly as Literal")
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
 
         kls = type(self)
 
@@ -94,6 +94,16 @@ class Primitive(object):
         self.kwargs = {}
 
         kwargs = kwargs.copy() # will modify
+
+        # first attempt to map args into kwargs
+        if len(args) > len(kls.argnames):
+            raise BadArgument("Argument list longer than total number of args")
+
+        for argname, arg in zip(kls.argnames, args):
+            if argname in kwargs:
+                raise BadArgument("argument %s already provided as keyword" % argname)
+
+            kwargs[argname] = arg
 
         model = self._scan_kwargs(kwargs)
         self._name = model.unique_name(kls.__name__)
