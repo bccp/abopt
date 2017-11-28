@@ -102,7 +102,7 @@ def modeloperator(kls):
 
         return _build(kwargs)
 
-    return type(kls.__name__, (Operator, kls, kls._opr), {'build':build})
+    return type(kls.__name__, (Operator, kls, kls._opr), {'build' : staticmethod(build)})
 
 @modeloperator
 class example:
