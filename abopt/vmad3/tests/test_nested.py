@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from abopt.vmad3.context import Context
 from abopt.vmad3.model import Builder
 
