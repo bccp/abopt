@@ -97,3 +97,18 @@ class Test_stack(BaseScalarTest):
 
     def model(self, x):
         return linalg.stack([x, x], axis=0)
+
+class Test_take(BaseScalarTest):
+    to_scalar = linalg.to_scalar
+
+    x = numpy.arange(10)
+    y = 2 ** 2
+    _y = 1.0
+    x_ = numpy.ones(10)
+
+    _x = (x == 2) * 2 * 2.0
+    y_ = 2 * x[2]
+
+    def model(self, x):
+        return linalg.take(x, 2, axis=0)
+

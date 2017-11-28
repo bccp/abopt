@@ -8,6 +8,7 @@ class BaseScalarTest:
 
     to_scalar = default_to_scalar  # norm-2 scalar
 
+    import numpy
     x = numpy.arange(10)  # free variable x
     x_ = numpy.ones(10)   # v of jvp, forward pass -- sum of all gradient components
     _y = 1.0              # v of vjp, backward pass

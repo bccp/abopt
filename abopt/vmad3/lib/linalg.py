@@ -109,3 +109,21 @@ class stack:
 
     def jvp(self, x_, axis):
         return dict(y_=numpy.stack(x_, axis=axis))
+
+@operator
+class take:
+    ain = {'x' : 'ndarray',}
+    aout = {'y' : 'ndarray'}
+
+    def opr(self, x, i, axis):
+        return dict(y=numpy.take(x, i, axis=axis))
+
+    def vjp(self, _y, i, axis, x):
+        _x = numpy.zeros_like(x)
+        _x = numpy.swapaxes(_x, 0, axis)
+        _x[i] = _y
+        _x = numpy.swapaxes(_x, 0, axis)
+        return dict(_x=_x)
+
+    def jvp(self, x_, i, axis):
+        return dict(y_=numpy.take(x_, i, axis=axis))
