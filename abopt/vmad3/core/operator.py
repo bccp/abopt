@@ -153,21 +153,6 @@ class add:
     def jvp(self, x1_, x2_):
         return dict(y_ = x1_ + x2_)
 
-# special operator used for check-gradients
-@operator
-class to_scalar:
-    ain  = {'x': 'ndarray'}
-    aout = {'y': '*'}
-
-    def apl(self, x,  y):
-        return dict(y = (abs(x)**2).sum())
-
-    def vjp(self, _x, _y):
-        return dict(_x = 2. * _y)
-
-    def jvp(self, x_, y_):
-        return dict(y_ = 2. * x_)
-
 # special operator for marking an output
 @operator
 class terminal:

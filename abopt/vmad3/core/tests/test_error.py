@@ -1,44 +1,44 @@
-from abopt.vmad3.model import Builder
-from abopt.vmad3.operator import add
+from abopt.vmad3.core.model import Builder
+from abopt.vmad3.core.operator import add
 import pytest
 
 def test_error_infer():
-    from abopt.vmad3.error import InferError
+    from abopt.vmad3.core.error import InferError
     with Builder() as m:
         a = m.input('a')
         with pytest.raises(InferError):
             add(x1=1, x2=1)
 
 def test_error_bad_arg1():
-    from abopt.vmad3.error import BadArgument
+    from abopt.vmad3.core.error import BadArgument
     with Builder() as m:
         a = m.input('a')
         with pytest.raises(BadArgument):
             add(1, 1, 1)
 
 def test_error_bad_arg2():
-    from abopt.vmad3.error import BadArgument
+    from abopt.vmad3.core.error import BadArgument
     with Builder() as m:
         a = m.input('a')
         with pytest.raises(BadArgument):
             add(1, x1=1, x2=2)
 
 def test_error_missing():
-    from abopt.vmad3.error import MissingArgument
+    from abopt.vmad3.core.error import MissingArgument
     with Builder() as m:
         a = m.input('a')
         with pytest.raises(MissingArgument):
             add(x2=1)
 
 def test_error_overwrite():
-    from abopt.vmad3.error import OverwritePrecaution
+    from abopt.vmad3.core.error import OverwritePrecaution
     with Builder() as m:
         a = m.input('a')
         with pytest.raises(OverwritePrecaution):
             add(x1=a, x2=a, y=a)
 
 def test_error_many_output():
-    from abopt.vmad3.error import DuplicatedOutput
+    from abopt.vmad3.core.error import DuplicatedOutput
     with Builder() as m:
         a = m.input('a')
         with pytest.raises(DuplicatedOutput):
@@ -47,7 +47,7 @@ def test_error_many_output():
 
 
 def test_error_unexpected_output():
-    from abopt.vmad3.error import UnexpectedOutput
+    from abopt.vmad3.core.error import UnexpectedOutput
     with Builder() as m:
         a = m.input('a')
         m.output(a=a)
@@ -56,7 +56,7 @@ def test_error_unexpected_output():
         m.compute(vout='b', init=dict(a=1.0))
 
 def test_error_unexpected_output():
-    from abopt.vmad3.error import ResolveError
+    from abopt.vmad3.core.error import ResolveError
     with Builder() as m:
         a = m.input('a')
         m.output(a=a)

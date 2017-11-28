@@ -6,7 +6,7 @@ def example():
 
     c, tape = compute(graph, vout='c', init=dict(a=10, b=20), return_tape=True)
 
-from abopt.vmad3.registry import Registry
+from abopt.vmad3.core.registry import Registry
 
 def test_registry():
     reg = Registry()

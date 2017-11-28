@@ -1,11 +1,11 @@
 from __future__ import print_function
 
-from abopt.vmad3.model import Builder
+from abopt.vmad3.core.model import Builder
 
 def test_model_nested():
 
 
-    from abopt.vmad3.nested import example
+    from abopt.vmad3.core.autooperator import example
 
     with Builder() as m:
         a = m.input('a')
@@ -29,7 +29,7 @@ def test_model_nested():
 
 def test_model_nested_build():
 
-    from abopt.vmad3.nested import example
+    from abopt.vmad3.core.autooperator import example
 
     m = example.build(n=2)
     init = dict(x = 1.0)

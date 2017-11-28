@@ -1,8 +1,8 @@
 from __future__ import print_function
 
 from pprint import pprint
-from abopt.vmad3.operator import add, to_scalar, operator
-from abopt.vmad3.model import Builder
+from abopt.vmad3.core.operator import operator
+from abopt.vmad3.core.model import Builder
 import pytest
 
 @operator
@@ -138,7 +138,7 @@ def test_operator_list_in():
 
 def test_operator_list_out():
     from numpy.testing import assert_array_equal
-    from abopt.vmad3.symbol import List, Symbol
+    from abopt.vmad3.core.symbol import List, Symbol
 
     with Builder() as m:
         a = m.input('a')

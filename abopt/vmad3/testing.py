@@ -1,11 +1,10 @@
-from abopt.vmad3.model import Builder
-from abopt.vmad3.operator import to_scalar as default_to_scalar
+from abopt.vmad3 import Builder
 from numpy.testing import assert_array_equal, assert_allclose
 
 class BaseScalarTest:
     """ Basic correctness test with to_scalar """
 
-    to_scalar = default_to_scalar  # norm-2 scalar
+    to_scalar = None # operator for norm-2 scalar
 
     import numpy
     x = numpy.arange(10)  # free variable x

@@ -1,4 +1,4 @@
-from abopt.vmad3.operator import operator
+from abopt.vmad3 import operator
 
 import numpy
 

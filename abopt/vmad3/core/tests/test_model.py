@@ -1,7 +1,7 @@
 from __future__ import print_function
 from pprint import pprint
-from abopt.vmad3.operator import add, to_scalar, operator
-from abopt.vmad3.model import Builder
+from abopt.vmad3.core.operator import add, operator
+from abopt.vmad3.core.model import Builder
 import pytest
 
 def test_model_partial():

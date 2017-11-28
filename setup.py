@@ -19,6 +19,7 @@ setup(name="abopt", version=find_version("abopt/version.py"),
       zip_safe=True, # this should be pure python
       packages=["abopt", "abopt.tests",
                 "abopt.vmad3", "abopt.vmad3.tests",
+                "abopt.vmad3.core", "abopt.vmad3.core.tests",
                 "abopt.vmad3.lib", "abopt.vmad3.lib.tests",
         ],
       license='GPLv3',

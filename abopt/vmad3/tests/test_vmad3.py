@@ -1,10 +1,10 @@
 from __future__ import print_function
 
-from abopt.vmad3.lab import Builder
-from abopt.vmad3.lab import autooperator
-from abopt.vmad3.lab import operator
+from abopt.vmad3 import Builder
+from abopt.vmad3 import autooperator
+from abopt.vmad3 import operator
 
-from abopt.vmad3.operator import add
+from abopt.vmad3.core.operator import add
 from pprint import pprint
 
 def test_vmad3_functional():
