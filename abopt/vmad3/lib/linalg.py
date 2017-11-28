@@ -1,5 +1,5 @@
-from abopt.vmad3 import operator
-from abopt.vmad3 import modeloperator
+from abopt.vmad3.operator import operator
+
 import numpy
 
 @operator

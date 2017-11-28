@@ -2,13 +2,16 @@ from .operator import _make_primitive, Operator, unbound
 from .model import Builder
 from .context import Context
 
-def modeloperator(kls):
-    """ Create a nested operator
+def autooperator(kls):
+    """ Create an operator with automated differentiate.
 
         ain : input arguments
         aout : output arguments
 
-        model : function(model, ...) building the model; returns the dict of output arguments.
+        model : function(model, ...) building the model;
+                the arguments are the input symbols
+                returns the dict of output symbols,
+                shall match the output arguments
 
         see the example below in this file.
     """
@@ -104,7 +107,7 @@ def modeloperator(kls):
 
     return type(kls.__name__, (Operator, kls, kls._apl), {'build' : staticmethod(build)})
 
-@modeloperator
+@autooperator
 class example:
     ain  = {'x': '*'}
     aout = {'y': '*'}

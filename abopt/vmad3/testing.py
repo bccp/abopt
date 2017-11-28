@@ -1,4 +1,4 @@
-from abopt.vmad3 import Builder
+from abopt.vmad3.model import Builder
 from abopt.vmad3.operator import to_scalar as default_to_scalar
 from numpy.testing import assert_array_equal, assert_allclose
 
