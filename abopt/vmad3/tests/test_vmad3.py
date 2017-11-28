@@ -4,7 +4,7 @@ from abopt.vmad3 import Builder
 from abopt.vmad3 import autooperator
 from abopt.vmad3 import operator
 
-from abopt.vmad3.core.operator import add
+from abopt.vmad3.lib.linalg import add
 from pprint import pprint
 
 def test_vmad3_functional():
