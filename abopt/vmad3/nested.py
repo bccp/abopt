@@ -1,4 +1,4 @@
-from .operator import _make_primitive, Operator
+from .operator import _make_primitive, Operator, unbound
 from .context import Context
 from .model import Builder
 
@@ -13,7 +13,7 @@ def modeloperator(kls):
         see the example below in this file.
     """
 
-    impl = kls.model
+    impl = unbound(kls.model)
 
     # use the argnames of the model
     argnames = impl.__code__.co_varnames[1:impl.__code__.co_argcount]

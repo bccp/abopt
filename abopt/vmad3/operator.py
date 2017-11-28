@@ -12,6 +12,13 @@
 
 class Operator(object): pass
 
+def unbound(method):
+    if hasattr(method, 'im_func'):
+        # python 2.7 has this unbound method thing
+        return method.im_func
+    # python 3, cool
+    return method
+
 def operator(kls):
     """ Decorator to declare an operator. 
 
@@ -45,9 +52,9 @@ def operator(kls):
 
     """
 
-    kls.opr = _make_primitive(kls, 'opr', kls.opr)
-    kls.vjp = _make_primitive(kls, 'vjp', kls.vjp)
-    kls.jvp = _make_primitive(kls, 'jvp', kls.jvp)
+    kls.opr = _make_primitive(kls, 'opr', unbound(kls.opr))
+    kls.vjp = _make_primitive(kls, 'vjp', unbound(kls.vjp))
+    kls.jvp = _make_primitive(kls, 'jvp', unbound(kls.jvp))
 
     return type(kls.__name__, (Operator, kls, kls.opr), {})
 
