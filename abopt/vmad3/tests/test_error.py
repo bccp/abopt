@@ -10,6 +10,20 @@ def test_error_infer():
         with pytest.raises(InferError):
             add(x1=1, x2=1)
 
+def test_error_bad_arg1():
+    from abopt.vmad3.error import BadArgument
+    with Builder() as m:
+        a = m.input('a')
+        with pytest.raises(BadArgument):
+            add(1, 1, 1)
+
+def test_error_bad_arg2():
+    from abopt.vmad3.error import BadArgument
+    with Builder() as m:
+        a = m.input('a')
+        with pytest.raises(BadArgument):
+            add(1, x1=1, x2=2)
+
 def test_error_missing():
     from abopt.vmad3.error import MissingArgument
     with Builder() as m:
