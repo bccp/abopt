@@ -1,6 +1,6 @@
 from .operator import _make_primitive, Operator, unbound
-from .context import Context
 from .model import Builder
+from .context import Context
 
 def modeloperator(kls):
     """ Create a nested operator

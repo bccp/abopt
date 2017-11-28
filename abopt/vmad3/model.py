@@ -1,6 +1,7 @@
 from .symbol import Symbol, Literal
 from .operator import terminal
 from .error import DuplicatedOutput
+from .context import Context
 
 class Model(list):
     def __init__(self):
@@ -52,7 +53,6 @@ class Model(list):
 
             init : dictionary
         """
-        from .context import Context
         ctx = Context(**init)
 
         return ctx.compute(self, vout=vout,
