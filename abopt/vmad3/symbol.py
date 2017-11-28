@@ -70,7 +70,6 @@ class List(Symbol):
         return [v.resolve(context) for v in self.value]
 
     def store(self, context, value):
-        print('storing list')
         for var, v in zip(self.value, value):
             var.store(context, v)
             print(var, v, context)
