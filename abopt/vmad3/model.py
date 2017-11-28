@@ -46,6 +46,19 @@ class Model(list):
     def __repr__(self):
         return "Model: %s => %s" % (self._vin, self._vout)
 
+    def compute(self, vout, init, return_tape=False, monitor=None):
+        """
+            compute a model with the initial values
+
+            init : dictionary
+        """
+        from .context import Context
+        ctx = Context(**init)
+
+        return ctx.compute(self, vout=vout,
+                        return_tape=return_tape,
+                        monitor=monitor)
+
 class Builder(Model):
     """ A context manager to signify the process of buildig a model.
 

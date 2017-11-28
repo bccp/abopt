@@ -1,5 +1,3 @@
-from .autodiff import vjp, jvp
-
 class Record(object):
     """ A record on the tape. 
 
@@ -21,7 +19,11 @@ class Tape(list):
         list.append(self, Record(node, resolved))
 
     def get_vjp(self):
-        return vjp(self)
+        # to avoid cicurlar reference; this is not a strong dependency
+        from .autodiff import vjpmodel
+        return vjpmodel(self)
 
     def get_jvp(self):
-        return jvp(self)
+        # to avoid cicurlar reference; this is not a strong dependency
+        from .autodiff import jvpmodel
+        return jvpmodel(self)

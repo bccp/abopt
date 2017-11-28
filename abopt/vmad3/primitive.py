@@ -152,27 +152,7 @@ class Primitive(object):
     def __repr__(self):
         return "%s(%s=>%s)" % (self._name, self.varin, self.varout)
 
-    def execute(self, context, tape):
-        """ execute the primitive on the context, recording the
-            resolved arguments to the tape for replay / gradients.
-        """
+    def call(self, **kwargs):
+        """ call the implementation function of the primitive """
+        return type(self).impl(self, **kwargs)
 
-        resolved = {}
-        for argname, ref in self.varin.items():
-            var = ref.symbol
-            resolved[argname] = var.resolve(context)
-
-        kwargs = {}
-        kwargs.update(resolved)
-
-        # add the extra arguments used by the impl
-        for argname in self.argnames:
-            if argname not in kwargs:
-                kwargs[argname] = self.kwargs[argname]
-
-        tape.append(self, resolved)
-
-        r = type(self).impl(self, **kwargs)
-
-        for argname, var in self.varout.items():
-            var.store(context, r[argname])

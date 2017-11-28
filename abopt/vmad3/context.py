@@ -3,8 +3,9 @@ from .error import UnexpectedOutput
 from .tape import Tape
 
 class Context(dict):
-    """ A context is a collection of python objects referred by symbol names
+    """ A context is a collection of python objects referred by symbol names;
 
+        This is where the execution of a model occurs.
     """
     def __init__(self, **kwargs):
         self.update(kwargs)
@@ -25,6 +26,8 @@ class Context(dict):
             self.pop(key)
 
     def result_used(self, node):
+        # FIXME: this doesn't remove all of the unused
+        # may need to fix this in 'compile' or 'optimize'.
         if isinstance(node, terminal._apl):
             return True
         for argname, var in node.varout.items():
@@ -54,7 +57,7 @@ class Context(dict):
         for i, node in enumerate(model):
 
             if self.result_used(node):
-                node.execute(self, tape)
+                self.execute(node, tape)
 
             if isinstance(node, terminal._apl):
                 for argname, var in node.varout.items():
@@ -74,3 +77,29 @@ class Context(dict):
             r = r, tape
 
         return r
+
+    def execute(self, node, tape):
+        """ execute a node on the context, recording the
+            resolved arguments to the tape for replay / gradients.
+        """
+
+        resolved = {}
+        for argname, ref in node.varin.items():
+            var = ref.symbol
+            resolved[argname] = var.resolve(self)
+
+        kwargs = {}
+        kwargs.update(resolved)
+
+        # add the extra arguments used by the impl
+        for argname in node.argnames:
+            if argname not in kwargs:
+                kwargs[argname] = node.kwargs[argname]
+
+        tape.append(node, resolved)
+
+        r = node.call(**kwargs)
+
+        for argname, var in node.varout.items():
+            var.store(self, r[argname])
+

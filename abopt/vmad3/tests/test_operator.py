@@ -3,7 +3,6 @@ from __future__ import print_function
 from pprint import pprint
 from abopt.vmad3.operator import add, to_scalar, operator
 from abopt.vmad3.model import Builder
-from abopt.vmad3.context import Context
 import pytest
 
 @operator
@@ -41,19 +40,19 @@ def test_operator_zero():
         t1 = error_on_grad(x=a)
         m.output(c=t1)
 
-    ctx = Context(a=3)
+    init = dict(a=3)
 
-    c, tape = ctx.compute(m, vout='c', return_tape=True)
+    c, tape = m.compute(init=init, vout='c', return_tape=True)
     assert c == 3
 
     vjp = tape.get_vjp()
-    ctx = Context(_c=0)
-    _a = ctx.compute(vjp, vout='_a', monitor=print)
+    init = dict(_c=0)
+    _a = vjp.compute(init=init, vout='_a', monitor=print)
     assert _a == 0
 
     jvp = tape.get_jvp()
-    ctx = Context(a_=0)
-    c_ = ctx.compute(jvp, vout='c_', monitor=print)
+    init = dict(a_=0)
+    c_ = jvp.compute(init=init, vout='c_', monitor=print)
     assert c_ == 0
 
 def test_operator_skip_unused():
@@ -63,19 +62,19 @@ def test_operator_skip_unused():
         t1 = error(x=a)
         m.output(c=a)
 
-    ctx = Context(a=3)
+    init = dict(a=3)
 
-    c, tape = ctx.compute(m, vout='c', return_tape=True)
+    c, tape = m.compute(init=init, vout='c', return_tape=True)
     assert c == 3
 
     vjp = tape.get_vjp()
-    ctx = Context(_c=0)
-    _a = ctx.compute(vjp, vout='_a', monitor=print)
+    init = dict(_c=0)
+    _a = vjp.compute(init=init, vout='_a', monitor=print)
     assert _a == 0
 
     jvp = tape.get_jvp()
-    ctx = Context(a_=0)
-    c_ = ctx.compute(jvp, vout='c_', monitor=print)
+    init = dict(a_=0)
+    c_ = jvp.compute(init=init, vout='c_', monitor=print)
     assert c_ == 0
 
 import numpy
@@ -120,20 +119,20 @@ def test_operator_list_in():
         t = stack(args=[a, a, a], axis=1)
         m.output(c=t)
 
-    ctx = Context(a=[1, 2])
+    init = dict(a=[1, 2])
 
-    c, tape = ctx.compute(m, vout='c', return_tape=True)
+    c, tape = m.compute(init=init, vout='c', return_tape=True)
     assert_array_equal(c, [[1, 1, 1], [2, 2, 2]])
 
     vjp = tape.get_vjp()
-    ctx = Context(_c=[[1, 1, 1], [1, 1, 1]])
-    _a = ctx.compute(vjp, vout='_a', monitor=print)
+    init = dict(_c=[[1, 1, 1], [1, 1, 1]])
+    _a = vjp.compute(init=init, vout='_a', monitor=print)
 
     assert_array_equal(_a, [3, 3])
 
     jvp = tape.get_jvp()
-    ctx = Context(a_=[1, 1])
-    c_ = ctx.compute(jvp, vout='c_', monitor=print)
+    init = dict(a_=[1, 1])
+    c_ = jvp.compute(init=init, vout='c_', monitor=print)
 
     assert_array_equal(c_, [[1, 1, 1], [1, 1, 1]])
 
@@ -154,20 +153,20 @@ def test_operator_list_out():
         assert isinstance(next(iter(t)), List)
         m.output(c=t)
 
-    ctx = Context(a=[[1, 1], [2, 2]])
+    init = dict(a=[[1, 1], [2, 2]])
 
-    c, tape = ctx.compute(m, vout='c', return_tape=True, monitor=print)
+    c, tape = m.compute(init=init, vout='c', return_tape=True, monitor=print)
     assert_array_equal(c, [[1, 1], [2, 2]])
 
     vjp = tape.get_vjp()
-    ctx = Context(_c=[[1, 1], [1, 1]])
-    _a = ctx.compute(vjp, vout='_a', monitor=print)
+    init = dict(_c=[[1, 1], [1, 1]])
+    _a = vjp.compute(init=init, vout='_a', monitor=print)
 
     assert_array_equal(_a, [[1, 1], [1, 1]])
 
     jvp = tape.get_jvp()
-    ctx = Context(a_=[[1, 1], [1, 1]])
-    c_ = ctx.compute(jvp, vout='c_', monitor=print)
+    init = dict(a_=[[1, 1], [1, 1]])
+    c_ = jvp.compute(init=init, vout='c_', monitor=print)
 
     assert_array_equal(c_, [[1, 1], [1, 1]])
 
@@ -193,19 +192,19 @@ def test_operator_multi_out():
         t1, t2 = op(x=a)
         m.output(c=t1, d=t2)
 
-    ctx = Context(a=3)
+    init = dict(a=3)
 
-    (c, d), tape = ctx.compute(m, vout=('c', 'd'), return_tape=True)
+    (c, d), tape = m.compute(init=init, vout=('c', 'd'), return_tape=True)
     assert c == 3
     assert d == 6
 
     vjp = tape.get_vjp()
-    ctx = Context(_c=1, _d=1)
-    _a = ctx.compute(vjp, vout='_a', monitor=print)
+    init = dict(_c=1, _d=1)
+    _a = vjp.compute(init=init, vout='_a', monitor=print)
     assert _a == 3
 
     jvp = tape.get_jvp()
-    ctx = Context(a_=1)
-    c_, d_ = ctx.compute(jvp, vout=('c_', 'd_'), monitor=print)
+    init = dict(a_=1)
+    c_, d_ = jvp.compute(init=init, vout=('c_', 'd_'), monitor=print)
     assert c_ == 1
     assert d_ == 2

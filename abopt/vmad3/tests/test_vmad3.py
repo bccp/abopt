@@ -1,6 +1,5 @@
 from __future__ import print_function
 from abopt.vmad3 import Builder
-from abopt.vmad3 import Context
 from abopt.vmad3 import modeloperator
 from abopt.vmad3.operator import add
 from pprint import pprint
@@ -21,15 +20,15 @@ def test_vmad3_functional():
     pprint(m[:])
 
     print("----- compute -----")
-    ctx = Context(a=3, b=4)
+    init = dict(a=3, b=4)
 
-    c = ctx.compute(m, vout='c')
-    print(ctx, c)
+    c = m.compute(init=init, vout='c')
+    print(init, c)
 
     print("----- tape -----")
-    ctx = Context(a=3, b=4)
-    c, tape = ctx.compute(m, vout='c', return_tape=True)
-    print(ctx, c)
+    init = dict(a=3, b=4)
+    c, tape = m.compute(init=init, vout='c', return_tape=True)
+    print(init, c)
     pprint(tape)
 
     print("----- vjp -----")
@@ -37,8 +36,8 @@ def test_vmad3_functional():
     pprint(vjp)
     pprint(vjp[:])
 
-    ctx = Context(_c=1.0)
-    _a, _b = ctx.compute(vjp, vout=['_a', '_b'], monitor=print)
+    init = dict(_c=1.0)
+    _a, _b = vjp.compute(init=init, vout=['_a', '_b'], monitor=print)
     print('_a, _b = ', _a, _b)
 
     print("----- jvp -----")
@@ -46,8 +45,8 @@ def test_vmad3_functional():
     pprint(jvp)
     pprint(jvp[:])
 
-    ctx = Context(a_=1.0, b_=1.0)
-    c_, = ctx.compute(jvp, vout=['c_'], monitor=print)
+    init = dict(a_=1.0, b_=1.0)
+    c_, = jvp.compute(init=init, vout=['c_'], monitor=print)
     print('c_ = ', c_)
 
 def test_modeloperator():
@@ -67,18 +66,18 @@ def test_modeloperator():
             t2 = add(b, 0)
             return dict(c=add(a, t2))
 
+    init = dict(a=3, b=4)
+
     m3 = mymodel.build(n=3)
     print("----- model 2-----")
     pprint(m3)
-    ctx = Context(a=3, b=4)
-    c = ctx.compute(m3, vout='c')
+    c = m3.compute(init=init, vout='c')
     assert c == 3 * 2 ** 3 + 4
 
     m2 = mymodel.build(n=2)
     print("----- model 3-----")
     pprint(m2)
-    ctx = Context(a=3, b=4)
-    c = ctx.compute(m2, vout='c')
+    c = m2.compute(init=init, vout='c')
     assert c == 3 * 2 ** 2 + 4
 
     # complicated model is longer

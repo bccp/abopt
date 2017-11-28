@@ -1,5 +1,4 @@
 from abopt.vmad3.model import Builder
-from abopt.vmad3.context import Context
 from abopt.vmad3.operator import add
 import pytest
 
@@ -53,10 +52,8 @@ def test_error_unexpected_output():
         a = m.input('a')
         m.output(a=a)
 
-    ctx = Context(a=1.0)
-
     with pytest.raises(UnexpectredOutput):
-        ctx.compute(m, vout='b')
+        m.compute(vout='b', init=dict(a=1.0))
 
 def test_error_unexpected_output():
     from abopt.vmad3.error import ResolveError
@@ -64,7 +61,5 @@ def test_error_unexpected_output():
         a = m.input('a')
         m.output(a=a)
 
-    ctx = Context()
-
     with pytest.raises(ResolveError):
-        ctx.compute(m, vout='a')
+        m.compute(vout='a', init={})

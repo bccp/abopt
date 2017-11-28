@@ -110,7 +110,7 @@ def create_input_vjp(var, model):
 
     return model.get(var.vjp_name)
 
-def vjp(tape):
+def vjpmodel(tape):
     """ generate a vector jacobian product model based on a tape """
     model = Model()
     for var in tape.model._vout:
@@ -151,7 +151,7 @@ def vjp(tape):
 
     return model
 
-def jvp(tape):
+def jvpmodel(tape):
     """ generate a jacobian vector product model based on a tape """
     model = Model()
     for var in tape.model._vin:
