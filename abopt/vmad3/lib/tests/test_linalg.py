@@ -3,38 +3,126 @@ from abopt.vmad3 import Builder
 from abopt.vmad3 import Context
 from pprint import pprint
 
-from abopt.vmad3.lib.linalg import *
-from numpy.testing import assert_array_equal
+from abopt.vmad3.lib import linalg
+from numpy.testing import assert_array_equal, assert_allclose
 import numpy
 
-def test_linalg_to_scalar():
-    with Builder() as m:
-        x = m.input('x')
-        c = copy(x)
-        y = to_scalar(x)
-        m.output(y=y)
+class BaseScalarTest:
+    def setup(self):
+        with Builder() as m:
+            x = m.input('x')
+            x = self.model(x)
+            y = linalg.to_scalar(x)
+            m.output(y=y)
+        self.m = m
 
+    def test_opr(self):
+        ctx = Context(x=self.x)
+        y1 = ctx.compute(self.m, vout='y', return_tape=False)
+        # correctness
+        assert_allclose(y1, self.y)
+
+    def test_vjp(self):
+        ctx = Context(x=self.x)
+        y1, tape = ctx.compute(self.m, vout='y', return_tape=True)
+
+        vjp = tape.get_vjp()
+        ctx = Context(_y=self._y)
+        _x1 = ctx.compute(vjp, vout='_x')
+
+        assert_allclose(self._x, _x1)
+
+    def test_jvp(self):
+        ctx = Context(x=self.x)
+        y1, tape = ctx.compute(self.m, vout='y', return_tape=True)
+
+        jvp = tape.get_jvp()
+        ctx = Context(x_=self.x_)
+        y_1, t1 = ctx.compute(jvp, vout='y_', return_tape=True)
+
+        assert_allclose(self.y_, y_1)
+
+class Test_to_scalar(BaseScalarTest):
     x = numpy.arange(10)
     y = sum(x ** 2)
     _y = 1.0
-    _x = 2 * x
     x_ = numpy.ones(10)
-    y_ = 2 * x
 
-    ctx = Context(x=x)
-    y1, tape = ctx.compute(m, vout='y', return_tape=True)
+    _x = 2 * x
+    y_ = sum(2 * x)
 
-    # correctness
-    assert_array_equal(y1, y)
+    def model(self, x):
+        return x
 
-    vjp = tape.get_vjp()
-    ctx = Context(_y=_y)
-    _x1 = ctx.compute(vjp, vout='_x')
+class Test_mul(BaseScalarTest):
+    x = numpy.arange(10)
+    y = sum(x ** 2)
+    _y = 1.0
+    x_ = numpy.ones(10)
 
-    assert_array_equal(_x, _x1)
+    _x = 2 * x
+    y_ = sum(2 * x)
 
-    jvp = tape.get_jvp()
-    ctx = Context(x_=x_)
-    y_1 = ctx.compute(jvp, vout='y_')
+    def model(self, x):
+        return linalg.mul(x, 1.0)
 
-    assert_array_equal(y_, y_1)
+class Test_pow(BaseScalarTest):
+    x = numpy.arange(10)
+    y = sum(x ** 2)
+    _y = 1.0
+    x_ = numpy.ones(10)
+
+    _x = 2 * x
+    y_ = sum(2 * x)
+
+    def model(self, x):
+        return linalg.pow(x, 1.0)
+
+class Test_log(BaseScalarTest):
+    logx = numpy.arange(10)
+    x = numpy.exp(logx)
+    y = sum(logx ** 2)
+    _y = 1.0
+    x_ = numpy.ones(10)
+
+    _x = 2 * logx / x
+    y_ = sum(2 * logx / x)
+
+    def model(self, x):
+        return linalg.log(x)
+
+class Test_add(BaseScalarTest):
+    x = numpy.arange(10)
+    y = sum(x ** 2)
+    _y = 1.0
+    x_ = numpy.ones(10)
+
+    _x = 2 * x
+    y_ = sum(2 * x)
+
+    def model(self, x):
+        return linalg.add(x, 0.0)
+
+class Test_copy(BaseScalarTest):
+    x = numpy.arange(10)
+    y = sum(x ** 2)
+    _y = 1.0
+    x_ = numpy.ones(10)
+
+    _x = 2 * x
+    y_ = sum(2 * x)
+
+    def model(self, x):
+        return linalg.copy(x)
+
+class Test_stack(BaseScalarTest):
+    x = numpy.arange(10)
+    y = sum(x ** 2) * 2
+    _y = 1.0
+    x_ = numpy.ones(10)
+
+    _x = 4 * x
+    y_ = sum(4 * x)
+
+    def model(self, x):
+        return linalg.stack([x, x], axis=0)

@@ -31,7 +31,7 @@ class to_scalar:
         return dict(_x = 2. * _y * x)
 
     def jvp(self, x_, x):
-        return dict(y_ = 2. * x_ * x)
+        return dict(y_ = 2. * (x_ * x).sum())
 
 @operator
 class add:
@@ -59,10 +59,10 @@ class log:
         return dict(y=numpy.log(x))
 
     def vjp(self, _y, x):
-        return dict(_x = _y * 1 / x)
+        return dict(_x = _y * 1. / x)
 
     def jvp(self, x_, x):
-        return dict(y_ = x * 1 / x)
+        return dict(y_ = x_ * 1. / x)
 
 @operator
 class pow:
@@ -73,13 +73,13 @@ class pow:
     def opr(self, x, n):
         return dict(y=x ** n)
 
-    def vjp(self, _y, x):
+    def vjp(self, _y, x, n):
         fac = x ** (n - 1) if n != 1 else 1
         return dict(_x = n * _y * fac)
 
-    def jvp(self, x_, x):
+    def jvp(self, x_, x, n):
         fac = x ** (n - 1) if n != 1 else 1
-        return dict(y_ = n * y_ * fac)
+        return dict(y_ = n * x_ * fac)
 
 @operator
 class copy:
@@ -108,4 +108,4 @@ class stack:
                 for i in range(numpy.shape(_y)[axis])])
 
     def jvp(self, x_, axis):
-        return dict(y_=numpy.stack(x_, axis))
+        return dict(y_=numpy.stack(x_, axis=axis))
