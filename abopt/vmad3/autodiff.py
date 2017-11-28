@@ -83,6 +83,15 @@ def connect_output_vjp(ref, model):
 
         add(x1=var_f, x2=var_p, y=var_f2)
 
+def create_output_jvp(var, model):
+    if isinstance(var, List):
+        return [create_output_jvp(v, model) for v in var.value]
+
+    if isinstance(var, Literal):
+        raise RuntimError("This shall not happen, vjp is from an output which can never be a literal")
+
+    return model.define(var.jvp_name)
+
 def create_input_jvp(var, model):
     if isinstance(var, List):
         return [create_input_jvp(v, model) for v in var.value]
@@ -91,6 +100,15 @@ def create_input_jvp(var, model):
         return ZeroLiteral(model)
 
     return model.get(var.jvp_name)
+
+def create_input_vjp(var, model):
+    if isinstance(var, List):
+        return [create_input_vjp(v, model) for v in var.value]
+
+    if isinstance(var, Literal):
+        raise RuntimError("This shall not happen, vjp is from an output which can never be a literal")
+
+    return model.get(var.vjp_name)
 
 def vjp(tape):
     """ generate a vector jacobian product model based on a tape """
@@ -108,7 +126,7 @@ def vjp(tape):
 
         # initialize 'v'
         for argname, var in p.varout.items():
-            kwargs['_' + argname] = model.get(var.vjp_name)
+            kwargs['_' + argname] = create_input_vjp(var, model)
 
         # create output vjps
         for argname, ref in p.varin.items():
@@ -154,7 +172,7 @@ def jvp(tape):
 
         # create output symbols
         for argname, var in p.varout.items():
-            jvp_var = model.define(var.jvp_name)
+            jvp_var = create_output_jvp(var, model)
             kwargs[argname + '_'] = jvp_var
 
         jvp_of_p(**kwargs)

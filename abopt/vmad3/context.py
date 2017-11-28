@@ -13,8 +13,8 @@ class Context(dict):
         """ remove objects not used by nodes"""
         used = set()
         for p in nodes:
-            for argname, var in p.varin.items():
-                used.add(var.symbol.name)
+            for argname, ref in p.varin.items():
+                used = used.union(ref.get_symbol_names())
 
         toremove = []
         for key in self:

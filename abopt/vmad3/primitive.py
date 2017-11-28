@@ -37,6 +37,15 @@ def _infer_model(var):
 
     return None
 
+def check_var_references(var):
+    if isinstance(var, List):
+        for v in var.value:
+            check_var_references(v)
+        return
+
+    if len(var.references) != 0:
+        raise OverwritePrecaution("Overwritting used symbols is not supported. Because it breaks vjp.")
+
 class Primitive(object):
     """ Primitives are building blocks of models.
 
@@ -61,7 +70,6 @@ class Primitive(object):
                 return model
 
         for argname in kls.aout:
-            raise
             if argname not in kwargs: continue
             var = kwargs[argname]
 
@@ -106,10 +114,10 @@ class Primitive(object):
                 var = model.define(varname)
             else:
                 var = kwargs[argname]
+                var = make_symbol(model, kwargs[argname])
                 # already given a symbol, overwrite it
                 # but this doesn't work for gradients
-                if len(var.references) != 0:
-                    raise OverwritePrecaution("Overwritting used symbols is not supported. Because it breaks vjp.")
+                check_var_references(var)
                 # make a new symbol of the same name
                 # var = model.define(var.name)
 

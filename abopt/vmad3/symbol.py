@@ -67,8 +67,10 @@ class List(Symbol):
         return [v.resolve(context) for v in self.value]
 
     def store(self, context, value):
+        print('storing list')
         for var, v in zip(self.value, value):
             var.store(context, v)
+            print(var, v, context)
 
     def add_reference(self, node):
         return ListRef(self, node)
@@ -83,6 +85,9 @@ class Ref(object):
     def __repr__(self):
         return "&[%s:%d]" % (self.symbol.name, self.ref_id)
 
+    def get_symbol_names(self):
+        return set([self.symbol.name])
+
 class ListRef(object):
     def __init__(self, symbol, node):
         self.symbol = symbol
@@ -91,6 +96,12 @@ class ListRef(object):
 
     def __repr__(self):
         return "& %s" % (str(self.value))
+
+    def get_symbol_names(self):
+        r = set()
+        for ref in self.value:
+            r = r.union(ref.get_symbol_names())
+        return r
 
 class Literal(Symbol):
     """ A literal is a special symbol that does not resolve with a context.
