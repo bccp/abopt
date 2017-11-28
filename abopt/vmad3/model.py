@@ -34,7 +34,7 @@ class Model(list):
                     raise DuplicatedOutput("Variable %s is already marked as an output" % varname)
 
             var = self.define(varname)
-            terminal.opr(x=oldvar, y=var)
+            terminal(x=oldvar, y=var)
             self._vout.append(var)
 
     def compile(self): pass

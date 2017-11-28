@@ -48,7 +48,7 @@ class Context(dict):
 
             p.execute(self, tape)
 
-            if isinstance(p, terminal.opr):
+            if isinstance(p, terminal._opr):
                 for argname, var in p.varout.items():
                     r[var.name] = self[var.name]
 

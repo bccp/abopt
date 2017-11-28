@@ -6,13 +6,13 @@ def find_primitive_type(p, func):
     # we will only do this on the opr primitives
     # because otherwise this is undefined
     # the algebra of autodiff in vmad3 is explicitly not closed!
-    assert isinstance(p, type(p).operator.opr)
+    assert isinstance(p, type(p).operator._opr)
 
     assert func in ['vjp', 'jvp', 'opr']
 
-    if func == 'jvp': return p.operator.jvp
-    if func == 'vjp': return p.operator.vjp
-    if func == 'opr': return p.operator.opr
+    if func == 'jvp': return p.operator._jvp
+    if func == 'vjp': return p.operator._vjp
+    if func == 'opr': return p.operator._opr
 
 def prepare_opr_kwargs(record, model):
     """ generate a first guess of kwargs based on the record.

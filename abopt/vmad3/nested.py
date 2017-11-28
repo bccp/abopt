@@ -89,9 +89,9 @@ def modeloperator(kls):
         y = compute(self, m, False, **kwargs)
         return y
 
-    kls.opr = _make_primitive(kls, 'opr', opr, argnames=argnames)
-    kls.vjp = _make_primitive(kls, 'vjp', vjp, argnames=argnames_vjp)
-    kls.jvp = _make_primitive(kls, 'jvp', jvp, argnames=argnames_jvp)
+    kls._opr = _make_primitive(kls, 'opr', opr, argnames=argnames)
+    kls._vjp = _make_primitive(kls, 'vjp', vjp, argnames=argnames_vjp)
+    kls._jvp = _make_primitive(kls, 'jvp', jvp, argnames=argnames_jvp)
 
     # FIXME: add docstring / argnames
     # shall be the list of extra args
@@ -102,7 +102,7 @@ def modeloperator(kls):
 
         return _build(kwargs)
 
-    return type(kls.__name__, (Operator, kls, kls.opr), {'build':build})
+    return type(kls.__name__, (Operator, kls, kls._opr), {'build':build})
 
 @modeloperator
 class example:

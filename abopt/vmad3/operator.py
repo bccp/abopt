@@ -52,11 +52,11 @@ def operator(kls):
 
     """
 
-    kls.opr = _make_primitive(kls, 'opr', unbound(kls.opr))
-    kls.vjp = _make_primitive(kls, 'vjp', unbound(kls.vjp))
-    kls.jvp = _make_primitive(kls, 'jvp', unbound(kls.jvp))
+    kls._opr = _make_primitive(kls, 'opr', unbound(kls.opr))
+    kls._vjp = _make_primitive(kls, 'vjp', unbound(kls.vjp))
+    kls._jvp = _make_primitive(kls, 'jvp', unbound(kls.jvp))
 
-    return type(kls.__name__, (Operator, kls, kls.opr), {})
+    return type(kls.__name__, (Operator, kls, kls._opr), {})
 
 def _make_primitive(operator, func, impl, argnames=None):
     """ create primitives for the operator.
