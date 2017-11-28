@@ -9,7 +9,7 @@ class mul:
           }
     aout = {'y' : '*'}
 
-    def opr(self, x1, x2):
+    def apl(self, x1, x2):
         return dict(y = x1 * x2)
 
     def vjp(self, _y, x1, x2):
@@ -24,7 +24,7 @@ class to_scalar:
     ain  = {'x': 'ndarray'}
     aout = {'y': '*'}
 
-    def opr(self, x):
+    def apl(self, x):
         return dict(y = (abs(x) ** 2).sum())
 
     def vjp(self, _y, x):
@@ -40,7 +40,7 @@ class add:
            }
     aout = {'y': '*'}
 
-    def opr(self, x1, x2):
+    def apl(self, x1, x2):
         return dict(y = x1 + x2)
 
     def vjp(self, _y):
@@ -55,7 +55,7 @@ class log:
           }
     aout = {'y' : '*'}
 
-    def opr(self, x):
+    def apl(self, x):
         return dict(y=numpy.log(x))
 
     def vjp(self, _y, x):
@@ -70,7 +70,7 @@ class pow:
           }
     aout = {'y' : '*'}
 
-    def opr(self, x, n):
+    def apl(self, x, n):
         return dict(y=x ** n)
 
     def vjp(self, _y, x, n):
@@ -86,7 +86,7 @@ class copy:
     ain = {'x' : 'ndarray'}
     aout = {'y' : 'ndarray'}
 
-    def opr(self, x, ):
+    def apl(self, x, ):
         return dict(y = numpy.copy(x))
 
     def vjp(self, _y):
@@ -100,7 +100,7 @@ class stack:
     ain = {'x' : 'ndarray',}
     aout = {'y' : 'ndarray'}
 
-    def opr(self, x, axis):
+    def apl(self, x, axis):
         return dict(y=numpy.stack(x, axis=axis))
 
     def vjp(self, _y, axis):
@@ -115,7 +115,7 @@ class take:
     ain = {'x' : 'ndarray',}
     aout = {'y' : 'ndarray'}
 
-    def opr(self, x, i, axis):
+    def apl(self, x, i, axis):
         return dict(y=numpy.take(x, i, axis=axis))
 
     def vjp(self, _y, i, axis, x):

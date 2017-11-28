@@ -68,7 +68,7 @@ def modeloperator(kls):
             r = r, tape
         return r
 
-    def opr(self, **kwargs):
+    def apl(self, **kwargs):
         m = _build(kwargs)
         y = compute(self, m, False, **kwargs)
         return y
@@ -89,7 +89,7 @@ def modeloperator(kls):
         y = compute(self, m, False, **kwargs)
         return y
 
-    kls._opr = _make_primitive(kls, 'opr', opr, argnames=argnames)
+    kls._apl = _make_primitive(kls, 'apl', apl, argnames=argnames)
     kls._vjp = _make_primitive(kls, 'vjp', vjp, argnames=argnames_vjp)
     kls._jvp = _make_primitive(kls, 'jvp', jvp, argnames=argnames_jvp)
 
@@ -102,7 +102,7 @@ def modeloperator(kls):
 
         return _build(kwargs)
 
-    return type(kls.__name__, (Operator, kls, kls._opr), {'build' : staticmethod(build)})
+    return type(kls.__name__, (Operator, kls, kls._apl), {'build' : staticmethod(build)})
 
 @modeloperator
 class example:

@@ -25,7 +25,7 @@ class Context(dict):
             self.pop(key)
 
     def result_used(self, node):
-        if isinstance(node, terminal._opr):
+        if isinstance(node, terminal._apl):
             return True
         for argname, var in node.varout.items():
             if var.has_reference(): return True
@@ -56,7 +56,7 @@ class Context(dict):
             if self.result_used(node):
                 node.execute(self, tape)
 
-            if isinstance(node, terminal._opr):
+            if isinstance(node, terminal._apl):
                 for argname, var in node.varout.items():
                     r[var.name] = self[var.name]
 

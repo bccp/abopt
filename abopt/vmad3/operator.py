@@ -23,10 +23,10 @@ def operator(kls):
     """ Decorator to declare an operator. 
 
         The decorator is similar to a meta-class. It produces a
-        new class with Operator as a baseclass, and opr, jvp and vjp are
+        new class with Operator as a baseclass, and apl, jvp and vjp are
         converted to primitives.
 
-        An operator must define `ain, aout` and opr, vjp, jvp functions.
+        An operator must define `ain, aout` and apl, vjp, jvp functions.
 
         ain : dict(name => type_pattern) describes the input arguments of
               the operator
@@ -36,7 +36,7 @@ def operator(kls):
         Currently the type_pattern is not used; the plan is to add multi-dispatch
         if it is proven to be useful.
 
-        opr : function(self, ...) the operator itself; shall return a dictionary
+        apl : function(self, ...) the application of the operator; shall return a dictionary
               of the evaluated values (exactly the same number of aout).
               all input arguments are resolved to python objects;
               it can have extra arguments in addition to ain.
@@ -52,11 +52,11 @@ def operator(kls):
 
     """
 
-    kls._opr = _make_primitive(kls, 'opr', unbound(kls.opr))
+    kls._apl = _make_primitive(kls, 'apl', unbound(kls.apl))
     kls._vjp = _make_primitive(kls, 'vjp', unbound(kls.vjp))
     kls._jvp = _make_primitive(kls, 'jvp', unbound(kls.jvp))
 
-    return type(kls.__name__, (Operator, kls, kls._opr), {})
+    return type(kls.__name__, (Operator, kls, kls._apl), {})
 
 def _make_primitive(operator, func, impl, argnames=None):
     """ create primitives for the operator.
@@ -69,7 +69,7 @@ def _make_primitive(operator, func, impl, argnames=None):
     from .symbol import Symbol
     from collections import OrderedDict
 
-    assert func in ('opr', 'vjp', 'jvp')
+    assert func in ('apl', 'vjp', 'jvp')
 
     kls = operator
 
@@ -91,7 +91,7 @@ def _make_primitive(operator, func, impl, argnames=None):
             return d
         return impl(self, **kwargs)
 
-    if func == 'opr':
+    if func == 'apl':
         ain = kls.ain
         aout = kls.aout
         realimpl = impl
@@ -144,7 +144,7 @@ class add:
            }
     aout = {'y': '*'}
 
-    def opr(self, x1, x2):
+    def apl(self, x1, x2):
         return dict(y = x1 + x2)
 
     def vjp(self, _y):
@@ -159,7 +159,7 @@ class to_scalar:
     ain  = {'x': 'ndarray'}
     aout = {'y': '*'}
 
-    def opr(self, x,  y):
+    def apl(self, x,  y):
         return dict(y = (x**2).sum())
 
     def vjp(self, _x, _y):
@@ -174,7 +174,7 @@ class terminal:
     ain  = {'x': '*'}
     aout = {'y': '*'}
 
-    def opr(self, x):
+    def apl(self, x):
         return dict(y=x)
     def vjp(self, _y):
         return dict(_x=_y)

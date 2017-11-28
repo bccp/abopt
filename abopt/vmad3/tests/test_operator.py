@@ -11,7 +11,7 @@ class error_on_grad:
     ain = {'x' : '*'}
     aout = {'y' : '*'}
 
-    def opr(self, x):
+    def apl(self, x):
         return dict(y=x)
 
     def vjp(self, _y):
@@ -25,7 +25,7 @@ class error:
     ain = {'x' : '*'}
     aout = {'y' : '*'}
 
-    def opr(self, x):
+    def apl(self, x):
         raise AssertionError("shall not reach here")
 
     def vjp(self, _y):
@@ -86,7 +86,7 @@ class split:
     # to preserve orders
     aout = [('args', '*'),]
 
-    def opr(self, x, axis):
+    def apl(self, x, axis):
         return dict(args=[numpy.take(x, i, axis=axis) for i in range(numpy.shape(x)[axis])])
 
     def vjp(self, _args, axis):
@@ -102,7 +102,7 @@ class stack:
     # to preserve orders
     aout = [('y', '*'),]
 
-    def opr(self, args, axis):
+    def apl(self, args, axis):
         return dict(y=numpy.stack(args, axis=axis))
 
     def vjp(self, _y, args, axis):
@@ -181,7 +181,7 @@ def test_operator_multi_out():
         aout = [('y1', '*'),
                 ('y2', '*')]
 
-        def opr(self, x):
+        def apl(self, x):
             return dict(y1=x, y2=2 * x)
         def vjp(self, _y1, _y2):
             return dict(_x = _y1 + 2 * _y2)
