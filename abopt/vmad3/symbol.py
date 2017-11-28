@@ -55,6 +55,9 @@ class Symbol(object):
     def store(self, context, value):
         context[self.name] = value
 
+    def has_reference(self):
+        return len(self.references) > 0
+
 class List(Symbol):
     def __init__(self, model, value):
         Symbol.__init__(self, model, None)
@@ -74,6 +77,9 @@ class List(Symbol):
 
     def add_reference(self, node):
         return ListRef(self, node)
+
+    def has_reference(self):
+        return any(v.has_reference() for v in self.value)
 
 class Ref(object):
     def __init__(self, symbol, node):

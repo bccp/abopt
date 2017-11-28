@@ -7,16 +7,34 @@ from abopt.vmad3.lib.linalg import *
 from numpy.testing import assert_array_equal
 import numpy
 
-def test_linalg_mul():
+def test_linalg_to_scalar():
     with Builder() as m:
         x = m.input('x')
-        #c = copy(x=x)
-        y = to_scalar(x=mul(x1=x, x2=x))
+        c = copy(x)
+        y = to_scalar(x)
         m.output(y=y)
 
-    ctx = Context(x=numpy.arange(10))
-    y, tape = ctx.compute(m, vout='y', return_tape=True)
+    x = numpy.arange(10)
+    y = sum(x ** 2)
+    _y = 1.0
+    _x = 2 * x
+    x_ = numpy.ones(10)
+    y_ = 2 * x
 
-    assert_array_equal(y, sum(numpy.arange(10) ** 4))
+    ctx = Context(x=x)
+    y1, tape = ctx.compute(m, vout='y', return_tape=True)
 
+    # correctness
+    assert_array_equal(y1, y)
 
+    vjp = tape.get_vjp()
+    ctx = Context(_y=_y)
+    _x1 = ctx.compute(vjp, vout='_x')
+
+    assert_array_equal(_x, _x1)
+
+    jvp = tape.get_jvp()
+    ctx = Context(x_=x_)
+    y_1 = ctx.compute(jvp, vout='y_')
+
+    assert_array_equal(y_, y_1)

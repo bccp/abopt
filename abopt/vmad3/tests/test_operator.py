@@ -6,25 +6,62 @@ from abopt.vmad3.model import Builder
 from abopt.vmad3.context import Context
 import pytest
 
+@operator
+class error_on_grad:
+    ain = {'x' : '*'}
+    aout = {'y' : '*'}
+
+    def opr(self, x):
+        return dict(y=x)
+
+    def vjp(self, _y):
+        raise AssertionError("shall not reach here")
+
+    def jvp(self, x_):
+        raise AssertionError("shall not reach here")
+
+@operator
+class error:
+    ain = {'x' : '*'}
+    aout = {'y' : '*'}
+
+    def opr(self, x):
+        raise AssertionError("shall not reach here")
+
+    def vjp(self, _y):
+        raise AssertionError("shall not reach here")
+
+    def jvp(self, x_):
+        raise AssertionError("shall not reach here")
+
 def test_operator_zero():
-    @operator
-    class op:
-        ain = {'x' : '*'}
-        aout = {'y' : '*'}
-
-        def opr(self, x):
-            return dict(y=x)
-
-        def vjp(self, _y):
-            raise AssertionError("shall not reach here")
-
-        def jvp(self, x_):
-            raise AssertionError("shall not reach here")
 
     with Builder() as m:
         a = m.input('a')
-        t1 = op(x=a)
+        t1 = error_on_grad(x=a)
         m.output(c=t1)
+
+    ctx = Context(a=3)
+
+    c, tape = ctx.compute(m, vout='c', return_tape=True)
+    assert c == 3
+
+    vjp = tape.get_vjp()
+    ctx = Context(_c=0)
+    _a = ctx.compute(vjp, vout='_a', monitor=print)
+    assert _a == 0
+
+    jvp = tape.get_jvp()
+    ctx = Context(a_=0)
+    c_ = ctx.compute(jvp, vout='c_', monitor=print)
+    assert c_ == 0
+
+def test_operator_skip_unused():
+
+    with Builder() as m:
+        a = m.input('a')
+        t1 = error(x=a)
+        m.output(c=a)
 
     ctx = Context(a=3)
 
@@ -57,6 +94,7 @@ class split:
 
     def jvp(self, x_, axis):
         return dict(args_=[numpy.take(x_, i, axis=axis) for i in range(numpy.shape(x_)[axis])])
+
 @operator
 class stack:
     ain = {('args', '*')}

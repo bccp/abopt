@@ -27,11 +27,11 @@ class to_scalar:
     def opr(self, x):
         return dict(y = (abs(x) ** 2).sum())
 
-    def vjp(self, _x, _y):
-        return dict(_x = 2. * _y)
+    def vjp(self, _y, x):
+        return dict(_x = 2. * _y * x)
 
-    def jvp(self, x_, y_):
-        return dict(y_ = 2. * x_)
+    def jvp(self, x_, x):
+        return dict(y_ = 2. * x_ * x)
 
 @operator
 class add:

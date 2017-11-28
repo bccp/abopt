@@ -24,6 +24,13 @@ class Context(dict):
         for key in toremove:
             self.pop(key)
 
+    def result_used(self, node):
+        if isinstance(node, terminal._opr):
+            return True
+        for argname, var in node.varout.items():
+            if var.has_reference(): return True
+        return False
+
     def compute(self, model, vout, return_tape=False, monitor=None):
         """
             compute a model in the current context (self).
@@ -44,18 +51,19 @@ class Context(dict):
                 raise UnexpectedOutput("Requested vout %s is not defined by the model as an output" % varname)
 
         r = {}
-        for i, p in enumerate(model):
+        for i, node in enumerate(model):
 
-            p.execute(self, tape)
+            if self.result_used(node):
+                node.execute(self, tape)
 
-            if isinstance(p, terminal._opr):
-                for argname, var in p.varout.items():
+            if isinstance(node, terminal._opr):
+                for argname, var in node.varout.items():
                     r[var.name] = self[var.name]
 
             self.remove_unused(model[i+1:])
 
             if monitor is not None:
-                monitor(p, self)
+                monitor(node, self)
 
         r = [r[varname] for varname in vout]
 
