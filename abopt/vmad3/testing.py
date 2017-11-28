@@ -4,7 +4,21 @@ from abopt.vmad3.operator import to_scalar as default_to_scalar
 from numpy.testing import assert_array_equal, assert_allclose
 
 class BaseScalarTest:
-    to_scalar = default_to_scalar
+    """ Basic correctness test with to_scalar """
+
+    to_scalar = default_to_scalar  # norm-2 scalar
+
+    x = numpy.arange(10)  # free variable x
+    x_ = numpy.ones(10)   # v of jvp, forward pass -- sum of all gradient components
+    _y = 1.0              # v of vjp, backward pass
+
+    y = sum(x ** 2)       # expected output variable y, scalar
+    y_ = sum(2 * x)       # expected jvp output
+    _x = 2 * x            # expected vjp output
+
+    def model(self, x):
+        return x          # override and build the model will be converted to a scalar later.
+
     def setup(self):
         with Builder() as m:
             x = m.input('x')
