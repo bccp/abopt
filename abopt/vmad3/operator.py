@@ -160,7 +160,7 @@ class to_scalar:
     aout = {'y': '*'}
 
     def apl(self, x,  y):
-        return dict(y = (x**2).sum())
+        return dict(y = (abs(x)**2).sum())
 
     def vjp(self, _x, _y):
         return dict(_x = 2. * _y)
