@@ -92,9 +92,9 @@ class Context(dict):
         kwargs.update(resolved)
 
         # add the extra arguments used by the impl
-        for argname in node.argnames:
-            if argname not in kwargs:
-                kwargs[argname] = node.kwargs[argname]
+        for argname, value in node.kwargs.items():
+            if argname in node.argnames:
+                kwargs[argname] = value
 
         tape.append(node, resolved)
 

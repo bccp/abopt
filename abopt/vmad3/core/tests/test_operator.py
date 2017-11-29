@@ -55,6 +55,47 @@ def test_operator_zero():
     c_ = jvp.compute(init=init, vout='c_', monitor=print)
     assert c_ == 0
 
+def test_operator_defaults():
+    @operator
+    class with_defaults:
+        ain = {('x', '*')}
+        # for python 2.x need to use this syntax
+        # to preserve orders
+        aout = [('y', '*'),]
+
+        def apl(self, x, defaults=False):
+            assert defaults == False
+            return dict(y=x)
+
+        def vjp(self, _y, defaults=False):
+            assert defaults == False
+            return dict(_x=_y)
+
+        def jvp(self, x_, defaults=False):
+            assert defaults == False
+            return dict(y_=x_)
+
+
+    with Builder() as m:
+        a = m.input('a')
+        t1 = with_defaults(x=a)
+        m.output(c=t1)
+
+    init = dict(a=3)
+
+    c, tape = m.compute(init=init, vout='c', return_tape=True)
+    assert c == 3
+
+    vjp = tape.get_vjp()
+    init = dict(_c=1)
+    _a = vjp.compute(init=init, vout='_a', monitor=print)
+    assert _a == 1
+
+    jvp = tape.get_jvp()
+    init = dict(a_=1)
+    c_ = jvp.compute(init=init, vout='c_', monitor=print)
+    assert c_ == 1
+
 def test_operator_skip_unused():
 
     with Builder() as m:
