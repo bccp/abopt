@@ -72,7 +72,6 @@ class List(Symbol):
     def store(self, context, value):
         for var, v in zip(self.value, value):
             var.store(context, v)
-            print(var, v, context)
 
     def add_reference(self, node):
         return ListRef(self, node)
