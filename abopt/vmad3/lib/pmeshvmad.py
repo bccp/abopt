@@ -40,25 +40,26 @@ class c2r:
     def jvp(self, x_):
         return dict(y_=x_.c2r())
 
-def nyquist_mask(v):
-    mask = ~numpy.bitwise_and.reduce([(ii == 0) | (ii == ni // 2) for ii, ni in zip(v.i, v.Nmesh)])
-    return 1.0 * mask
+def nyquist_mask(v, i, Nmesh):
+    mask = ~numpy.bitwise_and.reduce([(ii == 0) | (ii == ni // 2) for ii, ni in zip(i, Nmesh)])
+    v.imag[...] *= mask
+    return v
 
 @operator
 class apply_transfer:
-    ain = {'c' : 'ComplexField'}
-    aout = {'c' : 'ComplexField'}
+    ain = {'x' : 'ComplexField'}
+    aout = {'y' : 'ComplexField'}
 
     def apl(self, x, tf):
-        filter = lambda k, v: nyquist_mask(v) * tf(k) * v
+        filter = lambda k, v: nyquist_mask(v * tf(k), v.i, v.Nmesh)
         return dict(y=x.apply(filter))
 
-    def vjp(self, _y):
-        filter = lambda k, v: nyquist_mask(v) * numpy.conj(tf(k)) * v
+    def vjp(self, _y, tf):
+        filter = lambda k, v: nyquist_mask(v * numpy.conj(tf(k)), v.i, v.Nmesh)
         return dict(_x=_y.apply(filter))
 
-    def jvp(self, x_):
-        filter = lambda k, v: nyquist_mask(v) * tf(k) * v
+    def jvp(self, x_, tf):
+        filter = lambda k, v: nyquist_mask(v * tf(k), v.i, v.Nmesh)
         return dict(y_=x_.apply(filter))
 
 @operator
@@ -125,8 +126,8 @@ class decompose:
     def apl(self, x, pm):
         return dict(layout=pm.decompose(x))
 
-    def vjp(engine, _layout, _x, pm):
+    def vjp(engine, _layout):
         return dict(_x=0)
 
-    def jvp(engine, layout_, x_):
+    def jvp(engine, x_):
         return dict(layout_=0)
