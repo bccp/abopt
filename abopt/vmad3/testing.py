@@ -2,18 +2,16 @@ from abopt.vmad3 import Builder
 from numpy.testing import assert_array_equal, assert_allclose
 
 class BaseScalarTest:
-    """ Basic correctness test with to_scalar """
+    """ Basic correctness of gradient against numerical with to_scalar """
 
     to_scalar = None # operator for norm-2 scalar
 
     import numpy
     x = numpy.arange(10)  # free variable x
-    x_ = numpy.ones(10)   # v of jvp, forward pass -- sum of all gradient components
-    _y = 1.0              # v of vjp, backward pass
+    x_ = numpy.eye(10)    # a list of directions of x_ to check for directional gradients.
 
     y = sum(x ** 2)       # expected output variable y, scalar
-    y_ = sum(2 * x)       # expected jvp output
-    _x = 2 * x            # expected vjp output
+    epsilon = 1e-3
 
     def model(self, x):
         return x          # override and build the model will be converted to a scalar later.
@@ -24,7 +22,24 @@ class BaseScalarTest:
             x = self.model(x)
             y = self.to_scalar(x)
             m.output(y=y)
+
         self.m = m
+
+        y_ = []
+        for x_ in self.x_:
+            # run a step along x_
+            xl = self.x - x_ * (self.epsilon * 0.5)
+            xr = self.x + x_ * (self.epsilon * 0.5)
+
+            # numerical
+            yl = self.m.compute(init=dict(x=xl), vout='y', return_tape=False)
+            yr = self.m.compute(init=dict(x=xr), vout='y', return_tape=False)
+
+            y_.append((yr - yl) / self.epsilon)
+
+        y, tape = self.m.compute(init=dict(x=self.x), vout='y', return_tape=True)
+        self.tape = tape
+        self.y_ = y_
 
     def test_opr(self):
         init = dict(x=self.x)
@@ -32,23 +47,23 @@ class BaseScalarTest:
         # correctness
         assert_allclose(y1, self.y)
 
-    def test_vjp(self):
-        init = dict(x=self.x)
-        y1, tape = self.m.compute(vout='y', init=init, return_tape=True)
+    def test_jvp_finite(self):
+        jvp = self.tape.get_jvp()
 
-        vjp = tape.get_vjp()
-        init = dict(_y=self._y)
-        _x1 = vjp.compute(init=init, vout='_x')
+        for x_, y_ in zip(self.x_, self.y_):
+            init = dict(x_=x_)
+            y_1 = jvp.compute(init=init, vout='y_', return_tape=False)
 
-        assert_allclose(self._x, _x1)
+            assert_allclose(y_1, y_)
 
-    def test_jvp(self):
-        init = dict(x=self.x)
-        y1, tape = self.m.compute(init=init, vout='y', return_tape=True)
+    def test_vjp_finite(self):
+        import numpy
+        vjp = self.tape.get_vjp()
 
-        jvp = tape.get_jvp()
-        init = dict(x_=self.x_)
-        y_1, t1 = jvp.compute(init=init, vout='y_', return_tape=True)
+        init = dict(_y=1.0)
+        _x = vjp.compute(init=init, vout='_x', return_tape=False)
 
-        assert_allclose(self.y_, y_1)
+        for x_, y_ in zip(self.x_, self.y_):
+            assert_allclose(numpy.sum(_x * x_), y_)
+
 
