@@ -11,7 +11,7 @@ class error_on_grad:
     aout = {'y' : '*'}
 
     def apl(self, x):
-        return dict(y=x)
+        return x
 
     def vjp(self, _y):
         raise AssertionError("shall not reach here")
@@ -65,16 +65,15 @@ def test_operator_defaults():
 
         def apl(self, x, defaults=False):
             assert defaults == False
-            return dict(y=x)
+            return x
 
         def vjp(self, _y, defaults=False):
             assert defaults == False
-            return dict(_x=_y)
+            return _y
 
         def jvp(self, x_, defaults=False):
             assert defaults == False
-            return dict(y_=x_)
-
+            return x_
 
     with Builder() as m:
         a = m.input('a')
@@ -127,13 +126,13 @@ class split:
     aout = [('args', '*'),]
 
     def apl(self, x, axis):
-        return dict(args=[numpy.take(x, i, axis=axis) for i in range(numpy.shape(x)[axis])])
+        return [numpy.take(x, i, axis=axis) for i in range(numpy.shape(x)[axis])]
 
     def vjp(self, _args, axis):
-        return dict(_x=numpy.stack(_args, axis=axis))
+        return numpy.stack(_args, axis=axis)
 
     def jvp(self, x_, axis):
-        return dict(args_=[numpy.take(x_, i, axis=axis) for i in range(numpy.shape(x_)[axis])])
+        return [numpy.take(x_, i, axis=axis) for i in range(numpy.shape(x_)[axis])]
 
 @operator
 class stack:
@@ -143,13 +142,13 @@ class stack:
     aout = [('y', '*'),]
 
     def apl(self, args, axis):
-        return dict(y=numpy.stack(args, axis=axis))
+        return numpy.stack(args, axis=axis)
 
     def vjp(self, _y, args, axis):
-        return dict(_args=[numpy.take(_y, i, axis=axis) for i in range(numpy.shape(_y)[axis])])
+        return [numpy.take(_y, i, axis=axis) for i in range(numpy.shape(_y)[axis])]
 
     def jvp(self, args_, args, axis):
-        return dict(y_=numpy.stack(args_, axis))
+        return numpy.stack(args_, axis)
 
 
 def test_operator_list_in():
@@ -249,3 +248,33 @@ def test_operator_multi_out():
     c_, d_ = jvp.compute(init=init, vout=('c_', 'd_'), monitor=print)
     assert c_ == 1
     assert d_ == 2
+
+def test_operator_extra_args():
+    # assert used extra args are recored on the tape
+    @operator
+    class extra_args:
+        ain = {'x' : '*'}
+        aout = {'y' : '*'}
+
+        def apl(self, x, p):
+            return x * p
+
+        def vjp(self, x, _y, p):
+            return _y * p
+
+        def jvp(self, x, x_, p):
+            return x_ * p
+
+    with Builder() as m:
+        a = m.input('a')
+        b = extra_args(x=a, p=2.0)
+        m.output(b=b)
+
+    init = dict(a = 1.0)
+    b, tape = m.compute(init=init, vout='b', monitor=print, return_tape=True)
+
+    assert b == 2.0
+    assert isinstance(tape[0].node, extra_args._apl)
+    assert 'p' not in tape[0].resolved
+    assert 'p' in tape[0].node.kwargs
+

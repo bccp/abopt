@@ -154,5 +154,13 @@ class Primitive(object):
 
     def call(self, **kwargs):
         """ call the implementation function of the primitive """
-        return type(self).impl(self, **kwargs)
+        r = type(self).impl(self, **kwargs)
+
+        # allow returning without using a dict
+        # if there is only a single output argument
+        if not isinstance(r, dict) and len(self.varout) == 1:
+            argname = next(iter(self.varout.keys()))
+            r = {argname:r}
+
+        return r
 

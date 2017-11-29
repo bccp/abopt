@@ -36,8 +36,12 @@ def operator(kls):
         Currently the type_pattern is not used; the plan is to add multi-dispatch
         if it is proven to be useful.
 
-        apl : function(self, ...) the application of the operator; shall return a dictionary
-              of the evaluated values (exactly the same number of aout).
+        apl : function(self, ...) the application of the operator;
+              it shall return a dictionary
+              of the evaluated values (exactly the same number of aout);
+              except when there is only one output argument, then
+              the result can be returned directly.
+
               all input arguments are resolved to python objects;
               it can have extra arguments in addition to ain.
               self is the node object that is used in the model

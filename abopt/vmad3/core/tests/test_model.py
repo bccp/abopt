@@ -1,6 +1,6 @@
 from __future__ import print_function
 from pprint import pprint
-from abopt.vmad3.core.operator import add, operator
+from abopt.vmad3.core.operator import add
 from abopt.vmad3.core.model import Builder
 import pytest
 
@@ -90,35 +90,6 @@ def test_tape_unused():
     assert 'j' in tape[0].node.kwargs
 
     pprint(tape[:])
-
-def test_model_extra_args():
-    # assert used extra args are recored on the tape
-    @operator
-    class extra_args:
-        ain = {'x' : '*'}
-        aout = {'y' : '*'}
-
-        def apl(self, x, p):
-            return dict(y = x * p)
-
-        def vjp(self, x, _x, _y, p):
-            return dict(_x = _y * p)
-
-        def jvp(self, x, x_, y_, p):
-            return dict(y_ = x_ * p)
-
-    with Builder() as m:
-        a = m.input('a')
-        b = extra_args(x=a, p=2.0)
-        m.output(b=b)
-
-    init = dict(a = 1.0)
-    b, tape = m.compute(init=init, vout='b', monitor=print, return_tape=True)
-
-    assert b == 2.0
-    assert isinstance(tape[0].node, extra_args._apl)
-    assert 'p' not in tape[0].resolved
-    assert 'p' in tape[0].node.kwargs
 
 def test_model_many_rewrites():
     # this is a nasty model with many variable rewrites.
