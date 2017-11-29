@@ -18,6 +18,7 @@ install:
     - conda create --yes -n test python=$TRAVIS_PYTHON_VERSION
     - source activate test
     - conda install --yes numpy=$NUMPY_VERSION scipy nose
+    - conda install --yes pmesh
     - python setup.py install
 
 script:
