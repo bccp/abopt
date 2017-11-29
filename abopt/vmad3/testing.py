@@ -40,6 +40,10 @@ class BaseScalarTest:
         y, tape = self.m.compute(init=dict(x=self.x), vout='y', return_tape=True)
         self.tape = tape
         self.y_ = y_
+        import numpy
+
+        if numpy.allclose(y_, 0):
+            raise AssertionError("The test case is not powerful enough, since all derivatives at this point are zeros")
 
     def test_opr(self):
         init = dict(x=self.x)
