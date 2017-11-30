@@ -150,10 +150,7 @@ class Primitive(object):
 
             Returns: dict that goes into the tape
         """
-        if type(self).record_impl is not None:
-            return type(self).record_impl(self, **kwargs)
-        else:
-            return kwargs
+        return type(self).record_impl(self, **kwargs)
 
 
 def _infer_model(var):

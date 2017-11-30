@@ -86,7 +86,7 @@ class copy:
     ain = {'x' : 'ndarray'}
     aout = {'y' : 'ndarray'}
 
-    def apl(self, x, ):
+    def apl(self, x):
         return dict(y = numpy.copy(x))
 
     def vjp(self, _y):
@@ -118,8 +118,11 @@ class take:
     def apl(self, x, i, axis):
         return dict(y=numpy.take(x, i, axis=axis))
 
-    def vjp(self, _y, i, axis, x):
-        _x = numpy.zeros_like(x)
+    def rcd(self, x, i, axis):
+        return dict(xshape = numpy.shape(x), i=i, axis=axis)
+
+    def vjp(self, _y, i, axis, xshape):
+        _x = numpy.zeros(xshape)
         _x = numpy.swapaxes(_x, 0, axis)
         _x[i] = _y
         _x = numpy.swapaxes(_x, 0, axis)

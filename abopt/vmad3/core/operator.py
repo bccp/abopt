@@ -12,6 +12,15 @@
 
 class Operator(object): pass
 
+def record_copy_all(self, **kwargs):
+    """ A default rcd implementation that copies all kwargs to the tape.
+
+        the impl is used for the apl primitives if no rcd is given;
+        the impl is also used for the vjp and vjp primitives.
+    """
+    return kwargs
+
+
 def unbound(method):
     if hasattr(method, 'im_func'):
         # python 2.7 has this unbound method thing
@@ -61,15 +70,32 @@ def operator(kls):
 
     """
 
+    if hasattr(kls, 'rcd'):
+        record_impl = unbound(kls.rcd)
+    else:
+        record_impl = record_copy_all
+
     kls._apl = _make_primitive(kls, 'apl', unbound(kls.apl),
-            record_impl=unbound(kls.rcd) if hasattr(kls, 'rcd') else None)
+        record_impl=record_impl)
 
     kls._vjp = _make_primitive(kls, 'vjp', unbound(kls.vjp))
     kls._jvp = _make_primitive(kls, 'jvp', unbound(kls.jvp))
 
     return type(kls.__name__, (Operator, kls, kls._apl), {})
 
-def _make_primitive(operator, func, impl, argnames=None, record_impl=None):
+def zerobypass(impl):
+    def zerobypassimpl(self, **kwargs):
+        ain = type(self).ain
+        aout = type(self).aout
+        if all(kwargs[argname] is 0 for argname in ain):
+            d = {}
+            for argname in aout:
+                d[argname] = 0
+            return d
+        return impl(self, **kwargs)
+    return zerobypassimpl
+
+def _make_primitive(operator, func, impl, argnames=None, record_impl=record_copy_all):
     """ create primitives for the operator.
 
         This is used to define a primitive based on the unbound method
@@ -92,27 +118,16 @@ def _make_primitive(operator, func, impl, argnames=None, record_impl=None):
     if argnames is None:
         argnames = impl.__code__.co_varnames[1:impl.__code__.co_argcount]
 
-    def zerobypass(self, **kwargs):
-        ain = type(self).ain
-        aout = type(self).aout
-        if all(kwargs[argname] is 0 for argname in ain):
-            d = {}
-            for argname in aout:
-                d[argname] = 0
-            return d
-        return impl(self, **kwargs)
-
     if func == 'apl':
         ain = kls.ain
         aout = kls.aout
-        realimpl = impl
     elif func == 'vjp' : # in and out are prefixed.
         for arg in kls.ain:
             aout['_' + arg] = kls.ain[arg]
 
         for arg in kls.aout:
             ain['_' + arg] = kls.aout[arg]
-        realimpl = zerobypass
+        impl = zerobypass(impl)
 
     elif func == 'jvp' : # in and out are prefixed.
         for arg in kls.ain:
@@ -120,10 +135,10 @@ def _make_primitive(operator, func, impl, argnames=None, record_impl=None):
 
         for arg in kls.aout:
             aout[arg + '_'] = kls.aout[arg]
-        realimpl = zerobypass
+        impl = zerobypass(impl)
 
     members =  dict(
-                impl     = realimpl,
+                impl     = impl,
                 record_impl     = record_impl,
                 func     = func,
                 ain      = ain,
