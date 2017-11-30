@@ -12,14 +12,43 @@
 
 class Operator(object): pass
 
+def find_primitive_type(node, func):
+    # we will only do this on the apl primitives
+    # because otherwise this is undefined
+    # the algebra of autodiff in vmad3 is explicitly not closed!
+    assert isinstance(node, type(node).operator._apl)
+
+    assert func in ['vjp', 'jvp', 'apl']
+
+    if func == 'jvp': return node.operator._jvp
+    if func == 'vjp': return node.operator._vjp
+    if func == 'apl': return node.operator._apl
+
 def record_copy_all(self, **kwargs):
     """ A default rcd implementation that copies all kwargs to the tape.
 
-        the impl is used for the apl primitives if no rcd is given;
-        the impl is also used for the vjp and vjp primitives.
+        the impl is used for the vjp and vjp primitives.
+
+        the impl is can be used for the apl primitives if no rcd is given;
+        but we use 'record_copy_autodiff' to save a much smaller subset
+        of variables.
     """
     return kwargs
 
+def record_copy_autodiff(self, **kwargs):
+    """ A default rcd implementation that copies `useful` kwargs to the tape
+        for the autodiff.
+
+        the impl is used for the apl primitives if no rcd is given;
+    """
+    jvp = find_primitive_type(self, 'jvp')
+    vjp = find_primitive_type(self, 'vjp')
+    record = {}
+    for argname, value in kwargs.items():
+        if argname in jvp.argnames or argname in vjp.argnames:
+            record[argname] = value
+
+    return record
 
 def unbound(method):
     if hasattr(method, 'im_func'):
@@ -73,7 +102,7 @@ def operator(kls):
     if hasattr(kls, 'rcd'):
         record_impl = unbound(kls.rcd)
     else:
-        record_impl = record_copy_all
+        record_impl = record_copy_autodiff
 
     kls._apl = _make_primitive(kls, 'apl', unbound(kls.apl),
         record_impl=record_impl)

@@ -1,18 +1,7 @@
 from .symbol import ZeroLiteral, Literal, Symbol, ListRef, List
 from .model import Model
 from .operator import terminal, add
-
-def find_primitive_type(p, func):
-    # we will only do this on the apl primitives
-    # because otherwise this is undefined
-    # the algebra of autodiff in vmad3 is explicitly not closed!
-    assert isinstance(p, type(p).operator._apl)
-
-    assert func in ['vjp', 'jvp', 'apl']
-
-    if func == 'jvp': return p.operator._jvp
-    if func == 'vjp': return p.operator._vjp
-    if func == 'apl': return p.operator._apl
+from .operator import find_primitive_type
 
 def prepare_opr_kwargs(record, model):
     """ generate a first guess of kwargs based on the record.
