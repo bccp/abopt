@@ -92,7 +92,7 @@ class Primitive(object):
 
         self.varin = {}
         self.varout = {}
-        self.kwargs = {}
+        self.hyper_args = {}
 
         kwargs = kwargs.copy() # will modify
 
@@ -134,10 +134,10 @@ class Primitive(object):
 
             self.varout[argname] = var
 
-        # record all 'side' arguments that do not go into derivatives.
+        # record all `hyper` arguments that do not go into derivatives.
         for k, v in kwargs.items():
             if k not in kls.ain and k not in kls.aout:
-                self.kwargs[k] = v
+                self.hyper_args[k] = v
 
         model.append(self)
 

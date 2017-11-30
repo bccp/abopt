@@ -91,8 +91,8 @@ class Context(dict):
         kwargs = {}
         kwargs.update(resolved)
 
-        # add the extra arguments used by the impl
-        for argname, value in node.kwargs.items():
+        # add the hyper arguments used by the impl
+        for argname, value in node.hyper_args.items():
             if argname in node.argnames:
                 kwargs[argname] = value
 
