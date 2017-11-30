@@ -6,6 +6,8 @@ class Context(dict):
     """ A context is a collection of python objects referred by symbol names;
 
         This is where the execution of a model occurs.
+
+        Context is the internal API. Use the compute method of a model instead.
     """
     def __init__(self, **kwargs):
         self.update(kwargs)
@@ -36,8 +38,7 @@ class Context(dict):
 
     def compute(self, model, vout, return_tape=False, monitor=None):
         """
-            compute a model in the current context (self).
-
+            compute a model in the current context (self)
         """
         tape = Tape(model)
 
@@ -80,7 +81,8 @@ class Context(dict):
 
     def execute(self, node, tape):
         """ execute a node on the context, recording the
-            resolved arguments to the tape for replay / gradients.
+            arguments of the impl to the tape for replay, debuggin,
+            or autodiff.
         """
 
         resolved = {}
