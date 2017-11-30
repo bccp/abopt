@@ -165,3 +165,10 @@ class Primitive(object):
 
         return r
 
+    def record(self, kwargs):
+        """ generate the kwargs that goes into the tape """
+        if type(self).record_impl is not None:
+            return type(self).record_impl(self, **kwargs)
+        else:
+            return kwargs
+

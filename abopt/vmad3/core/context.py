@@ -96,7 +96,7 @@ class Context(dict):
             if argname in node.argnames:
                 kwargs[argname] = value
 
-        tape.append(node, resolved)
+        tape.append(node, node.record(kwargs))
 
         r = node.call(**kwargs)
 

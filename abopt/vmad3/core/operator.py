@@ -56,13 +56,15 @@ def operator(kls):
 
     """
 
-    kls._apl = _make_primitive(kls, 'apl', unbound(kls.apl))
+    kls._apl = _make_primitive(kls, 'apl', unbound(kls.apl),
+            record_impl=unbound(kls.rcd) if hasattr(kls, 'rcd') else None)
+
     kls._vjp = _make_primitive(kls, 'vjp', unbound(kls.vjp))
     kls._jvp = _make_primitive(kls, 'jvp', unbound(kls.jvp))
 
     return type(kls.__name__, (Operator, kls, kls._apl), {})
 
-def _make_primitive(operator, func, impl, argnames=None):
+def _make_primitive(operator, func, impl, argnames=None, record_impl=None):
     """ create primitives for the operator.
 
         This is used to define a primitive based on the unbound method
@@ -100,10 +102,6 @@ def _make_primitive(operator, func, impl, argnames=None):
         aout = kls.aout
         realimpl = impl
     elif func == 'vjp' : # in and out are prefixed.
-        for arg in argnames:
-            if arg in kls.ain: # useful original arguments
-                ain[arg] = kls.ain[arg]
-
         for arg in kls.ain:
             aout['_' + arg] = kls.ain[arg]
 
@@ -112,10 +110,6 @@ def _make_primitive(operator, func, impl, argnames=None):
         realimpl = zerobypass
 
     elif func == 'jvp' : # in and out are prefixed.
-        for arg in argnames:
-            if arg in kls.ain: # useful original arguments
-                ain[arg] = kls.ain[arg]
-
         for arg in kls.ain:
             ain[arg + '_'] = kls.ain[arg]
 
@@ -125,6 +119,7 @@ def _make_primitive(operator, func, impl, argnames=None):
 
     members =  dict(
                 impl     = realimpl,
+                record_impl     = record_impl,
                 func     = func,
                 ain      = ain,
                 aout     = aout,

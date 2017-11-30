@@ -75,22 +75,6 @@ def test_model_partial_out():
     assert c_ == 2.0
     assert a_ == 1.0
 
-def test_tape_unused():
-    # assert unused extra args are not recorded on the tape.
-    with Builder() as m:
-        a = m.input('a')
-        b = add(x1=a, x2=a, j=3)
-        m.output(b=b)
-
-    init = dict(a = 1.0)
-    b, tape = m.compute(init=init, vout='b', monitor=print, return_tape=True)
-    assert b == 2.0
-    assert isinstance(tape[0].node, add._apl)
-    assert 'j' not in tape[0].resolved
-    assert 'j' in tape[0].node.kwargs
-
-    pprint(tape[:])
-
 def test_model_many_rewrites():
     # this is a nasty model with many variable rewrites.
     n = 2

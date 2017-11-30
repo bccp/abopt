@@ -19,20 +19,11 @@ def prepare_opr_kwargs(record, model):
 
     """
     p = record.node
-    resolved = record.resolved
+    impl_kwargs = record.impl_kwargs
 
     kwargs = {}
 
-    kwargs.update(p.kwargs)
-
-    # add resolved symbols as literals
-    for k, v in resolved.items():
-        # v is a python object
-        assert k in p.varin
-        # if we expect an input, convert it to a literal
-        kwargs[k] = Literal(model, v)
-
-    return kwargs
+    return impl_kwargs
 
 def create_output_vjp(ref, model):
 
@@ -118,7 +109,6 @@ def vjpmodel(tape):
 
     for i, record in enumerate(tape[::-1]):
         p = record.node
-        resolved = record.resolved
 
         vjp_of_p = find_primitive_type(p, func='vjp')
 
@@ -159,7 +149,6 @@ def jvpmodel(tape):
 
     for i, record in enumerate(tape):
         p = record.node
-        resolved = record.resolved
 
         jvp_of_p = find_primitive_type(p, func='jvp')
 

@@ -249,32 +249,34 @@ def test_operator_multi_out():
     assert c_ == 1
     assert d_ == 2
 
-def test_operator_extra_args():
+def test_operator_record():
     # assert used extra args are recored on the tape
     @operator
-    class extra_args:
+    class myrecord:
         ain = {'x' : '*'}
         aout = {'y' : '*'}
 
         def apl(self, x, p):
             return x * p
 
-        def vjp(self, x, _y, p):
-            return _y * p
+        def rcd(self, x, p):
+            return dict(x=x, u=p)
 
-        def jvp(self, x, x_, p):
-            return x_ * p
+        def vjp(self, x, _y, u):
+            return _y * u
+
+        def jvp(self, x, x_, u):
+            return x_ * u
 
     with Builder() as m:
         a = m.input('a')
-        b = extra_args(x=a, p=2.0)
+        b = myrecord(x=a, p=2.0)
         m.output(b=b)
 
     init = dict(a = 1.0)
     b, tape = m.compute(init=init, vout='b', monitor=print, return_tape=True)
 
     assert b == 2.0
-    assert isinstance(tape[0].node, extra_args._apl)
-    assert 'p' not in tape[0].resolved
-    assert 'p' in tape[0].node.kwargs
+    assert 'p' not in tape[0].impl_kwargs
+    assert 'u' in tape[0].impl_kwargs
 
