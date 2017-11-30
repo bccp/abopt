@@ -5,6 +5,11 @@ from .symbol import Symbol, Literal, List
 
 def make_symbol(model, var):
     if isinstance(var, Primitive):
+        # unpack the primitive result
+        #
+        # see __iter__ if explict unpack (a, b = primitive(...))
+        # is used.
+
         if len(var.varout) > 1:
             raise UnpackError("More than one output variable, need to unpack them")
         var = next(iter(var.varout.values()))
@@ -18,10 +23,6 @@ def make_symbol(model, var):
     return var
 
 def _infer_model(var):
-    # unpack the primitive result
-    # see __iter__ if explict unpack (a, b = primitive(...))
-    # is used.
-
     if isinstance(var, Primitive):
         var = next(iter(var.varout.values()))
 
