@@ -46,6 +46,11 @@ def operator(kls):
               it can have extra arguments in addition to ain.
               self is the node object that is used in the model
 
+        rcd : function(self, ...) recording the arguments for
+              invoking jvp and vjp. It shall return a dict.
+              the only items included in the dict are available
+              to vjp and vjp; if not defined, all arguments to apl are recorded.
+
         jvp : function(self, ...) the jacobian vector product. The convention
               is to use '_' + argname as the name of vectors. used for back-prop.
               self is the node object that is used in the model
