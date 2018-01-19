@@ -249,6 +249,42 @@ def test_operator_multi_out():
     assert c_ == 1
     assert d_ == 2
 
+def test_operator_multi_out_unused():
+    @operator
+    class op:
+        ain = {'x' : '*'}
+        # for python 2.x need to use this syntax
+        # to preserve orders
+        aout = [('y1', '*'),
+                ('y2', '*')]
+
+        def apl(self, x):
+            return dict(y1=x, y2=2 * x)
+        def vjp(self, _y1, _y2):
+            return dict(_x = _y1 + 2 * _y2)
+        def jvp(self, x_):
+            return dict(y1_=x_, y2_=2 * x_)
+
+    with Builder() as m:
+        a = m.input('a')
+        t1, t2 = op(x=a)
+        m.output(c=t1)
+
+    init = dict(a=3)
+
+    c, tape = m.compute(init=init, vout='c', return_tape=True)
+    assert c == 3
+
+    vjp = tape.get_vjp()
+    init = dict(_c=1)
+    _a = vjp.compute(init=init, vout='_a', monitor=print)
+    assert _a == 1
+
+    jvp = tape.get_jvp()
+    init = dict(a_=1)
+    c_ = jvp.compute(init=init, vout=('c_'), monitor=print)
+    assert c_ == 1
+
 def test_operator_record():
     # assert used extra args are recored on the tape
     @operator

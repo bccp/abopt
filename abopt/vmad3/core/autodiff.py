@@ -88,6 +88,11 @@ def create_input_vjp(var, model):
     if isinstance(var, Literal):
         raise RuntimError("This shall not happen, vjp is from an output which can never be a literal")
 
+    if not model.has(var.vjp_name):
+        # the variable is not declared on the model
+        # FIXME: this can either be a bug or the variable is unused.
+        return ZeroLiteral(model)
+
     return model.get(var.vjp_name)
 
 def vjpmodel(tape):
