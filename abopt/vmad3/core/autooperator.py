@@ -8,7 +8,7 @@ def autooperator(kls):
         ain : input arguments
         aout : output arguments
 
-        model : function(model, ...) building the model;
+        main : function(model, ...) building the model;
                 the arguments are the input symbols
                 returns the dict of output symbols,
                 shall match the output arguments
@@ -16,9 +16,9 @@ def autooperator(kls):
         see the example below in this file.
     """
 
-    impl = unbound(kls.model)
+    impl = unbound(kls.main)
 
-    # use the argnames of the model
+    # use the argnames of main function
     argnames = impl.__code__.co_varnames[1:impl.__code__.co_argcount]
     argnames_vjp = list(argnames)
     argnames_jvp = list(argnames)
@@ -32,7 +32,7 @@ def autooperator(kls):
     def _build(kwargs):
 
         model_args = {}
-        # copy extra args of the model function
+        # copy extra args of the main function
         for argname in argnames:
             if argname not in kls.ain:
                 model_args[argname] = kwargs[argname]
@@ -113,7 +113,7 @@ class example:
     aout = {'y': '*'}
 
     # must take both extra parameters and input parameters
-    def model(self, x, n):
+    def main(self, x, n):
         from .operator import add
 
         for i in range(n):

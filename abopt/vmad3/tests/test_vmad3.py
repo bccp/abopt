@@ -63,7 +63,7 @@ def test_autooperator():
                'b' : '*'}
         aout = {'c' : '*'}
 
-        def model(model, a, b, n):
+        def main(model, a, b, n):
             for i in range(n):
                 a = add(a, a)
 
