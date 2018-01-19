@@ -20,18 +20,46 @@ class mul:
         return dict(y_ = x1_* x2 + x1 * x2_)
 
 @operator
+class unpack_complex:
+    ain = {'x' : '*'}
+    aout = [('real', '*'), ('imag', '*')]
+
+    def apl(self, x):
+        return dict(real=x.real, imag=x.imag)
+
+    def vjp(self, _real, _imag):
+        return dict(_x = _real + _imag * 1j)
+
+    def jvp(self, x_):
+        return dict(real_ = x_.real, imag_ = x_.imag)
+
+@operator
+class pack_complex:
+    ain = [('real', '*'), ('imag', '*')]
+    aout = {'y' : '*'}
+
+    def apl(self, real, imag):
+        return dict(y = real + imag * 1j)
+
+    def vjp(self, _y):
+        return dict(_real = _y.real, _imag = _y.imag)
+
+    def jvp(self, real_, imag_):
+        return dict(y_ = real_ + imag_ * 1j)
+
+@operator
 class to_scalar:
     ain  = {'x': 'ndarray'}
     aout = {'y': '*'}
 
     def apl(self, x):
-        return dict(y = (abs(x) ** 2).sum())
+        return dict(y = (x * numpy.conj(x)).sum())
 
     def vjp(self, _y, x):
-        return dict(_x = 2. * _y * x)
+        return dict(_x = 2 * numpy.conj(_y) * x)
 
     def jvp(self, x_, x):
-        return dict(y_ = 2. * (x_ * x).sum())
+        return dict(y_ = (x_ * numpy.conj(x) + numpy.conj(x_) * x).sum())
 
 @operator
 class add:
@@ -63,6 +91,21 @@ class log:
 
     def jvp(self, x_, x):
         return dict(y_ = x_ * 1. / x)
+
+@operator
+class abs:
+    ain = {'x' : '*',
+          }
+    aout = {'y' : '*'}
+
+    def apl(self, x):
+        return dict(y=numpy.abs(x))
+
+    def vjp(self, _y, x):
+        return dict(_x = _y * numpy.sign(x))
+
+    def jvp(self, x_, x):
+        return dict(y_ = x_ * numpy.sign(x))
 
 @operator
 class pow:
@@ -130,3 +173,42 @@ class take:
 
     def jvp(self, x_, i, axis):
         return dict(y_=numpy.take(x_, i, axis=axis))
+
+@operator
+class reshape:
+    ain  = {'x' : '*'}
+    aout = {'y': '*'}
+
+    def apl(self, x, shape):
+        return dict(y = numpy.reshape(x, shape))
+
+    def rcd(self, x, shape):
+        return dict(xshape = numpy.shape(x), shape=shape)
+
+    def vjp(self, _y, xshape):
+        return dict(_x=_y.reshape(xshape))
+
+    def jvp(self, x_, shape):
+        return dict(y_=x_.reshape(shape))
+
+@operator
+class sum:
+    ain  = {'x' : '*'}
+    aout = {'y': '*'}
+
+    def apl(self, x, axis):
+        return dict(y = numpy.sum(x, axis=axis))
+
+    def rcd(self, x, axis):
+        return dict(xshape = numpy.shape(x), axis=axis)
+
+    def vjp(self, _y, xshape, axis):
+        _x = numpy.ones(xshape)
+        _yshape = list(numpy.shape(_y))
+        _yshape.insert(axis, 1)
+        _x *= _y.reshape(_yshape)
+        return dict(_x = _x)
+
+    def jvp(self, x_, xshape, axis):
+        return numpy.sum(x_, axis=axis)
+

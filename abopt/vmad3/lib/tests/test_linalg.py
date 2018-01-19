@@ -15,6 +15,36 @@ class Test_to_scalar(BaseScalarTest):
     def model(self, x):
         return x
 
+class Test_pack_complex(BaseScalarTest):
+    to_scalar = linalg.to_scalar
+    x = numpy.arange(10) # will pack to complex of x + x * 1j
+    y = sum(x ** 2) * 1.25
+    x_ = numpy.eye(10)
+
+    def model(self, x):
+        c = linalg.pack_complex(x, linalg.mul(x, 0.5))
+        return c
+
+class Test_unpack_complex(BaseScalarTest):
+    to_scalar = linalg.to_scalar
+    x = numpy.arange(10) # will pack to complex of x + x * 1j
+    y = sum(x ** 2) * 4
+    x_ = numpy.eye(10)
+
+    def model(self, x):
+        c = linalg.pack_complex(x, x)
+        r, i = linalg.unpack_complex(c)
+        return linalg.add(r, i)
+
+class Test_reshape(BaseScalarTest):
+    to_scalar = linalg.to_scalar
+    x = numpy.arange(10) # will pack to complex of x + x * 1j
+    y = sum(x ** 2)
+    x_ = numpy.eye(10)
+
+    def model(self, x):
+        c = linalg.reshape(x, (5, 2))
+        return c
 
 class Test_mul(BaseScalarTest):
     to_scalar = linalg.to_scalar
@@ -25,6 +55,17 @@ class Test_mul(BaseScalarTest):
     def model(self, x):
         return linalg.mul(x, 1.0)
 
+class Test_sum(BaseScalarTest):
+    to_scalar = linalg.to_scalar
+    x = numpy.arange(10)
+    y = sum(x.reshape(5, 2).sum(axis=0) ** 2)
+    x_ = numpy.eye(10)
+
+    def model(self, x):
+        x = linalg.reshape(x, (5, 2))
+
+        return linalg.sum(x, axis=0)
+
 class Test_pow(BaseScalarTest):
     to_scalar = linalg.to_scalar
     x = numpy.arange(10)
@@ -33,6 +74,15 @@ class Test_pow(BaseScalarTest):
 
     def model(self, x):
         return linalg.pow(x, 1.0)
+
+class Test_abs(BaseScalarTest):
+    to_scalar = linalg.to_scalar
+    x = numpy.arange(10) - 4.5 # avoid 0 because numerial is bad.
+    y = sum((abs(x) + x) ** 2)
+    x_ = numpy.eye(10)
+
+    def model(self, x):
+        return linalg.add(linalg.abs(x), x)
 
 class Test_log(BaseScalarTest):
     to_scalar = linalg.to_scalar
@@ -47,11 +97,11 @@ class Test_log(BaseScalarTest):
 class Test_add(BaseScalarTest):
     to_scalar = linalg.to_scalar
     x = numpy.arange(10)
-    y = sum(x ** 2)
+    y = sum((x + 5.0)** 2)
     x_ = numpy.eye(10)
 
     def model(self, x):
-        return linalg.add(x, 0.0)
+        return linalg.add(x, 5.0)
 
 class Test_copy(BaseScalarTest):
     to_scalar = linalg.to_scalar

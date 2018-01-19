@@ -117,7 +117,6 @@ class readout:
         value_ = mesh.readout_jvp(x, v_self=mesh_, v_pos=x_, layout=layout, resampler=resampler)
         return dict(value_=value_)
 
-
 @operator
 class decompose:
     aout={'layout' : 'Layout'}
