@@ -35,7 +35,9 @@ class BaseScalarTest:
             yl = self.m.compute(init=dict(x=xl), vout='y', return_tape=False)
             yr = self.m.compute(init=dict(x=xr), vout='y', return_tape=False)
 
-            y_.append((yr - yl) / self.epsilon)
+            y_1 = (yr - yl) / self.epsilon
+
+            y_.append(y_1)
 
         y, tape = self.m.compute(init=dict(x=self.x), vout='y', return_tape=True)
         self.tape = tape
