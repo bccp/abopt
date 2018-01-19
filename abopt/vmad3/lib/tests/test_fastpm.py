@@ -1,12 +1,12 @@
 from __future__ import print_function
 from pprint import pprint
-from abopt.vmad3.lib import pmeshvmad, linalg
+from abopt.vmad3.lib import fastpm, linalg
 import numpy
 
 from abopt.vmad3.testing import BaseScalarTest
 from mpi4py import MPI
 
-pm = pmeshvmad.ParticleMesh(Nmesh=[4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
+pm = fastpm.ParticleMesh(Nmesh=[4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
 
 from pmesh.pm import RealField, ComplexField
 
@@ -23,15 +23,15 @@ def create_bases(x):
         return [i for i in bases]
 
 class Test_r2c_c2r(BaseScalarTest):
-    to_scalar = pmeshvmad.to_scalar
+    to_scalar = fastpm.to_scalar
 
     x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
     y = x.cnorm()
     x_ = create_bases(x)
 
     def model(self, x):
-        c = pmeshvmad.r2c(x)
-        r = pmeshvmad.c2r(c)
+        c = fastpm.r2c(x)
+        r = fastpm.c2r(c)
         return r
 
 #    def teardown(self):
@@ -46,23 +46,23 @@ def transfer(k):
     return r
 
 class Test_r2c_transfer_c2r(BaseScalarTest):
-    to_scalar = pmeshvmad.to_scalar
+    to_scalar = fastpm.to_scalar
 
     x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
     y = x.r2c().apply(lambda k, v: transfer(k) * v).c2r().cnorm()
     x_ = create_bases(x)
 
     def model(self, x):
-        c = pmeshvmad.r2c(x)
-        c = pmeshvmad.apply_transfer(c, tf=transfer)
-        r = pmeshvmad.c2r(c)
+        c = fastpm.r2c(x)
+        c = fastpm.apply_transfer(c, tf=transfer)
+        r = fastpm.c2r(c)
         return r
 
 #    def teardown(self):
 #        print(self.y_)
 
 class Test_paint_x(BaseScalarTest):
-    to_scalar = pmeshvmad.to_scalar
+    to_scalar = fastpm.to_scalar
 
     mesh = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
@@ -73,12 +73,12 @@ class Test_paint_x(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        y = pmeshvmad.paint(x, layout=None, mass=1.0, pm=pm)
+        y = fastpm.paint(x, layout=None, mass=1.0, pm=pm)
         y = linalg.add(y, self.mesh) # biasing a bit to get non-zero derivatives.
         return y
 
 class Test_decompose_paint_x(BaseScalarTest):
-    to_scalar = pmeshvmad.to_scalar
+    to_scalar = fastpm.to_scalar
 
     mesh = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
@@ -89,13 +89,13 @@ class Test_decompose_paint_x(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        layout = pmeshvmad.decompose(x, pm=pm)
-        y = pmeshvmad.paint(x, layout=layout, mass=1.0, pm=pm)
+        layout = fastpm.decompose(x, pm=pm)
+        y = fastpm.paint(x, layout=layout, mass=1.0, pm=pm)
         y = linalg.add(y, self.mesh) # biasing a bit to get non-zero derivatives.
         return y
 
 class Test_paint_mass(BaseScalarTest):
-    to_scalar = pmeshvmad.to_scalar
+    to_scalar = fastpm.to_scalar
 
     mesh = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
@@ -107,7 +107,7 @@ class Test_paint_mass(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        y = pmeshvmad.paint(self.pos, layout=None, mass=x, pm=pm)
+        y = fastpm.paint(self.pos, layout=None, mass=x, pm=pm)
         return y
 
 class Test_readout_x(BaseScalarTest):
@@ -122,7 +122,7 @@ class Test_readout_x(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        y = pmeshvmad.readout(self.mesh, x, layout=None, pm=pm)
+        y = fastpm.readout(self.mesh, x, layout=None, pm=pm)
         return y
 
 class Test_readout_mesh(BaseScalarTest):
@@ -137,5 +137,5 @@ class Test_readout_mesh(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        y = pmeshvmad.readout(x, self.pos, layout=None, pm=pm)
+        y = fastpm.readout(x, self.pos, layout=None, pm=pm)
         return y
