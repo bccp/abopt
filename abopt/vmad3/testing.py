@@ -11,6 +11,7 @@ class BaseScalarTest:
     x_ = numpy.eye(10)    # a list of directions of x_ to check for directional gradients.
 
     y = sum(x ** 2)       # expected output variable y, scalar
+                          # NotImplemented to bypass the value comparison
     epsilon = 1e-3
 
     def model(self, x):
@@ -50,8 +51,10 @@ class BaseScalarTest:
     def test_opr(self):
         init = dict(x=self.x)
         y1 = self.m.compute(vout='y', init=init, return_tape=False)
-        # correctness
-        assert_allclose(y1, self.y)
+
+        if self.y is not NotImplemented:
+            # correctness
+            assert_allclose(y1, self.y)
 
     def test_jvp_finite(self):
         jvp = self.tape.get_jvp()

@@ -8,11 +8,14 @@ from mpi4py import MPI
 
 pm = fastpm.ParticleMesh(Nmesh=[4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
 
+pm3d = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
+
 from pmesh.pm import RealField, ComplexField
 
 def create_bases(x):
     bases = numpy.eye(x.size).reshape([-1] + list(x.shape))
     if isinstance(x, RealField):
+        pm = x.pm
         # FIXME: remove this after pmesh 0.1.36
         def create_field(pm, data):
             real = pm.create(mode='real')
@@ -139,3 +142,32 @@ class Test_readout_mesh(BaseScalarTest):
     def model(self, x):
         y = fastpm.readout(x, self.pos, layout=None, pm=pm)
         return y
+
+class Test_lpt1(BaseScalarTest):
+    to_scalar = linalg.to_scalar
+
+    x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
+
+    pos = pm.generate_uniform_particle_grid(shift=0.5)
+    y = NotImplemented
+    x_ = create_bases(x)
+
+    epsilon = 1e-4
+
+    def model(self, x):
+        dx1 = fastpm.lpt1(fastpm.r2c(x), q=self.pos, pm=pm)
+        return dx1
+
+class Test_lpt2src(BaseScalarTest):
+    to_scalar = fastpm.to_scalar
+
+    x = pm3d.generate_whitenoise(seed=300, unitary=True, mode='real')
+
+    y = NotImplemented
+    x_ = create_bases(x)
+
+    epsilon = 1e-4
+
+    def model(self, x):
+        return fastpm.lpt2src(fastpm.r2c(x), pm=pm3d)
+

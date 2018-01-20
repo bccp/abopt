@@ -16,12 +16,17 @@ def autooperator(kls):
         see the example below in this file.
     """
 
+    from collections import OrderedDict
+
     impl = unbound(kls.main)
 
     # use the argnames of main function
     argnames = impl.__code__.co_varnames[1:impl.__code__.co_argcount]
     argnames_vjp = list(argnames)
     argnames_jvp = list(argnames)
+
+    kls.ain = OrderedDict(kls.ain)
+    kls.aout = OrderedDict(kls.aout)
 
     # add v arguments
     for argname in kls.aout:

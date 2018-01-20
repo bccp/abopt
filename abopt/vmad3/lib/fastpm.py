@@ -1,5 +1,7 @@
-from abopt.vmad3 import operator
+from abopt.vmad3 import operator, autooperator
+from abopt.vmad3.core.model import Literal
 from pmesh.pm import ParticleMesh
+from abopt.vmad3.lib import linalg
 import numpy
 
 @operator
@@ -15,6 +17,44 @@ class to_scalar:
 
     def jvp(self, x_, x):
         return dict(y_ = x.cdot(x_) * 2)
+
+# FIXME: this is probably not correct.
+"""
+@operator
+class to_scalar_co:
+    ain = {'x' : 'ndarray'}
+    aout = {'y' : '*'}
+
+    def apl(self, x, comm):
+        return dict(y = comm.allreduce((x * numpy.conj(x)).sum()))
+
+    def vjp(self, _y, x, comm):
+        return dict(_x = 2 * numpy.conj(_y) * x)
+
+    def jvp(self, x_, x, comm):
+        return dict(y_ = comm.allreduce((x_ * numpy.conj(x) + numpy.conj(x_) * x).sum()))
+"""
+
+@operator
+class as_complex_field:
+    ain = {'x' : '*'}
+    aout = {'y' : 'ComplexField'}
+
+    def apl(self, x, pm):
+        y = pm.create(mode='complex')
+        y.real[...] = x[..., 0]
+        y.imag[...] = x[..., 1]
+        return dict(y=y)
+
+    def vjp(self, _y, pm):
+        _x = numpy.stack([_y.real, _y.imag], axis=-1)
+        return dict(_x=_x)
+
+    def jvp(self, x_):
+        y_ = pm.create(mode='complex')
+        y_.real[...] = x_[..., 0]
+        y_.imag[...] = x_[..., 1]
+        return dict(y_=y_)
 
 @operator
 class r2c:
@@ -130,3 +170,128 @@ class decompose:
 
     def jvp(engine, x_):
         return dict(layout_=0)
+
+def fourier_space_gradient(dir):
+    def filter(k):
+        return 1j * k[dir]
+    return filter
+
+def fourier_space_laplace(k):
+    k2 = sum(ki **2 for ki in k)
+    bad = k2 == 0
+    k2[bad] = 1
+    k2 = - 1 / k2
+    k2[bad] = 0
+    return k2
+
+@autooperator
+class lpt1:
+    ain = [
+            ('rhok',  'ComplexField'),
+          ]
+    aout = [
+            ('dx1', '*'),
+         #, ('dx2', '*'),
+           ]
+
+    def main(self, rhok, q, pm):
+        p = apply_transfer(rhok, fourier_space_laplace)
+        q = Literal(self, q)
+
+        layout = decompose(q, pm)
+
+        r1 = []
+        for d in range(pm.ndim):
+            dx1_c = apply_transfer(p, fourier_space_gradient(d))
+            dx1_r = c2r(dx1_c)
+            dx1 = readout(dx1_r, q, layout)
+            r1.append(dx1)
+
+        dx1 = linalg.stack(r1, axis=-1)
+
+        return dict(dx1 = dx1)
+
+@autooperator
+class lpt2src:
+    ain = [
+            ('rhok',  'ComplexField'),
+          ]
+    aout = [
+            ('rho_lpt2', 'RealField'),
+           ]
+
+    def main(self, rhok, pm):
+        if pm.ndim != 3:
+            raise ValueError("LPT 2 only works in 3d")
+
+        D1 = [1, 2, 0]
+        D2 = [2, 0, 1]
+
+        potk = apply_transfer(rhok, fourier_space_laplace)
+
+        Pii = []
+        for d in range(pm.ndim):
+            t = apply_transfer(potk, fourier_space_gradient(d))
+            Pii1 = apply_transfer(t, fourier_space_gradient(d))
+            Pii1 = c2r(Pii1)
+            Pii.append(Pii1)
+
+        source = None
+        for d in range(pm.ndim):
+            source1 = linalg.mul(Pii[D1[d]], Pii[D2[d]])
+            if source is None:
+                source = source1
+            else:
+                source = linalg.add(source, source1)
+
+        for d in range(pm.ndim):
+            t = apply_transfer(potk, fourier_space_gradient(D1[d]))
+            Pij1 = apply_transfer(t, fourier_space_gradient(D2[d]))
+            Pij1 = c2r(Pij1)
+            neg = linalg.mul(Pij1, -1)
+            source1 = linalg.mul(Pij1, neg)
+            source = linalg.add(source, source1)
+
+        source = linalg.mul(source, 3.0/7 )
+
+        return dict(rho_lpt2=source)
+
+@autooperator
+class induce_correlation:
+    ain = [
+            ('wnk',  'ComplexField'),
+          ]
+    aout = [
+            ('c', 'ComplexField'),
+           ]
+
+    def main(self, wnk, powerspectrum, pm):
+        def tf(k):
+            k = sum(ki ** 2 for ki in k) ** 0.5
+            return (powerspectrum(k) / pm.BoxSize.prod()) ** 0.5
+
+        c = apply_transfer(c, tf)
+        return dict(c = c)
+
+@autooperator
+class model_lpt:
+    ain = [
+            ('wnk',  'RealField'),
+          ]
+
+    aout = [
+            ('dx1', '*'),
+            ('dx2', '*'),
+           ]
+
+    def main(self, wnk, q, powerspectrum, pm):
+        rhok = induce_correlation(wnk, powerspectrum, pm)
+
+        dx1 = lpt1(rhok, q, pm)
+
+        source2 = lpt2src(rhok)
+        rhok2 = r2c(source2)
+        dx2 = lpt2(rhok2, q, pm)
+
+        return dict(dx1=dx1, dx2=dx2)
+

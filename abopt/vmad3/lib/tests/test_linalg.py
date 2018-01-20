@@ -130,4 +130,3 @@ class Test_take(BaseScalarTest):
 
     def model(self, x):
         return linalg.take(x, 2, axis=0)
-
