@@ -270,13 +270,13 @@ class induce_correlation:
             k = sum(ki ** 2 for ki in k) ** 0.5
             return (powerspectrum(k) / pm.BoxSize.prod()) ** 0.5
 
-        c = apply_transfer(c, tf)
+        c = apply_transfer(wnk, tf)
         return dict(c = c)
 
 @autooperator
-class model_lpt:
+class lpt:
     ain = [
-            ('wnk',  'RealField'),
+            ('rhok',  'RealField'),
           ]
 
     aout = [
@@ -284,14 +284,12 @@ class model_lpt:
             ('dx2', '*'),
            ]
 
-    def main(self, wnk, q, powerspectrum, pm):
-        rhok = induce_correlation(wnk, powerspectrum, pm)
+    def main(self, rhok, q, pm):
 
         dx1 = lpt1(rhok, q, pm)
-
-        source2 = lpt2src(rhok)
+        source2 = lpt2src(rhok, pm)
         rhok2 = r2c(source2)
-        dx2 = lpt2(rhok2, q, pm)
+        dx2 = lpt1(rhok2, q, pm)
 
         return dict(dx1=dx1, dx2=dx2)
 
