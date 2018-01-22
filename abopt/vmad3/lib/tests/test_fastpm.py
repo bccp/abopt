@@ -6,10 +6,6 @@ import numpy
 from abopt.vmad3.testing import BaseScalarTest
 from mpi4py import MPI
 
-pm = fastpm.ParticleMesh(Nmesh=[4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
-
-pm3d = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
-
 from pmesh.pm import RealField, ComplexField
 
 def create_bases(x):
@@ -27,6 +23,8 @@ def create_bases(x):
 
 class Test_r2c_c2r(BaseScalarTest):
     to_scalar = fastpm.to_scalar
+
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
 
     x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
     y = x.cnorm()
@@ -51,6 +49,8 @@ def transfer(k):
 class Test_r2c_transfer_c2r(BaseScalarTest):
     to_scalar = fastpm.to_scalar
 
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
+
     x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
     y = x.r2c().apply(lambda k, v: transfer(k) * v).c2r().cnorm()
     x_ = create_bases(x)
@@ -67,6 +67,8 @@ class Test_r2c_transfer_c2r(BaseScalarTest):
 class Test_paint_x(BaseScalarTest):
     to_scalar = fastpm.to_scalar
 
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
+
     mesh = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
     x = pm.generate_uniform_particle_grid(shift=0.1)
@@ -76,13 +78,15 @@ class Test_paint_x(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        y = fastpm.paint(x, layout=None, mass=1.0, pm=pm)
+        y = fastpm.paint(x, layout=None, mass=1.0, pm=self.pm)
         y = linalg.add(y, self.mesh) # biasing a bit to get non-zero derivatives.
         return y
 
 class Test_decompose_paint_x(BaseScalarTest):
     to_scalar = fastpm.to_scalar
 
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
+
     mesh = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
     x = pm.generate_uniform_particle_grid(shift=0.1)
@@ -92,13 +96,15 @@ class Test_decompose_paint_x(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        layout = fastpm.decompose(x, pm=pm)
-        y = fastpm.paint(x, layout=layout, mass=1.0, pm=pm)
+        layout = fastpm.decompose(x, pm=self.pm)
+        y = fastpm.paint(x, layout=layout, mass=1.0, pm=self.pm)
         y = linalg.add(y, self.mesh) # biasing a bit to get non-zero derivatives.
         return y
 
 class Test_paint_mass(BaseScalarTest):
     to_scalar = fastpm.to_scalar
+
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
 
     mesh = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
@@ -110,11 +116,13 @@ class Test_paint_mass(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        y = fastpm.paint(self.pos, layout=None, mass=x, pm=pm)
+        y = fastpm.paint(self.pos, layout=None, mass=x, pm=self.pm)
         return y
 
 class Test_readout_x(BaseScalarTest):
     to_scalar = linalg.to_scalar
+
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
 
     mesh = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
@@ -125,11 +133,13 @@ class Test_readout_x(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        y = fastpm.readout(self.mesh, x, layout=None, pm=pm)
+        y = fastpm.readout(self.mesh, x, layout=None, pm=self.pm)
         return y
 
 class Test_readout_mesh(BaseScalarTest):
     to_scalar = linalg.to_scalar
+
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
 
     x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
@@ -140,11 +150,13 @@ class Test_readout_mesh(BaseScalarTest):
     epsilon = 1e-3
 
     def model(self, x):
-        y = fastpm.readout(x, self.pos, layout=None, pm=pm)
+        y = fastpm.readout(x, self.pos, layout=None, pm=self.pm)
         return y
 
 class Test_lpt1(BaseScalarTest):
     to_scalar = linalg.to_scalar
+
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
 
     x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
@@ -155,13 +167,15 @@ class Test_lpt1(BaseScalarTest):
     epsilon = 1e-4
 
     def model(self, x):
-        dx1 = fastpm.lpt1(fastpm.r2c(x), q=self.pos, pm=pm)
+        dx1 = fastpm.lpt1(fastpm.r2c(x), q=self.pos, pm=self.pm)
         return dx1
 
 class Test_lpt2src(BaseScalarTest):
     to_scalar = fastpm.to_scalar
 
-    x = pm3d.generate_whitenoise(seed=300, unitary=True, mode='real')
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
+
+    x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
 
     y = NotImplemented
     x_ = create_bases(x)
@@ -169,5 +183,39 @@ class Test_lpt2src(BaseScalarTest):
     epsilon = 1e-4
 
     def model(self, x):
-        return fastpm.lpt2src(fastpm.r2c(x), pm=pm3d)
+        return fastpm.lpt2src(fastpm.r2c(x), pm=self.pm)
+
+class Test_lpt(BaseScalarTest):
+    to_scalar = linalg.to_scalar
+
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
+
+    x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
+
+    pos = pm.generate_uniform_particle_grid(shift=0.5)
+    y = NotImplemented
+    x_ = create_bases(x)
+
+    epsilon = 1e-4
+
+    def model(self, x):
+        dx1, dx2 = fastpm.lpt(fastpm.r2c(x), q=self.pos, pm=self.pm)
+        return linalg.add(dx1, dx2)
+
+class Test_nbody(BaseScalarTest):
+    to_scalar = linalg.to_scalar
+
+    pm = fastpm.ParticleMesh(Nmesh=[4, 4, 4], BoxSize=8.0, comm=MPI.COMM_SELF)
+
+    x = pm.generate_whitenoise(seed=300, unitary=True, mode='real')
+
+    pos = pm.generate_uniform_particle_grid(shift=0.5)
+    y = NotImplemented
+    x_ = create_bases(x)
+
+    epsilon = 1e-4
+    def model(self, x):
+        from nbodykit.cosmology import Planck15
+        dx, p, f = fastpm.nbody(fastpm.r2c(x), q=self.pos, stages=[0.1, 0.5, 1.0], pm=self.pm, cosmology=Planck15)
+        return linalg.stack([dx, p, f], axis=-1)
 
