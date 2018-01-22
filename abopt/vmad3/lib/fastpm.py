@@ -171,9 +171,9 @@ class decompose:
     def jvp(engine, x_):
         return dict(layout_=0)
 
-def fourier_space_gradient(dir):
+def fourier_space_neg_gradient(dir):
     def filter(k):
-        return 1j * k[dir]
+        return - 1j * k[dir]
     return filter
 
 def fourier_space_laplace(k):
@@ -202,7 +202,7 @@ class lpt1:
 
         r1 = []
         for d in range(pm.ndim):
-            dx1_c = apply_transfer(p, fourier_space_gradient(d))
+            dx1_c = apply_transfer(p, fourier_space_neg_gradient(d))
             dx1_r = c2r(dx1_c)
             dx1 = readout(dx1_r, q, layout)
             r1.append(dx1)
@@ -231,8 +231,8 @@ class lpt2src:
 
         Pii = []
         for d in range(pm.ndim):
-            t = apply_transfer(potk, fourier_space_gradient(d))
-            Pii1 = apply_transfer(t, fourier_space_gradient(d))
+            t = apply_transfer(potk, fourier_space_neg_gradient(d))
+            Pii1 = apply_transfer(t, fourier_space_neg_gradient(d))
             Pii1 = c2r(Pii1)
             Pii.append(Pii1)
 
@@ -245,8 +245,8 @@ class lpt2src:
                 source = linalg.add(source, source1)
 
         for d in range(pm.ndim):
-            t = apply_transfer(potk, fourier_space_gradient(D1[d]))
-            Pij1 = apply_transfer(t, fourier_space_gradient(D2[d]))
+            t = apply_transfer(potk, fourier_space_neg_gradient(D1[d]))
+            Pij1 = apply_transfer(t, fourier_space_neg_gradient(D2[d]))
             Pij1 = c2r(Pij1)
             neg = linalg.mul(Pij1, -1)
             source1 = linalg.mul(Pij1, neg)
@@ -293,3 +293,107 @@ class lpt:
 
         return dict(dx1=dx1, dx2=dx2)
 
+
+@autooperator
+class gravity:
+    ain = [ ('dx', '*'),
+          ]
+    aout = [ ('f', '*')]
+
+    def main(self, dx, q, pm):
+
+        x = linalg.add(dx, q)
+        layout = decompose(x, pm)
+
+        rho = paint(x, 1.0, layout, pm)
+        rhok = r2c(rho)
+
+        p = apply_transfer(rhok, fourier_space_laplace)
+
+        r1 = []
+        for d in range(pm.ndim):
+            dx1_c = apply_transfer(p, fourier_space_neg_gradient(d))
+            dx1_r = c2r(dx1_c)
+            dx1 = readout(dx1_r, x, layout)
+            r1.append(dx1)
+
+        f = linalg.stack(r1, axis=-1)
+        return dict(f=f)
+
+def KickFactor(pt, ai, ac, af):
+    return 1 / (ac ** 2 * pt.E(ac)) * (pt.Gf(af) - pt.Gf(ai)) / pt.gf(ac)
+
+def DriftFactor(pt, ai, ac, af):
+    return 1 / (ac ** 3 * pt.E(ac)) * (pt.Gp(af) - pt.Gp(ai)) / pt.gp(ac)
+
+@autooperator
+class leapfrog:
+    ain = [ ('dx_i', '*'), ('p_i', '*') ]
+    aout = [ ('dx', '*'), ('p', '*'), ('f', '*') ]
+
+    def main(self, dx_i, p_i, q, stages, cosmology, pm):
+        #from nbodykit.cosmology import PerturbationGrowth
+        from fastpm.background import PerturbationGrowth
+
+        dx = dx_i
+        p = p_i
+        f = gravity(dx, q, pm)
+
+        for ai, af in zip(stages[:-1], stages[1:]):
+            ac = (ai * af) ** 0.5
+            pt = PerturbationGrowth(cosmology, a=[ai, ac, af])
+
+            # kick
+            dp = linalg.mul(f, KickFactor(pt, ai, ai, ac) * 1.5 * cosmology.Om0)
+            p = linalg.add(p, dp)
+
+            # drift
+            ddx = linalg.mul(p, DriftFactor(pt, ai, ac, af))
+            dx = linalg.add(dx, ddx)
+
+            # force
+            f = gravity(dx, q, pm)
+
+            # kick
+            dp = linalg.mul(f, KickFactor(pt, ac, af, af) * 1.5 * cosmology.Om0)
+            p = linalg.add(p, dp)
+
+        f = linalg.mul(f, 1.5 * cosmology.Om0)
+        return dict(dx=dx, p=p, f=f)
+
+@autooperator
+class nbody:
+    ain = [
+            ('rhok',  'RealField'),
+          ]
+
+    aout = [
+            ('dx', '*'), ('p', '*'), ('f', '*')
+           ]
+
+    def main(self, rhok, q, stages, cosmology, pm):
+        from fastpm.background import PerturbationGrowth
+
+        dx1, dx2 = lpt(rhok, q, pm)
+
+        pt = PerturbationGrowth(cosmology, a=stages)
+        a = stages[0]
+
+        E = pt.E(a)
+        D1 = pt.D1(a)
+        D2 = pt.D2(a)
+        f1 = pt.f1(a)
+        f2 = pt.f2(a)
+
+        dx1 = linalg.mul(dx1, D1)
+        dx2 = linalg.mul(dx2, D2)
+
+        p1 = linalg.mul(dx1, a ** 2 * f1 * E)
+        p2 = linalg.mul(dx2, a ** 2 * f2 * E)
+
+        p = linalg.add(p1, p2)
+        dx = linalg.add(dx1, dx2)
+
+        dx, p, f = leapfrog(dx, p, q, stages, cosmology, pm)
+
+        return dict(dx=dx, p=p, f=f)

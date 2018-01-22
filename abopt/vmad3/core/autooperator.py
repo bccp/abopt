@@ -1,6 +1,7 @@
 from .operator import _make_primitive, Operator, unbound
 from .model import Builder
 from .context import Context
+from .error import ModelError
 
 def autooperator(kls):
     """ Create an operator with automated differentiation.
