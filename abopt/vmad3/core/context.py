@@ -1,5 +1,5 @@
 from .operator import terminal
-from .error import UnexpectedOutput
+from .error import UnexpectedOutput, ExecutionError
 from .tape import Tape
 
 class Context(dict):
@@ -58,7 +58,10 @@ class Context(dict):
         for i, node in enumerate(model):
 
             if self.result_used(node):
-                self.execute(node, tape)
+                try:
+                    self.execute(node, tape)
+                except Exception as e:
+                    raise ExecutionError("Error computing node : %s. model = %s" % (node, model), e)
 
             if isinstance(node, terminal._apl):
                 for argname, var in node.varout.items():

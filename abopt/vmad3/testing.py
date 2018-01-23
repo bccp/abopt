@@ -1,18 +1,22 @@
 from abopt.vmad3 import Builder
 from numpy.testing import assert_array_equal, assert_allclose
 
+import numpy
+
 class BaseScalarTest:
     """ Basic correctness of gradient against numerical with to_scalar """
 
     to_scalar = None # operator for norm-2 scalar
 
-    import numpy
     x = numpy.arange(10)  # free variable x
     x_ = numpy.eye(10)    # a list of directions of x_ to check for directional gradients.
 
     y = sum(x ** 2)       # expected output variable y, scalar
                           # NotImplemented to bypass the value comparison
     epsilon = 1e-3
+
+    def inner(self, x, y):
+        return numpy.sum(x * y)
 
     def model(self, x):
         return x          # override and build the model will be converted to a scalar later.
@@ -73,6 +77,6 @@ class BaseScalarTest:
         _x = vjp.compute(init=init, vout='_x', return_tape=False)
 
         for x_, y_ in zip(self.x_, self.y_):
-            assert_allclose(numpy.sum(_x * x_), y_)
+            assert_allclose(self.inner(_x, x_), y_)
 
 

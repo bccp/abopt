@@ -196,17 +196,22 @@ class sum:
     ain  = {'x' : '*'}
     aout = {'y': '*'}
 
-    def apl(self, x, axis):
+    def apl(self, x, axis=None):
         return dict(y = numpy.sum(x, axis=axis))
 
-    def rcd(self, x, axis):
+    def rcd(self, x, axis=None):
         return dict(xshape = numpy.shape(x), axis=axis)
 
     def vjp(self, _y, xshape, axis):
         _x = numpy.ones(xshape)
-        _yshape = list(numpy.shape(_y))
-        _yshape.insert(axis, 1)
-        _x *= _y.reshape(_yshape)
+
+        if axis is not None:
+            # prepend to the correct axis
+            _yshape = list(numpy.shape(_y))
+            _yshape.insert(axis, 1)
+            _y = _y.reshape(_yshape)
+
+        _x *= _y
         return dict(_x = _x)
 
     def jvp(self, x_, xshape, axis):
