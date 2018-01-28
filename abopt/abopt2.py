@@ -336,7 +336,7 @@ class GradientDescent(Optimizer):
     from .linesearch import backtrace
 
     optimizer_defaults = {
-        'maxiter' : 1000,
+        'maxiter' : 100000,
         'linesearch' : backtrace,
     }
 

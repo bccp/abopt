@@ -268,7 +268,7 @@ class LBFGS(Optimizer):
     from .linesearch import backtrace
     from .linesearch import simpleregulator
     optimizer_defaults = {
-        'maxiter' : 1000,
+        'maxiter' : 100000,
         'miniter' : 6,
         'm' : 6,
         'linesearch' : backtrace,
