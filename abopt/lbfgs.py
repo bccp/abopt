@@ -343,13 +343,13 @@ class LBFGS(Optimizer):
                 rmax = 1.
             prop, r1 = self.linesearch(problem, state, z, rmax)
 
+            # failed line search, recover
+            if prop is None: raise StopIteration
+
             #if LBFGS is not moving, try GD
             if problem.check_convergence(state.y, prop.y):
                 raise StopIteration
                 # print('LBFGS Starting step = %0.2e, abort LBGFS at step = %0.2e'%(rmax, r1))
-
-            # failed line search, recover
-            if prop is None: raise StopIteration
 
         except StopIteration:
             # LBFGS failed. Abandon LBFGS and restart with GD
