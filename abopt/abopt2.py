@@ -21,11 +21,9 @@ from .vectorspace import VectorSpace
 from .vectorspace import real_vector_space
 from .vectorspace import complex_vector_space
 
-class Assessment(object):
-    def __init__(self, converged, message):
-        self.converged = converged
-        self.message = message
-    def __repr__(self): return repr(self.message)
+class ContinueIteration(str): pass
+class ConvergedIteration(str): pass
+class FailedIteration(str): pass
 
 class State(object):
     def __init__(self):
@@ -36,6 +34,7 @@ class State(object):
         self.dy = None
         self.dxnorm = None
         self.assessment = None
+        self.conviter = 0
         self.converged = False
         self.message = ""
         self.y_ = []
@@ -46,7 +45,7 @@ class State(object):
         return hasattr(self, key)
 
     def __repr__(self):
-        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'message', 'assessment', 'radius', 'B', 'rate', 'rho'] if k in self]
+        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'message', 'assessment', 'radius', 'B', 'rate', 'rho', 'conviter'] if k in self]
         return repr(d)
 
 class Proposal(object):
@@ -230,7 +229,15 @@ class Optimizer(object):
         self.__dict__.update(kwargs)
 
     def terminated(self, problem, state):
-        if state.assessment is not None: return True
+        if isinstance(state.assessment, ConvergedIteration):
+            if state.Pgnorm == 0:
+                return True
+            if state.conviter >= self.conviter:
+                return True
+            else:
+                return False
+        if isinstance(state.assessment, FailedIteration):
+            return True
         if state.nit > self.maxiter: return True
         if state.dy is None: return False
 
@@ -260,12 +267,21 @@ class Optimizer(object):
         state.dxnorm = prop.dxnorm
 
     def assess(self, problem, state, prop):
-        raise NotImplementedError
-        # here is an example
-        if prop.gnorm <= problem.gtol:
-            return True, "Gradient less than norm"
+        if prop is None:
+            return FailedIteration("no proposal is made")
 
-        return None # can be omitted
+        prop = prop.complete(state)
+
+        if prop.gnorm <= problem.gtol:
+            return ConvergedIteration("Gradient is sufficiently small")
+
+        if prop.dxnorm <= problem.xtol:
+            return ConvergedIteration("Solution stopped moving")
+
+        if problem.check_convergence(state.y, prop.y):
+            return ConvergedIteration("Objective stopped improving")
+
+        return ContinueIteration("continue iteration")
 
     def single_iteration(self, problem, state):
         # it shall return a Proposal object
@@ -282,24 +298,24 @@ class Optimizer(object):
 
         while not optimizer.terminated(problem, state):
 
-            prop = optimizer.single_iteration(problem, state).complete(state)
+            prop = optimizer.single_iteration(problem, state)
 
-            if prop is not None: # a proposal is made
-                # assessment must be before the move, for it needs to see dy
-                assessment = optimizer.assess(problem, state, prop)
+            # assessment must be before the move, for it needs to see dy
+            assessment = optimizer.assess(problem, state, prop)
 
+            state.assessment = assessment
+
+            if isinstance(assessment, (ContinueIteration, ConvergedIteration)):
                 optimizer.move(problem, state, prop)
                 state.nit = state.nit + 1
-            else:
-                # no proposal is possible
-                assesment = (False, "Failed to propose a new solution")
 
-            if assessment is None:
-                state.assessment = None
+            if isinstance(assessment, ConvergedIteration):
+                state.conviter = state.conviter + 1
+                state.converged = True
+
+            if isinstance(assessment, ContinueIteration):
+                state.conviter = 0
                 state.converged = False
-            else:
-                state.assessment = Assessment(*assessment)
-                state.converged = state.assessment.converged
 
             if monitor is not None:
                 monitor(state)
@@ -341,22 +357,9 @@ class GradientDescent(Optimizer):
 
     optimizer_defaults = {
         'maxiter' : 100000,
+        'conviter' : 1,
         'linesearch' : backtrace,
     }
-
-    def assess(self, problem, state, prop):
-        if prop.dxnorm <= problem.xtol:
-            return True, "Solution stopped moving"
-
-        if problem.check_convergence(state.y, prop.y):
-            return True, "Objective stopped improving"
-
-        if prop.gnorm <= problem.gtol:
-            return True, "Gradient is sufficiently small"
-
-        if prop.Pgnorm == 0:
-            # cannot move if Pgnorm is 0
-            return False, "Preconditioned Gradient vanishes"
 
     def move(self, problem, state, prop):
         if prop.init:

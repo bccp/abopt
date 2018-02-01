@@ -55,6 +55,7 @@
 """
 
 from .abopt2 import Optimizer
+from .abopt2 import Proposal
 
 def scalar(vs, hessian):
     """ M1QN2.A in GL.  EQ 4.1;
@@ -245,13 +246,20 @@ class LBFGSHessian(object):
         addmul = self.vs.addmul
         mul = self.vs.mul
 
-        self.Y.append(addmul(Pg1, Pg0, -1))
-        self.S.append(addmul(Px1, Px0, -1))
-        self.YS.append(dot(self.Y[-1], self.S[-1]))
-        self.YY.append(dot(self.Y[-1], self.Y[-1]))
+        y = addmul(Pg1, Pg0, -1)
+        s = addmul(Px1, Px0, -1)
 
-        if self.YY[-1] == 0 or self.YS[-1] == 0: # failed LBFGS
-            raise
+        ys = dot(y, s)
+        yy = dot(y, y)
+
+        if yy == 0 or ys == 0:
+            # refuse to add a degenerate mode.
+            return
+
+        self.Y.append(y)
+        self.S.append(s)
+        self.YS.append(ys)
+        self.YY.append(yy)
 
         if len(self.Y) > self.m:
             del self.Y[0]
@@ -274,7 +282,7 @@ class LBFGS(Optimizer):
     from .linesearch import simpleregulator
     optimizer_defaults = {
         'maxiter' : 100000,
-        'miniter' : 6,
+        'conviter' : 6,
         'm' : 6,
         'linesearch' : backtrace,
         'regulator' : simpleregulator,
@@ -284,24 +292,6 @@ class LBFGS(Optimizer):
 
     def _newLBFGSHessian(self, problem):
         return LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
-
-    def assess(self, problem, state, prop):
-        # gradient assessment is before miniter requirement
-        if prop.gnorm <= problem.gtol:
-            return True, "Gradient is sufficiently small"
-
-        if prop.Pgnorm == 0:
-            return False, "Preconditioned gradient vanishes"
-
-        if state['nit'] < self.miniter: # and len(state.B.Y) != 0:
-            # do not stop too early, #unless we are stuck with GD
-            return
-
-        if prop.dxnorm <= problem.xtol:
-            return True, "Solution stopped moving"
-
-        if problem.check_convergence(state.y, prop.y):
-            return True, "Objective stopped improving"
 
 
     def move(self, problem, state, prop):
@@ -343,12 +333,6 @@ class LBFGS(Optimizer):
             if z is None:
                 raise LBFGSFailure("hvp cannot be computed")
 
-            if len(B.Y) < 0.5 * B.m:
-                # hessian likely poor, regulate the step size
-                rmax = self.regulator(problem, state, z)
-            else:
-                rmax = 1.
-
             rmax = 1.
 
             prop, r1 = self.linesearch(problem, state, z, rmax)
@@ -363,8 +347,6 @@ class LBFGS(Optimizer):
                 # print('LBFGS Starting step = %0.2e, abort LBGFS at step = %0.2e'%(rmax, r1))
 
         except LBFGSFailure as e:
-            # LBFGS failed. Abandon LBFGS and restart with GD
-            # B = self._newLBFGSHessian(problem)
 
             z = state.Pg
 
@@ -372,11 +354,13 @@ class LBFGS(Optimizer):
 
             prop, r1 = self.linesearch(problem, state, state.Pg, rmax)
 
+            # failed GD
+            if prop is None:
+                return None
+
             prop.message = e.message
             #print('Starting step = %0.2e, step moved = %0.2e'%(rmax, r1))
 
-            # failed GD, die without a proposal
-            if prop is None: return None
 
         prop.B = B
         prop.z = z
