@@ -364,7 +364,7 @@ class LBFGS(Optimizer):
 
         except LBFGSFailure as e:
             # LBFGS failed. Abandon LBFGS and restart with GD
-            B = self._newLBFGSHessian(problem)
+            # B = self._newLBFGSHessian(problem)
 
             z = state.Pg
 
