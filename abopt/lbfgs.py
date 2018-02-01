@@ -264,6 +264,11 @@ class LBFGSHessian(object):
     def __repr__(self):
         return "LBFGSHessian(len(Y)=%d, m=%d)" % (len(self.Y), self.m)
 
+class LBFGSFailure(StopIteration):
+    def __init__(self, message):
+        self.message = message
+        StopIteration.__init__(self)
+
 class LBFGS(Optimizer):
     from .linesearch import backtrace
     from .linesearch import simpleregulator
@@ -329,29 +334,33 @@ class LBFGS(Optimizer):
             B = state.B
 
             # no hessian approximation yet, use GD
-            if len(B.Y) == 0: raise StopIteration
+            if len(B.Y) == 0:
+                raise LBFGSFailure("no hessian approximate")
 
             z = B.hvp(state.Pg)
 
             # hvp cannot be computed, recover
-            if z is None: raise StopIteration
+            if z is None:
+                raise LBFGSFailure("hvp cannot be computed")
 
             if len(B.Y) < 0.5 * B.m:
                 # hessian likely poor, regulate the step size
                 rmax = self.regulator(problem, state, z)
             else:
                 rmax = 1.
+
             prop, r1 = self.linesearch(problem, state, z, rmax)
 
             # failed line search, recover
-            if prop is None: raise StopIteration
+            if prop is None:
+                raise LBFGSFailure("line search along lbfgs failed.")
 
             #if LBFGS is not moving, try GD
             if problem.check_convergence(state.y, prop.y):
-                raise StopIteration
+                raise LBFGSFailure("motion along lbfgs produced no improvement")
                 # print('LBFGS Starting step = %0.2e, abort LBGFS at step = %0.2e'%(rmax, r1))
 
-        except StopIteration:
+        except LBFGSFailure as e:
             # LBFGS failed. Abandon LBFGS and restart with GD
             B = self._newLBFGSHessian(problem)
 
@@ -361,8 +370,9 @@ class LBFGS(Optimizer):
 
             prop, r1 = self.linesearch(problem, state, state.Pg, rmax)
 
+            prop.message = e.message
             #print('Starting step = %0.2e, step moved = %0.2e'%(rmax, r1))
-            
+
             # failed GD, die without a proposal
             if prop is None: return None
 

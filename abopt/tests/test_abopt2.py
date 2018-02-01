@@ -60,7 +60,7 @@ def test_abopt_gd_exact():
 def test_abopt_lbfgs_backtrace():
     lbfgs = LBFGS(linesearch=backtrace)
     
-    s = minimize(lbfgs, rosen, rosen_der, x0)
+    s = minimize(lbfgs, rosen, rosen_der, x0, monitor=print)
     print(s)
     assert s.converged
     assert_allclose(s.x, 1.0, rtol=1e-4)

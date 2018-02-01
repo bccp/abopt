@@ -37,6 +37,7 @@ class State(object):
         self.dxnorm = None
         self.assessment = None
         self.converged = False
+        self.message = ""
         self.y_ = []
 
     def __getitem__(self, key):
@@ -45,7 +46,7 @@ class State(object):
         return hasattr(self, key)
 
     def __repr__(self):
-        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'assessment', 'radius', 'B', 'rate', 'rho'] if k in self]
+        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'message', 'assessment', 'radius', 'B', 'rate', 'rho'] if k in self]
         return repr(d)
 
 class Proposal(object):
@@ -68,6 +69,7 @@ class Proposal(object):
         self.Pg = Pg
         self.problem = problem
         self.init = init
+        self.message = "normal"
 
     def complete(self, state):
         dot = self.problem.vs.dot
@@ -235,6 +237,8 @@ class Optimizer(object):
         return False
 
     def move(self, problem, state, prop):
+
+        state.message = prop.message
 
         state.y_.append(prop.y)
 
