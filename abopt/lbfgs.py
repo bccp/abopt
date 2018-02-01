@@ -349,6 +349,8 @@ class LBFGS(Optimizer):
             else:
                 rmax = 1.
 
+            rmax = 1.
+
             prop, r1 = self.linesearch(problem, state, z, rmax)
 
             # failed line search, recover
