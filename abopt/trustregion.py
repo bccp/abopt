@@ -5,7 +5,7 @@
 
 """
 
-from .abopt2 import Optimizer, Problem, Proposal
+from .abopt2 import Optimizer, Problem, Proposal, ContinueIteration, ConvergedIteration, FailedIteration
 from .lbfgs import post_scaled_direct_bfgs, LBFGSHessian
 
 class TrustRegionCG(Optimizer):
@@ -18,6 +18,7 @@ class TrustRegionCG(Optimizer):
                         'maxiter' : 1000,
                         'lbfgs_precondition' : False,
                         'm' : 6,
+                        'conviter' : 6, 
                         'diag_update' : post_scaled_direct_bfgs,
                         'rescale_diag' : False,
                         'linesearch' : backtrace,
@@ -109,23 +110,27 @@ class TrustRegionCG(Optimizer):
         return prop
 
     def assess(self, problem, state, prop):
+        if prop is None:
+            return FailedIteration("no proposal is made")
+
+        prop = prop.complete(state)
+
         #print("assess radius", state.radius, 'tol', problem.get_tol(state.y), 'gnorm', prop.gnorm, 'gtol', problem.gtol)
         if hasattr(prop, 'reinit') and prop.reinit:
             if problem.check_convergence(state.y, prop.y):
-                return True, "Objective is not improving in GD"
+                return ConvergedIteration("Objective is not improving in GD")
 
         else:
             if prop.radius >= state.radius:
                 if problem.check_convergence(state.y, prop.y):
-                    return True, "Objective is not improving in trust region"
+                    return ConvergedIteration("Objective is not improving in trust region")
                 if prop.dxnorm <= problem.xtol:
-                    return True, "Solution is not moving in trust region"
+                    return ConvergedIteration("Solution is not moving in trust region")
 
         if prop.gnorm <= problem.gtol:
-            return True, "Gradient is sufficiently small"
+            return ConvergedIteration("Gradient is sufficiently small")
 
-        if prop.Pgnorm == 0:
-            return False, "Preconditioned gradient vanishes"
+        return ContinueIteration("normal iteration")
 
     def move(self, problem, state, prop):
         if prop.init or (hasattr(prop, 'reinit') and prop.reinit):
