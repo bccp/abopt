@@ -303,9 +303,11 @@ class LBFGS(Optimizer):
         if prop.init:
             state.B = self._newLBFGSHessian(problem)
             state.z = prop.Pg
+            state.r1 = 1.0
         else:
             state.B = prop.B
             state.z = prop.z
+            state.r1 = prop.r1
             state.B.update(state.Px, prop.Px, state.Pg, prop.Pg)
 
         Optimizer.move(self, problem, state, prop)
@@ -333,7 +335,7 @@ class LBFGS(Optimizer):
             if z is None:
                 raise LBFGSFailure("hvp cannot be computed")
 
-            rmax = 1.
+            rmax = min(1., state.r1 * 2)
 
             prop, r1 = self.linesearch(problem, state, z, rmax)
 
@@ -351,6 +353,7 @@ class LBFGS(Optimizer):
             z = state.Pg
 
             rmax = self.regulator(problem, state, z)
+            rmax = min(rmax, state.r1 * 2)
 
             prop, r1 = self.linesearch(problem, state, state.Pg, rmax)
 
@@ -364,5 +367,6 @@ class LBFGS(Optimizer):
 
         prop.B = B
         prop.z = z
+        prop.r1 = r1
 
         return prop
