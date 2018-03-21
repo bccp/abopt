@@ -84,7 +84,7 @@ class RealVectorSpace(VectorSpace):
     def dot(self, a, b):
         """ einsum('i,i->', a, b) """
         if hasattr(a, 'dot'):
-            return a.dot(b)
+            return (a * b).sum()
         try:
             return sum(a * b)
         except TypeError:
