@@ -22,9 +22,11 @@ class TrustRegionCG(Optimizer):
                         'diag_update' : post_scaled_direct_bfgs,
                         'rescale_diag' : False,
                         'linesearch' : backtrace,
+                        'cg_monitor' : None
                         }
 
     problem_defaults = {
+                        'cg_maxiter' : 50,
                         'cg_rtol' : 1e-2,
                         'maxradius' : 100.,
                         'initradius' : None,
@@ -42,8 +44,8 @@ class TrustRegionCG(Optimizer):
             return problem.PHvp(state.x, v)
 
         def cg_monitor(*kwargs):
-            #print(*kwargs)
-            pass
+            if self.cg_monitor is not None:
+                self.cg_monitor(*kwargs)
 
         if self.lbfgs_precondition:
             B1 = self._newHessianApprox(problem)
@@ -56,7 +58,7 @@ class TrustRegionCG(Optimizer):
         radius1 = state.radius
 
         z = cg_steihaug(problem.vs, Avp, state.Pg, radius1,
-                problem.cg_rtol, monitor=cg_monitor, B=B1, mvp=mvp)
+                problem.cg_rtol, problem.cg_maxiter, monitor=cg_monitor, B=B1, mvp=mvp)
 
         mdiff = 0.5 * dot(z, Avp(z)) + dot(state.Pg, z)
 
@@ -149,13 +151,13 @@ class TrustRegionCG(Optimizer):
         #print('move', prop.y)
         Optimizer.move(self, problem, state, prop)
 
-def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None, mvp=None):
+def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp=None):
     """ best effort solving for y = - A^{-1} g with cg,
         given the trust-region constraint;
 
         This is roughly ported from Jeff Regier's
 
-            https://github.com/jeff-regier/Celeste.jl/blob/master/src/cg_trust_region.jl
+            https://github.com/jeff-regier/Celeste.jl/blob/316cae12efcc394a5253ee799056c5513c2efc67/src/cg_trust_region.jl
 
         the algorithm is almost identical to the one on NWU wiki,
 
@@ -237,12 +239,14 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, monitor=None, B=None, mvp=None):
 
         if monitor is not None:
 #            monitor(j, rho0, r0, d0, z0, Avp(z0), g, B)
-            monitor(j, rho0, rtol)
+            monitor(j, rho0, rho_init, rtol)
 
         if rho1 / rho_init < rtol ** 2:
             #print("rho1 / rho_init", rho1 / rho_init, rtol ** 2)
             break
 
+        if j >= maxiter:
+            break
         j = j + 1
 
     return z0
