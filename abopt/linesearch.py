@@ -27,7 +27,7 @@ def backtrace(problem, state, z, rate, c=1e-5, tau=0.5):
         return None, None
 
     Px1 = addmul(state.Px, z, -rate)
-    prop = Proposal(problem, Px=Px1).complete_y(state)
+    prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
 
     i = 0
     propmin = prop
@@ -47,7 +47,7 @@ def backtrace(problem, state, z, rate, c=1e-5, tau=0.5):
 
         rate *= tau
         Px1 = addmul(state.Px, z, -rate)
-        prop = Proposal(problem, Px=Px1).complete_y(state)
+        prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
         i = i + 1
     return None, None
 
@@ -61,7 +61,7 @@ def exact(problem, state, z, rate, c=0.5):
     from scipy.optimize import minimize_scalar
 
     Px1 = addmul(state.Px, z, - rate)
-    prop = Proposal(problem, Px=Px1).complete_y(state)
+    prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
 
     best = [prop, 1.0]
 
@@ -69,7 +69,7 @@ def exact(problem, state, z, rate, c=0.5):
         if tau == 0: return state.y
 
         Px1 = addmul(state.Px, z, -tau * rate)
-        prop = Proposal(problem, Px=Px1).complete_y(state)
+        prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
 
         if prop.y < best[0].y:
             best[0] = prop
@@ -87,7 +87,7 @@ def exact(problem, state, z, rate, c=0.5):
             raise StopIteration
 
         Px1 = addmul(state.Px, z, -r.x * rate)
-        return Proposal(problem, Px=Px1, y=r.fun), r.x * rate
+        return Proposal(problem, Px=Px1, y=r.fun, z=z), r.x * rate
 
     except StopIteration as e:
         return best[0], best[1] * rate
@@ -150,6 +150,6 @@ def minpack(problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
         # this is the gradient at the next step no need to compute it
         # again in the outer loop.
         (g1, Pg1), (x1, Px1) = Pgval
-        prop = Proposal(problem, g=g1, Pg=Pg1, x=x1, Px=Px1, y=phi_star)
+        prop = Proposal(problem, g=g1, Pg=Pg1, x=x1, Px=Px1, y=phi_star, z=z)
         return prop, alpha_star
 

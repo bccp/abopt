@@ -38,6 +38,8 @@ class State(object):
         self.converged = False
         self.message = ""
         self.y_ = []
+        self.z = None
+        self.Pg = None
 
     def __getitem__(self, key):
         return getattr(self, key)
@@ -45,11 +47,11 @@ class State(object):
         return hasattr(self, key)
 
     def __repr__(self):
-        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'converged', 'message', 'assessment', 'radius', 'B', 'rate', 'rho', 'conviter'] if k in self]
+        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'theta', 'converged', 'message', 'assessment', 'radius', 'B', 'rate', 'rho', 'conviter'] if k in self]
         return repr(d)
 
 class Proposal(object):
-    def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None, init=False):
+    def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None, z=None, init=False):
         """ A proposal is a collection of variable and gradients.
 
             We will generate the variables if they are not provided.
@@ -66,6 +68,7 @@ class Proposal(object):
         self.Px = Px
         self.g = g
         self.Pg = Pg
+        self.z = z
         self.problem = problem
         self.init = init
         self.message = "normal"
@@ -77,14 +80,20 @@ class Proposal(object):
         self.Pxnorm = dot(self.Px, self.Px) ** 0.5
         self.complete_y(state)
         self.complete_g(state)
-
         if not self.init:
             self.dy = self.y - state.y
             dx = addmul(self.x, state.x, -1)
             self.dxnorm = dot(dx, dx) ** 0.5
+            self.znorm = dot(self.z, self.z) ** 0.5
+            if self.Pgnorm == 0:
+                self.theta = 1
+            else:
+                self.theta = dot(self.z, self.Pg) / (self.znorm * self.Pgnorm)
         else:
             self.dy = None
             self.dxnorm = None
+            self.znorm = None
+            self.theta = None
         return self
 
     def complete_y(self, state):
@@ -257,6 +266,7 @@ class Optimizer(object):
 
         state.x = prop.x
         state.g = prop.g
+        state.theta = prop.theta
         state.Px = prop.Px
         state.Pg = prop.Pg
 

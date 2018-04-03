@@ -208,6 +208,15 @@ class LBFGSHessian(object):
         self.diag_update = diag_update
         self.rescale_diag = rescale_diag
 
+    def copy(self):
+        r = LBFGSHessian(vs=self.vs, m=self.m, diag_update=self.diag_update, rescale_diag=self.rescale_diag)
+        r.Y = self.Y[:]
+        r.S = self.S[:]
+        r.YS = self.YS[:]
+        r.YY = self.YY[:]
+        r.D = self.vs.copy(self.D)
+        return r
+
     def hvp(self, v):
         """ Inverse of Hessian dot any vector; lowercase h indicates it is the inverse """
         q = v

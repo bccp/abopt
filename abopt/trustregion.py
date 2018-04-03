@@ -48,13 +48,15 @@ class TrustRegionCG(Optimizer):
                 self.cg_monitor(*kwargs)
 
         if self.lbfgs_precondition:
-            B1 = self._newHessianApprox(problem)
-            mvp = state.B.hvp
+            # cannot reuse state.B, must be a new B1 because
+            # otherwise mvp will change during cg_steihaug!
+            B1 = state.B
+            mvp = state.B.copy().hvp
         else:
             B1 = None
             mvp = None
 
-        # solve H z = g constrained by the radius
+        # solve - H z = g constrained by the radius
         radius1 = state.radius
 
         z = cg_steihaug(problem.vs, Avp, state.Pg, radius1,
@@ -89,10 +91,10 @@ class TrustRegionCG(Optimizer):
             radius1 = radius1
 
         if rho > self.eta1: # sufficient quadratic, move
-            prop = Proposal(problem, Px=Px1, x=x1, y=y1)
+            prop = Proposal(problem, Px=Px1, x=x1, y=y1, z=z)
         else: # poor, stay and use the shrunk radius
             # restart from the previus cg_steihaug result.
-            prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y)
+            prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y, z=z)
 
         prop.radius = radius1
         prop.rho = rho
@@ -167,9 +169,12 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
 
             http://epubs.siam.org/doi/abs/10.1137/S1052623497327854
 
-        mvp is the preconditioner operator. M^{-1}.
-    """
 
+        mvp is the preconditioner operator. M^{-1}.
+        The implementatino of preconditioner is buggy, missing an inversion.
+        See Steihaug's paper. https://epubs.siam.org/doi/pdf/10.1137/0720042"
+
+    """
     if mvp is None: mvp = lambda x:x
     dot = vs.dot
     mul = vs.mul
@@ -178,7 +183,7 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
     z0 = vs.zeros_like(g)
     r0 = g
     mr0 = mvp(r0)
-    d0 = mr0
+    d0 = mul(mr0, -1)
 
     j = 0
 
@@ -192,7 +197,7 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
 
         alpha = rho0 / dBd0
 
-        p0 = addmul(z0, d0, -alpha)
+        p0 = addmul(z0, d0, alpha)
 
         if dBd0 == 0: # zero Hessian
             rho1 = 0 # will terminate
@@ -207,10 +212,11 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
             # find tau such that p = z0 + tau d0 minimizes m(p)
             # and satisfies ||pk|| == \Delta_k.
             a_ = dot(d0, d0)
-            b_ = -2 * dot(z0, d0)
+            b_ = 2 * dot(z0, d0)
             c_ = dot(z0, z0) - Delta ** 2
             tau = (- b_ + (b_ **2 - 4 * a_ * c_) ** 0.5) / (2 * a_)
-            z1 = addmul(z0, d0, -tau)
+            z1 = addmul(z0, d0, tau)
+            assert tau >= 0
             if dBd0 <= 0:
                 rho1 = -1 # will terminate
             else:
@@ -219,13 +225,13 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
             mr1 = mr0
             d1 = d0
         else:
-            z1 = addmul(z0, d0, -alpha)
-            r1 = addmul(r0, Bd0, -alpha)
+            z1 = addmul(z0, d0,  alpha)
+            r1 = addmul(r0, Bd0, alpha)
             mr1 = mvp(r1)
 
             rho1 = dot(mr1, r1)
-
-            d1 = addmul(mr1, d0, rho1 / rho0)
+            d1 = mul(mr1, -1)
+            d1 = addmul(d1, d0, rho1 / rho0)
 
 
             if B is not None:
@@ -239,7 +245,10 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
 
         if monitor is not None:
 #            monitor(j, rho0, r0, d0, z0, Avp(z0), g, B)
-            monitor(j, rho0, rho_init, rtol)
+            z0norm = dot(z0, z0)
+            zgnorm = dot(z0, g)
+            gnorm = dot(g, g)
+            monitor(j, rho0, rho_init, rtol, zgnorm / z0norm ** 0.5 / gnorm ** 0.5)
 
         if rho1 / rho_init < rtol ** 2:
             #print("rho1 / rho_init", rho1 / rho_init, rtol ** 2)
