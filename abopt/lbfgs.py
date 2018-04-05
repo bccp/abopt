@@ -344,6 +344,10 @@ class LBFGS(Optimizer):
             if z is None:
                 raise LBFGSFailure("hvp cannot be computed")
 
+            znorm = dot(z, z) ** 0.5
+            if dot(z, state.Pg) / (state.Pgnorm * znorm) < - 0.2:
+                raise LBFGSFailure("lbfgs misaligned with gradient, skipping it.")
+
             rmax = min(1., state.r1 * 2)
 
             prop, r1 = self.linesearch(problem, state, z, rmax)
