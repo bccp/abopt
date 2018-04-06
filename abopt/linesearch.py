@@ -14,7 +14,7 @@ def simpleregulator(problem, state, z):
 
     return rmax
 
-def backtrace(problem, state, z, rate, c=1e-5, tau=0.5):
+def backtrace(problem, state, z, rate, maxiter, c=1e-5, tau=0.5):
     vs = problem.vs
 
     addmul = vs.addmul
@@ -32,7 +32,7 @@ def backtrace(problem, state, z, rate, c=1e-5, tau=0.5):
     i = 0
     propmin = prop
     ratemin = rate
-    while i < 100:
+    while i < maxiter:
         # print('rate', rate, 'y', state.y, 'y1', y1, 'x', state.Px, 'x1', Px1, 'z', z)
 
         # watch out : do not check convergence ; avoid jumping too far to the other side
@@ -51,7 +51,7 @@ def backtrace(problem, state, z, rate, c=1e-5, tau=0.5):
         i = i + 1
     return None, None
 
-def exact(problem, state, z, rate, c=0.5):
+def exact(problem, state, z, rate, maxiter, c=0.5):
     vs = problem.vs
     addmul = vs.addmul
     dot = vs.dot
@@ -94,7 +94,7 @@ def exact(problem, state, z, rate, c=0.5):
 
 from .scipywolfe2 import scalar_search_wolfe2
 
-def minpack(problem, state, z, rate, c1=1e-4, c2=0.9, amax=50):
+def minpack(problem, state, z, rate, maxiter, c1=1e-4, c2=0.9, amax=50):
     """"
     Notes
     -----

@@ -294,6 +294,7 @@ class LBFGS(Optimizer):
         'conviter' : 6,
         'm' : 6,
         'linesearch' : backtrace,
+        'linesearchiter' : 100,
         'regulator' : simpleregulator,
         'diag_update' : post_scaled_direct_bfgs,
         'rescale_diag' : False,
@@ -350,7 +351,7 @@ class LBFGS(Optimizer):
 
             rmax = min(1., state.r1 * 2)
 
-            prop, r1 = self.linesearch(problem, state, z, rmax)
+            prop, r1 = self.linesearch(problem, state, z, rmax, maxiter=self.linesearchiter)
 
             # failed line search, recover
             if prop is None:
@@ -368,7 +369,7 @@ class LBFGS(Optimizer):
             rmax = self.regulator(problem, state, z)
             rmax = min(rmax, state.r1 * 2)
 
-            prop, r1 = self.linesearch(problem, state, state.Pg, rmax)
+            prop, r1 = self.linesearch(problem, state, state.Pg, rmax, maxiter=self.linesearchiter)
 
             # failed GD
             if prop is None:

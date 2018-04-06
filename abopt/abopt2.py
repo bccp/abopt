@@ -369,6 +369,7 @@ class GradientDescent(Optimizer):
         'maxiter' : 100000,
         'conviter' : 1,
         'linesearch' : backtrace,
+        'linesearchiter' : 100,
     }
 
     def move(self, problem, state, prop):
@@ -384,7 +385,7 @@ class GradientDescent(Optimizer):
 
         z = mul(state.Pg, 1 / state.Pgnorm)
 
-        prop, r1 = self.linesearch(problem, state, z, state.rate * 2)
+        prop, r1 = self.linesearch(problem, state, z, state.rate * 2, maxiter=self.linesearchiter)
 
         prop.rate = r1
         return prop
