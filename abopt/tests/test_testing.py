@@ -1,11 +1,19 @@
-from abopt.testing import get_all_nd, get_all_2d
-
 from numpy.testing import assert_allclose
 from numpy.testing import assert_array_equal
 
 from abopt.abopt2 import Problem, LBFGS
 
 import pytest
+
+try:
+    import autograd
+    from abopt.testing import get_all_nd, get_all_2d
+except ImportError:
+    autograd = None
+    def get_all_nd(): return []
+    def get_all_2d(): return []
+
+pytestmark = pytest.mark.skipif(autograd is None, reason="skipping test functions due to lack of autograd")
 
 @pytest.mark.parametrize("case", get_all_2d())
 def test_cases_fmin(case):
