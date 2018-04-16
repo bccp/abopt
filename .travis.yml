@@ -23,6 +23,7 @@ install:
 
 script:
     - pip install runtests
+    - pip install autograd # for testing optimization on the standard functions.
     - python ./runtests.py
     - bash check_tag.sh abopt/version.py
 
