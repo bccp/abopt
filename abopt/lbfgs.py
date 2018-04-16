@@ -349,7 +349,7 @@ class LBFGS(Optimizer):
             if dot(z, state.Pg) / (state.Pgnorm * znorm) < - 0.2:
                 raise LBFGSFailure("lbfgs misaligned with gradient, skipping it.")
 
-            rmax = min(1., state.r1 * 2)
+            rmax = 1.
 
             prop, r1 = self.linesearch(problem, state, z, rmax, maxiter=self.linesearchiter)
 
