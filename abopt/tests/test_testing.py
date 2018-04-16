@@ -69,7 +69,7 @@ def test_cases_lbfgs_nd(case):
 
     r = opt.minimize(p, x0, monitor=print)
 
-    assert r['nit'] < 20
+    assert r['nit'] < 20 # Probably hitting slow convergence. Bug in optimizer?
     assert_allclose(r['y'], case.fmin, atol=case.yatol)
     assert_allclose(r['x'], case.xmin, atol=case.xatol)
 
@@ -83,6 +83,6 @@ def test_cases_lbfgs_2d(case):
 
     r = opt.minimize(p, x0, monitor=print)
 
-    assert r['nit'] < 20
+    assert r['nit'] < 20 # Probably hitting slow convergence. Bug in optimizer?
     assert_allclose(r['y'], case.fmin, atol=case.yatol)
     assert_allclose(r['x'], case.xmin, atol=case.xatol)
