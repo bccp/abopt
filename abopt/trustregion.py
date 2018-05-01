@@ -22,6 +22,7 @@ class TrustRegionCG(Optimizer):
                         'diag_update' : post_scaled_direct_bfgs,
                         'rescale_diag' : False,
                         'linesearch' : backtrace,
+                        'linesearchiter' : 100,
                         'cg_monitor' : None,
                         'cg_maxiter' : 50,
                         'cg_rtol' : 1e-2,
@@ -103,10 +104,11 @@ class TrustRegionCG(Optimizer):
 
             z = mul(state.Pg, 1 / state.Pgnorm)
 
-            prop, r1 = self.linesearch(problem, state, z, 2.0 * radius1)
+            prop, r1 = self.linesearch(problem, state, z, 2.0 * radius1, maxiter=self.linesearchiter)
             # reinit.
             prop.radius = r1
             prop.reinit = True
+            prop.message = "Falling back to line search"
 
         return prop
 
