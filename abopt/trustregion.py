@@ -22,15 +22,12 @@ class TrustRegionCG(Optimizer):
                         'diag_update' : post_scaled_direct_bfgs,
                         'rescale_diag' : False,
                         'linesearch' : backtrace,
-                        'cg_monitor' : None
-                        }
-
-    problem_defaults = {
+                        'cg_monitor' : None,
                         'cg_maxiter' : 50,
                         'cg_rtol' : 1e-2,
                         'maxradius' : 100.,
                         'initradius' : None,
-                    }
+                        }
 
     def _newHessianApprox(self, problem):
         return LBFGSHessian(problem.vs, m=self.m, diag_update=self.diag_update, rescale_diag=self.rescale_diag)
@@ -60,7 +57,7 @@ class TrustRegionCG(Optimizer):
         radius1 = state.radius
 
         z = cg_steihaug(problem.vs, Avp, state.Pg, radius1,
-                problem.cg_rtol, problem.cg_maxiter, monitor=cg_monitor, B=B1, mvp=mvp)
+                self.cg_rtol, self.cg_maxiter, monitor=cg_monitor, B=B1, mvp=mvp)
 
         mdiff = 0.5 * dot(z, Avp(z)) + dot(state.Pg, z)
 
@@ -86,7 +83,7 @@ class TrustRegionCG(Optimizer):
             # reinialize radius from the gradient norm if needed
             radius1 = min(self.t1 * radius1, state.Pgnorm)
         elif rho > self.eta3 and not interior: # good and too conservative
-            radius1 = min(radius1 * self.t2, problem.maxradius)
+            radius1 = min(radius1 * self.t2, self.maxradius)
         else: # about right
             radius1 = radius1
 
@@ -139,10 +136,10 @@ class TrustRegionCG(Optimizer):
     def move(self, problem, state, prop):
         if prop.init or (hasattr(prop, 'reinit') and prop.reinit):
             # initial radius is the norm of the gradient.
-            if problem.initradius is None:
-                state.radius = min(prop.Pgnorm, problem.maxradius)
+            if self.initradius is None:
+                state.radius = min(prop.Pgnorm, self.maxradius)
             else:
-                state.radius = problem.initradius
+                state.radius = self.initradius
             state.B = self._newHessianApprox(problem)
             state.rho = 1.0
         else:

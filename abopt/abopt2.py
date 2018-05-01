@@ -10,8 +10,8 @@
 
     Problem parameters and Optimizer parameters
     -------------------------------------------
-    Problem parameters are affected by the scale of the problem.
-    Optimizer parameters only controls the behavior of the optimizer.
+    Problem parameters are related to the accuracy, atol, rtol, etc.
+    Optimizer parameters only controls the behavior of the optimizer; maxiter, etc.
 
     An easy way to see this is that if we redefine the vector variable by a factor of 10,
     if a parameters shall be adjusted, then it belongs to the problem;
@@ -141,8 +141,6 @@ class Preconditioner(object):
 class Problem(object):
     """ Defines a problem.
 
-        additional problem arguments are passed in with kwargs.
-
     """
     def __init__(self, objective, gradient,
         hessian_vector_product=None,
@@ -152,7 +150,6 @@ class Problem(object):
         xtol=1e-7,
         gtol=1e-8,
         precond=None,
-        **kwargs
         ):
         if precond is None:
             precond = Preconditioner(lambda x:x, lambda x:x, lambda x:x)
@@ -173,8 +170,6 @@ class Problem(object):
         self.rtol = rtol
         self.xtol = xtol
         self.gtol = gtol
-
-        self.__dict__.update(kwargs)
 
     def Px2x(self, Px):
         return self.precond.vQp(Px)
@@ -230,7 +225,6 @@ class Problem(object):
 
 class Optimizer(object):
     optimizer_defaults = {}
-    problem_defaults = {}
 
     def __init__(self, **kwargs):
         # this updates the attributes
@@ -300,8 +294,6 @@ class Optimizer(object):
         return Proposal(Px=state.Px)
 
     def restart(optimizer, problem, state, monitor=None):
-        for key, value in optimizer.problem_defaults.items():
-            problem.__dict__.setdefault(key, value)
 
         if monitor is not None:
             monitor(state)
@@ -333,13 +325,6 @@ class Optimizer(object):
         return state
 
     def minimize(optimizer, problem, x0, monitor=None, **state_args):
-        # first make sure the default problem parameters are set
-        # FIXME: this is ugly but otherwise either
-        # - problem must be defined after optimizer, or
-        # - problem.get must take optimizer as argument, or
-        # - we need to add 'config' object that is built from problem and optimizer
-        for key, value in optimizer.problem_defaults.items():
-            problem.__dict__.setdefault(key, value)
 
         state = State()
 

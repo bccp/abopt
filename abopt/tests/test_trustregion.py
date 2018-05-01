@@ -123,7 +123,8 @@ def test_tr_lbfgs():
     ]
 )
 def test_gaussnewton(alpha, beta):
-    trcg = TrustRegionCG(maxiter=100)
+    trcg = TrustRegionCG(maxiter=100, cg_rtol=1e-9, rtol=1e-8, maxradius=80)
+
     J = numpy.array([ [0, 0,     2,  1],
                       [0,  10,   2,  0],
                       [40, 100,  0,  0],
@@ -148,8 +149,7 @@ def test_gaussnewton(alpha, beta):
 
     problem = Problem(objective=objective,
                       gradient=gradient,
-                      hessian_vector_product=fake_hessian,
-                      cg_rtol=1e-9, rtol=1e-8, maxradius=80)
+                      hessian_vector_product=fake_hessian)
 
     x0 = numpy.zeros(4)
 #    print("Fake Hessian")
