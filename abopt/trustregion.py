@@ -230,7 +230,10 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
             r1 = r0
             mr1 = mr0
             d1 = d0
-            message = "negative curvature "
+            if dBd0 <= 0:
+                message = "negative curvature "
+            else:
+                message = "truncation"
         else:
             z1 = addmul(z0, d0,  alpha)
             r1 = addmul(r0, Bd0, alpha)
