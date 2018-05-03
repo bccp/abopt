@@ -80,19 +80,23 @@ class TrustRegionCG(Optimizer):
 
         interior = dot(z, z) ** 0.5 < 0.9 * radius1
 
-        if rho < self.eta2: # poor approximation
-            # reinialize radius from the gradient norm if needed
-            radius1 = min(self.t1 * radius1, state.Pgnorm)
-        elif rho > self.eta3 and not interior: # good and too conservative
-            radius1 = min(radius1 * self.t2, self.maxradius)
-        else: # about right
-            radius1 = radius1
-
         if rho > self.eta1: # sufficient quadratic, move
             prop = Proposal(problem, Px=Px1, x=x1, y=y1, z=z)
         else: # poor, stay and use the shrunk radius
             # restart from the previus cg_steihaug result.
             prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y, z=z)
+
+        if rho < self.eta2: # poor approximation
+            # reinialize radius from the gradient norm if needed
+            radius1 = min(self.t1 * radius1, state.Pgnorm)
+            prop.message = "poor approximation "
+        elif rho > self.eta3 and not interior: # good and too conservative
+            radius1 = min(radius1 * self.t2, self.maxradius)
+            prop.message = "too conservative"
+        else: # about right
+            radius1 = radius1
+            prop.message = "good approximation"
+
 
         prop.radius = radius1
         prop.rho = rho
@@ -198,12 +202,15 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
 
         p0 = addmul(z0, d0, alpha)
 
+        message = ""
+
         if dBd0 == 0: # zero Hessian
             rho1 = 0 # will terminate
             z1 = z0
             r1 = r0
             mr1 = mr0
             d1 = d0
+            message = "zero hessian"
 
         elif dBd0 <= 0 or dot(p0, p0) ** 0.5 >= Delta:
             #print("dBd0", dBd0, "rad", dot(p0, p0) ** 0.5, Delta)
@@ -223,6 +230,7 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
             r1 = r0
             mr1 = mr0
             d1 = d0
+            message = "negative curvature "
         else:
             z1 = addmul(z0, d0,  alpha)
             r1 = addmul(r0, Bd0, alpha)
@@ -236,6 +244,8 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
             if B is not None:
                 B.update(z0, z1, r0, r1)
 
+            message = "regular iteration"
+
         r0 = r1
         mr0 = mr1
         d0 = d1
@@ -247,7 +257,7 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
             z0norm = dot(z0, z0)
             zgnorm = dot(z0, g)
             gnorm = dot(g, g)
-            monitor(j, rho0, rho_init, rtol, zgnorm / z0norm ** 0.5 / gnorm ** 0.5)
+            monitor(j, message, rho0, rho_init, rtol, zgnorm / z0norm ** 0.5 / gnorm ** 0.5)
 
         if rho1 / rho_init < rtol ** 2:
             #print("rho1 / rho_init", rho1 / rho_init, rtol ** 2)
