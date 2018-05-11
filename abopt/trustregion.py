@@ -83,22 +83,28 @@ class TrustRegionCG(Optimizer):
 
         interior = dot(z, z) ** 0.5 < 0.9 * radius1
 
-        if rho > self.eta1: # sufficient quadratic, move
-            prop = Proposal(problem, Px=Px1, x=x1, y=y1, z=z)
-        else: # poor, stay and use the shrunk radius
+        if rho < self.eta1:
+            # poor descent stay and shrink
             # restart from the previus cg_steihaug result, but shrink the size to avoid
             # excessive recoveries.
-            prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y, z=mul(z, self.t1))
-
-        if rho < self.eta2: # poor approximation
-            # reinialize radius from the gradient norm if needed
             radius1 = min(self.t1 * radius1, state.Pgnorm)
+            prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y, z=mul(z, 0.9 * radius1 / state.radius))
+            prop.message = "poor descent "
+        elif rho < self.eta2:
+            # poor approximation but good descent, move and shrink
+            radius1 = min(self.t1 * radius1, state.Pgnorm)
+            prop = Proposal(problem, Px=Px1, x=x1, y=y1, z=mul(z, 0.9 * radius1 / state.radius))
             prop.message = "poor approximation "
-        elif rho > self.eta3 and not interior: # good and too conservative
+            # reinialize radius from the gradient norm if needed
+        elif rho > self.eta3 and not interior:
+            # good and too conservative, move and grow
             radius1 = min(radius1 * self.t2, self.maxradius)
+            prop = Proposal(problem, Px=Px1, x=x1, y=y1, z=z)
             prop.message = "too conservative"
         else: # about right
+            # good and too conservative, move and grow
             radius1 = radius1
+            prop = Proposal(problem, Px=Px1, x=x1, y=y1, z=z)
             prop.message = "good approximation"
 
 
