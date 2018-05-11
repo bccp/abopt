@@ -15,6 +15,10 @@ def test_cg_steihaug():
                       [0, 0, 2, 0], 
                       [0, 3, 0, 0], 
                       [400, 0, 0, 0]])
+    C = numpy.array([[2, 0, 0, 0],
+                      [0, 1, 0, 0], 
+                      [0, 0, 3, 0], 
+                      [0, 0, 0, 1]])
     def f(x): return J.dot(x)
     def vjp(x, v): return v.dot(J)
     def jvp(x, v): return J.dot(v)
@@ -30,6 +34,7 @@ def test_cg_steihaug():
     def hessian(x, v):
         return vjp(x, jvp(x, v)) * 2
 
+    
     g = numpy.zeros(4) + 1.0
     g[...] = [  -2.,   -4.,   -6., -800.]
     Delta = 8000.
@@ -38,10 +43,20 @@ def test_cg_steihaug():
     def Avp(v):
         return hessian(0, v)
 
-    z = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print)
+    z = cg_steihaug(real_vector_space, Avp, g, g, Delta, rtol, monitor=print)
 
-    assert_allclose(Avp(z), -g)
+    assert_allclose(Avp(z), g)
 
+    z = cg_steihaug(real_vector_space, Avp, g, g*0, Delta, rtol, monitor=print)
+
+    assert_allclose(Avp(z), g)
+
+    z = cg_steihaug(real_vector_space, Avp, g, g*0, Delta, rtol, monitor=print,
+        C=lambda v: C.dot(v), Cinv=lambda v: numpy.linalg.inv(C).dot(v))
+
+    assert_allclose(Avp(z), g)
+
+@pytest.mark.skipif(True, reason="LBFGS preconditioner is broken")
 def test_cg_steihaug_lbfgs():
     import numpy
     J = numpy.array([[0, 0, 4, 1],
@@ -71,24 +86,26 @@ def test_cg_steihaug_lbfgs():
     Delta = 8000.
     rtol = 1e-8
     B = LBFGSHessian(real_vector_space, 5)
-    z = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print, B=B)
+    z = cg_steihaug(real_vector_space, Avp, g, g, Delta, rtol, monitor=print, B=B)
 
     assert_allclose(B.hvp(g), -z, rtol=1e-3)
     assert_allclose(Avp(z), -g)
 
+""" Disabled because cannot use B here
     print('-------', "run cg with the preconditioner")
     B2 = LBFGSHessian(real_vector_space, 5)
-    z2 = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print, B=B2, mvp=B.hvp)
+    z2 = cg_steihaug(real_vector_space, Avp, g, g, Delta, rtol, monitor=print, B=B2, mvp=B.hvp)
     assert_allclose(B2.hvp(g), -z, rtol=1e-3)
     #assert_allclose(z, z2)
 
     print('-------', "run cg with the new preconditioner")
     B3 = LBFGSHessian(real_vector_space, 5)
-    z3 = cg_steihaug(real_vector_space, Avp, g, Delta, rtol, monitor=print, B=B3, mvp=B2.hvp)
+    z3 = cg_steihaug(real_vector_space, Avp, g, g, Delta, rtol, monitor=print, B=B3, mvp=B2.hvp)
     assert_allclose(B3.hvp(g), -z, rtol=1e-3)
+"""
 
 def test_tr():
-    trcg = TrustRegionCG(maxradius=10., maxiter=100, lbfgs_precondition=False)
+    trcg = TrustRegionCG(maxradius=10., maxiter=100, lbfgs_precondition=False, cg_monitor=print)
     problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod)
 
     x0 = numpy.zeros(20)
@@ -106,6 +123,7 @@ def test_tr_precond():
     assert r.converged
     assert_allclose(r.x, 1.0, rtol=1e-4)
 
+@pytest.mark.skipif(True, reason="LBFGS preconditioner is broken")
 def test_tr_lbfgs():
     trcg = TrustRegionCG(maxradius=10., maxiter=1000, lbfgs_precondition=True)
     problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod)

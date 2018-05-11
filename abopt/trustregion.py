@@ -46,23 +46,26 @@ class TrustRegionCG(Optimizer):
                 self.cg_monitor(*kwargs)
 
         if self.lbfgs_precondition:
+            raise RuntimeError("LBFGS Precondition is broken because I don't know how to apply LBFGS Hessian. The standard formula only does Hessian Inverse.")
             # cannot reuse state.B, must be a new B1 because
             # otherwise mvp will change during cg_steihaug!
             B1 = state.B
-            mvp = state.B.copy().hvp
+            Cinv = state.B.copy().hvp
+            C = Unknown
         else:
             B1 = None
-            mvp = None
+            Cinv = None
+            C = None
 
         # solve - H z = g constrained by the radius
         radius1 = state.radius
 
-        z = cg_steihaug(problem.vs, Avp, state.Pg, radius1,
-                self.cg_rtol, self.cg_maxiter, monitor=cg_monitor, B=B1, mvp=mvp)
+        z = cg_steihaug(problem.vs, Avp, state.Pg, state.z, radius1,
+                self.cg_rtol, self.cg_maxiter, monitor=cg_monitor, B=B1, Cinv=Cinv, C=C)
 
-        mdiff = 0.5 * dot(z, Avp(z)) + dot(state.Pg, z)
+        mdiff = 0.5 * dot(z, Avp(z)) - dot(state.Pg, z)
 
-        Px1 = addmul(state.Px, z, 1)
+        Px1 = addmul(state.Px, z, -1)
         x1 = problem.Px2x(Px1)
         y1 = problem.f(x1)
         state.fev = state.fev + 1
@@ -156,8 +159,8 @@ class TrustRegionCG(Optimizer):
         #print('move', prop.y)
         Optimizer.move(self, problem, state, prop)
 
-def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp=None):
-    """ best effort solving for y = - A^{-1} g with cg,
+def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, B=None, Cinv=None, C=None):
+    """ best effort solving for y = A^{-1} g with cg,
         given the trust-region constraint;
 
         This is roughly ported from Jeff Regier's
@@ -173,34 +176,38 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
             http://epubs.siam.org/doi/abs/10.1137/S1052623497327854
 
 
-        mvp is the preconditioner operator. M^{-1}.
-        The implementatino of preconditioner is buggy, missing an inversion.
-        See Steihaug's paper. https://epubs.siam.org/doi/pdf/10.1137/0720042"
+        Cinv and C are the preconditioner operator. C^{-1}, and C, 
+
+        See Steihaug's paper. https://epubs.siam.org/doi/pdf/10.1137/0720042
 
     """
-    if mvp is None: mvp = lambda x:x
+    if C is None: C = lambda x:x
+    if Cinv is None: Cinv = lambda x:x
     dot = vs.dot
     mul = vs.mul
     addmul = vs.addmul
 
-    z0 = vs.zeros_like(g)
-    r0 = g
-    mr0 = mvp(r0)
-    d0 = mul(mr0, -1)
+    if z0 is None:
+        z0 = vs.zeros_like(g)
+
+    # FIXME: how to seed cg with a different starting point?
+    r0 = addmul(Avp(z0), g, -1)
+    mr0 = Cinv(r0)
+    d0 = mul(mr0, 1)
 
     j = 0
 
-    rho_init = dot(mr0, r0)
+    rho_init = dot(mr0, r0)   # <r, mr>
 
     rho0 = rho_init
 
     while True:
         Bd0 = Avp(d0)
-        dBd0 = dot(d0, Bd0)
+        dBd0 = dot(d0, Bd0)  # gamma
 
         alpha = rho0 / dBd0
 
-        p0 = addmul(z0, d0, alpha)
+        p0 = addmul(z0, d0, -alpha)
 
         message = ""
 
@@ -212,35 +219,57 @@ def cg_steihaug(vs, Avp, g, Delta, rtol, maxiter=1000, monitor=None, B=None, mvp
             d1 = d0
             message = "zero hessian"
 
-        elif dBd0 <= 0 or dot(p0, p0) ** 0.5 >= Delta:
+        elif dBd0 <= 0 or dot(p0, C(p0)) ** 0.5 >= Delta:
             #print("dBd0", dBd0, "rad", dot(p0, p0) ** 0.5, Delta)
             # negative curvature or too fast
             # find tau such that p = z0 + tau d0 minimizes m(p)
             # and satisfies ||pk|| == \Delta_k.
-            a_ = dot(d0, d0)
-            b_ = 2 * dot(z0, d0)
-            c_ = dot(z0, z0) - Delta ** 2
-            tau = (- b_ + (b_ **2 - 4 * a_ * c_) ** 0.5) / (2 * a_)
-            z1 = addmul(z0, d0, tau)
-            assert tau >= 0
-            if dBd0 <= 0:
-                rho1 = -1 # will terminate
+            a_ = dot(d0, C(d0))
+            b_ = 2 * dot(z0, C(d0))
+            c_ = dot(z0, C(z0)) - Delta ** 2
+            cond = (b_ **2 - 4 * a_ * c_)
+            if a_ == 0 or cond < 0: # already at the solution, do not move.
+                rho1 = -1
+                tau = 1.0
+                if c_ > 0:
+                    tau = Delta / c_ ** 0.5
+                z1 = mul(z0, tau)
+                if a_ == 0:
+                    message = "already at the right direction"
+                    rho1 = -1
+                else:
+                    message = "no solution to second order equation, restarting "
+                    z0 = vs.zeros_like(g)
+                    r0 = addmul(Avp(z0), g, -1)
+                    mr0 = Cinv(r0)
+                    d0 = mul(mr0, 1)
+                    rho1 = dot(mr0, r0)   # <r, mr>
             else:
-                rho1 = 0
+                tau = (- b_ - cond ** 0.5) / (2 * a_)
+                # do not assert because when d0 is close to zero
+                # tau may be a large number
+                # assert tau <= 0
+                z1 = addmul(z0, d0, tau)
+
+                if dBd0 <= 0:
+                    rho1 = -1 # will terminate
+                else:
+                    rho1 = 0
+                if dBd0 <= 0:
+                    message = "negative curvature "
+                else:
+                    message = "truncation"
+
             r1 = r0
             mr1 = mr0
             d1 = d0
-            if dBd0 <= 0:
-                message = "negative curvature "
-            else:
-                message = "truncation"
         else:
-            z1 = addmul(z0, d0,  alpha)
-            r1 = addmul(r0, Bd0, alpha)
-            mr1 = mvp(r1)
+            z1 = addmul(z0, d0,  -alpha)
+            r1 = addmul(r0, Bd0, -alpha)
+            mr1 = Cinv(r1)
 
             rho1 = dot(mr1, r1)
-            d1 = mul(mr1, -1)
+            d1 = mul(mr1, 1)
             d1 = addmul(d1, d0, rho1 / rho0)
 
 
