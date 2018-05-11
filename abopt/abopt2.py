@@ -260,6 +260,7 @@ class Optimizer(object):
 
         state.x = prop.x
         state.g = prop.g
+        state.z = prop.z
         state.theta = prop.theta
         state.Px = prop.Px
         state.Pg = prop.Pg
