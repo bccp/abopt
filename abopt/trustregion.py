@@ -86,8 +86,9 @@ class TrustRegionCG(Optimizer):
         if rho > self.eta1: # sufficient quadratic, move
             prop = Proposal(problem, Px=Px1, x=x1, y=y1, z=z)
         else: # poor, stay and use the shrunk radius
-            # restart from the previus cg_steihaug result.
-            prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y, z=z)
+            # restart from the previus cg_steihaug result, but shrink the size to avoid
+            # excessive recoveries.
+            prop = Proposal(problem, Px=state.Px, x=state.x, y=state.y, z=mul(z, self.t1))
 
         if rho < self.eta2: # poor approximation
             # reinialize radius from the gradient norm if needed
