@@ -155,6 +155,7 @@ class Problem(object):
     """
     def __init__(self, objective, gradient,
         hessian_vector_product=None,
+        inverse_hessian_vector_product=None,
         vs=real_vector_space,
         atol=0,
         rtol=1e-7,
@@ -177,6 +178,7 @@ class Problem(object):
         self.objective = objective
         self.gradient = gradient
         self.hessian_vector_product = hessian_vector_product
+        self.inverse_hessian_vector_product = inverse_hessian_vector_product
         self.atol = atol
         self.rtol = rtol
         self.xtol = xtol
@@ -200,16 +202,41 @@ class Problem(object):
         """ This returns the hessian product of the preconditioned variable against
             a vector of the preconditioned variable.
             uppercase H means Hessian, not Hessian inverse.
+
+            v is preconditioned.
+            x is not preconditioned.
+
+            result is preconditioned, and act like Px.
         """
         if self.hessian_vector_product is None:
             raise ValueError("hessian vector product is not defined")
         vQ = self.precond.vQp(v)
         return self.precond.Qvp(self.hessian_vector_product(x, vQ))
 
+    def Phvp(self, x, v):
+        """ This returns the inverse hessian product of the preconditioned variable against
+            a vector of the preconditioned variable.
+            lowercase h means inverse of Hessian
+
+            v is preconditioned.
+            x is not preconditioned.
+
+            result is preconditioned, and act like Px.
+        """
+        if self.inverse_hessian_vector_product is None:
+            raise ValueError("inverse_hessian vector product is not defined")
+        Pv = self.precond.Pvp(v)
+        return self.precond.vPp(self.inverse_hessian_vector_product(x, Pv))
+
     def Hvp(self, x, v):
         """ This returns the hessian product of the unpreconditioned variable against
             a vector of the unpreconditioned variable.
             uppercase H means Hessian, not Hessian inverse.
+
+            v is not preconditioned.
+            x is not preconditioned.
+
+            result is not preconditioned, and act like x.
         """
         if self.hessian_vector_product is None:
             raise ValueError("hessian vector product is not defined")
