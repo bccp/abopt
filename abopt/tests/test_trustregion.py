@@ -115,7 +115,11 @@ def test_tr():
 
 def test_tr_precond():
     trcg = TrustRegionCG(maxradius=10., maxiter=100, lbfgs_precondition=False)
-    precond = Preconditioner(Pvp=lambda x: 20 * x, vQp=lambda x: 0.05 * x, Qvp=lambda x: 0.05 * x)
+    precond = Preconditioner(
+                        Pvp=lambda x: 20 * x,
+                        vPp=lambda x: 20 * x,
+                        vQp=lambda x: 0.05 * x,
+                        Qvp=lambda x: 0.05 * x)
     problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod, precond=precond)
 
     x0 = numpy.zeros(2)

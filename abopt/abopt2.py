@@ -122,19 +122,30 @@ class Proposal(object):
         return self
 
 class Preconditioner(object):
-    """ A preconditioner has three functions:
+    """ A preconditioner has four functions, corresponding
+        to left dot and right dot of P and Q on a vector.
 
-        x~ i  = P_ij x_j -> Pvp(x)
+        The P = Q ^{-1}, given by the following coordinate transformations
+        from x to x~.
 
-        x_j = Q_ij x~_i -> vQp(x~)
+            x~ i  = P_ij x_j -> Pvp(x)
 
-        g~_i = g_j Q_ij -> Qvp(g)
+            x_j = Q_ij x~_i -> vQp(x~)
 
-        H~_ij v_j = Q_ia Q_jb v_j H_ab -> Qvp(Hvp(vQp(v)))
+        The gradient transformation is from chain rule,
+
+            g~_i = g_j Q_ij -> Qvp(g)
+            g_j = g~_i P_ij -> vPp(g~)
+
+        Hessian vector product and inverse Hessian vector product,
+
+            H~_ij v_j = Q_ia Q_jb v_j H_ab -> Qvp(Hvp(vQp(v)))
+            h~_ij v_j = P_ai P_bj v_j h_ab -> vPp(hvp(Pvp(v)))
 
     """
-    def __init__(self, Pvp, Qvp, vQp):
+    def __init__(self, Pvp, vPp, Qvp, vQp):
         self.Pvp = Pvp
+        self.vPp = vPp
         self.Qvp = Qvp
         self.vQp = vQp
 
@@ -152,7 +163,7 @@ class Problem(object):
         precond=None,
         ):
         if precond is None:
-            precond = Preconditioner(lambda x:x, lambda x:x, lambda x:x)
+            precond = Preconditioner(lambda x:x, lambda x:x, lambda x:x, lambda x:x)
 
         if not isinstance(vs, VectorSpace):
             raise TypeError("expecting a VectorSpace object for vs, got type(vs) = %s", repr(type(vs)))

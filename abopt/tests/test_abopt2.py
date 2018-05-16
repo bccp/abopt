@@ -90,7 +90,11 @@ def test_abopt_lbfgs_quad():
 
 def test_abopt_lbfgs_quad_P():
     gd = LBFGS(linesearch=backtrace)
-    precond = Preconditioner(Pvp=lambda x: 2 * x, vQp=lambda x: 0.5 * x, Qvp=lambda x: 0.5 * x)
+    precond = Preconditioner(
+                    Pvp=lambda x: 2 * x,
+                    vPp=lambda x: 2 * x,
+                    vQp=lambda x: 0.5 * x,
+                    Qvp=lambda x: 0.5 * x)
     s = minimize(gd, quad, quad_der, x0, monitor=print)
     print(s, s.x)
     print('-----')
