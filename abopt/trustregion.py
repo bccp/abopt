@@ -6,7 +6,6 @@
 """
 
 from .abopt2 import Optimizer, Problem, Proposal, ContinueIteration, ConvergedIteration, FailedIteration
-from .lbfgs import post_scaled_direct_bfgs, LBFGSHessian
 
 class TrustRegionCG(Optimizer):
     from .linesearch import backtrace
@@ -16,11 +15,8 @@ class TrustRegionCG(Optimizer):
                         't1' : 0.25,
                         't2' : 2.0,
                         'maxiter' : 1000,
-                        'lbfgs_precondition' : False,
                         'm' : 6,
                         'conviter' : 6, 
-                        'diag_update' : post_scaled_direct_bfgs,
-                        'rescale_diag' : False,
                         'linesearch' : backtrace,
                         'linesearchiter' : 100,
                         'cg_monitor' : None,
@@ -30,13 +26,11 @@ class TrustRegionCG(Optimizer):
                         'initradius' : None,
                         }
 
-    def _newHessianApprox(self, problem):
-        return LBFGSHessian(problem.vs, m=self.m, diag_update=self.diag_update, rescale_diag=self.rescale_diag)
-
     def single_iteration(self, problem, state):
         mul = problem.vs.mul
         dot = problem.vs.dot
         addmul = problem.vs.addmul
+
         def Avp(v):
             state.hev = state.hev + 1
             return problem.PHvp(state.x, v)
@@ -45,23 +39,14 @@ class TrustRegionCG(Optimizer):
             if self.cg_monitor is not None:
                 self.cg_monitor(*kwargs)
 
-        if self.lbfgs_precondition:
-            raise RuntimeError("LBFGS Precondition is broken because I don't know how to apply LBFGS Hessian. The standard formula only does Hessian Inverse.")
-            # cannot reuse state.B, must be a new B1 because
-            # otherwise mvp will change during cg_steihaug!
-            B1 = state.B
-            Cinv = state.B.copy().hvp
-            C = Unknown
-        else:
-            B1 = None
-            Cinv = None
-            C = None
+        Cinv = None
+        C = None
 
         # solve - H z = g constrained by the radius
         radius1 = state.radius
 
         z = cg_steihaug(problem.vs, Avp, state.Pg, state.z, radius1,
-                self.cg_rtol, self.cg_maxiter, monitor=cg_monitor, B=B1, Cinv=Cinv, C=C)
+                self.cg_rtol, self.cg_maxiter, monitor=cg_monitor, Cinv=Cinv, C=C)
 
         mdiff = 0.5 * dot(z, Avp(z)) - dot(state.Pg, z)
 
@@ -110,7 +95,6 @@ class TrustRegionCG(Optimizer):
 
         prop.radius = radius1
         prop.rho = rho
-        prop.B = B1
 
         #if TrustRegion is not moving, try GD
         if rho > self.eta1 and problem.check_convergence(state.y, prop.y):
@@ -156,17 +140,15 @@ class TrustRegionCG(Optimizer):
                 state.radius = min(prop.Pgnorm, self.maxradius)
             else:
                 state.radius = self.initradius
-            state.B = self._newHessianApprox(problem)
             state.rho = 1.0
         else:
             state.radius = prop.radius
-            state.B = prop.B
             state.rho = prop.rho
 
         #print('move', prop.y)
         Optimizer.move(self, problem, state, prop)
 
-def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, B=None, Cinv=None, C=None):
+def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, Cinv=None, C=None):
     """ best effort solving for y = A^{-1} g with cg,
         given the trust-region constraint;
 
@@ -183,7 +165,10 @@ def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, B=None,
             http://epubs.siam.org/doi/abs/10.1137/S1052623497327854
 
 
-        Cinv and C are the preconditioner operator. C^{-1}, and C, 
+        Cinv and C are the preconditioner operator. C^{-1}, and C, where C is close to A;
+        or Cinv(A) has a lower condition number.
+
+        One particular case is if C is the diagonal of A.
 
         See Steihaug's paper. https://epubs.siam.org/doi/pdf/10.1137/0720042
 
@@ -279,9 +264,6 @@ def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, B=None,
             d1 = mul(mr1, 1)
             d1 = addmul(d1, d0, rho1 / rho0)
 
-
-            if B is not None:
-                B.update(z0, z1, r0, r1)
 
             message = "regular iteration"
 
