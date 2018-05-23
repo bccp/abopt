@@ -99,6 +99,7 @@ class TrustRegionCG(Optimizer):
 
         prop.radius = radius1
         prop.rho = rho
+        prop.reinit = False
 
         #if TrustRegion is not moving, try GD
         if rho > self.eta1 and problem.check_convergence(state.y, prop.y):
@@ -107,8 +108,14 @@ class TrustRegionCG(Optimizer):
             z = mul(state.Pg, 1 / state.Pgnorm)
 
             prop, r1 = self.linesearch(problem, state, z, 2.0 * radius1, maxiter=self.linesearchiter)
-            # reinit.
-            prop.radius = r1
+
+            # reinit the trust region
+            if self.initradius is None:
+                prop.radius = min(state.Pgnorm, self.maxradius)
+            else:
+                prop.radius = self.initradius
+
+            prop.rho = 1.0
             prop.reinit = True
             prop.message = "Falling back to line search"
 
@@ -121,7 +128,7 @@ class TrustRegionCG(Optimizer):
         prop = prop.complete(state)
 
         #print("assess radius", state.radius, 'tol', problem.get_tol(state.y), 'gnorm', prop.gnorm, 'gtol', problem.gtol)
-        if hasattr(prop, 'reinit') and prop.reinit:
+        if prop.reinit:
             if problem.check_convergence(state.y, prop.y):
                 return ConvergedIteration("Objective is not improving in GD")
 
@@ -137,17 +144,21 @@ class TrustRegionCG(Optimizer):
 
         return ContinueIteration("normal iteration")
 
-    def move(self, problem, state, prop):
-        if prop.init or (hasattr(prop, 'reinit') and prop.reinit):
-            # initial radius is the norm of the gradient.
-            if self.initradius is None:
-                state.radius = min(prop.Pgnorm, self.maxradius)
-            else:
-                state.radius = self.initradius
-            state.rho = 1.0
+    def start(self, problem, state, x0):
+        prop = Optimizer.start(self, problem, state, x0)
+
+        if self.initradius is None:
+            prop.radius = min(prop.Pgnorm, self.maxradius)
         else:
-            state.radius = prop.radius
-            state.rho = prop.rho
+            prop.radius = self.initradius
+
+        prop.reinit = False
+        prop.rho = 1.0
+        return prop
+
+    def move(self, problem, state, prop):
+        state.radius = prop.radius
+        state.rho = prop.rho
 
         #print('move', prop.y)
         Optimizer.move(self, problem, state, prop)

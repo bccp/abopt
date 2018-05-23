@@ -30,7 +30,3 @@ class Newton(Optimizer):
         prop, r1 = self.linesearch(problem, state, z, 1.0, maxiter=self.linesearchiter)
 
         return prop
-
-    def move(self, problem, state, prop):
-        Optimizer.move(self, problem, state, prop)
-

@@ -51,7 +51,7 @@ class State(object):
         return repr(d)
 
 class Proposal(object):
-    def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None, z=None, init=False):
+    def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None, z=None):
         """ A proposal is a collection of variable and gradients.
 
             We will generate the variables if they are not provided.
@@ -70,7 +70,6 @@ class Proposal(object):
         self.Pg = Pg
         self.z = z
         self.problem = problem
-        self.init = init
         self.message = "normal"
 
     def complete(self, state):
@@ -80,20 +79,15 @@ class Proposal(object):
         self.Pxnorm = dot(self.Px, self.Px) ** 0.5
         self.complete_y(state)
         self.complete_g(state)
-        if not self.init:
-            self.dy = self.y - state.y
-            dx = addmul(self.x, state.x, -1)
-            self.dxnorm = dot(dx, dx) ** 0.5
-            self.znorm = dot(self.z, self.z) ** 0.5
-            if self.Pgnorm == 0:
-                self.theta = 1
-            else:
-                self.theta = dot(self.z, self.Pg) / (self.znorm * self.Pgnorm)
+
+        self.dy = self.y - state.y
+        dx = addmul(self.x, state.x, -1)
+        self.dxnorm = dot(dx, dx) ** 0.5
+        self.znorm = dot(self.z, self.z) ** 0.5
+        if self.Pgnorm == 0:
+            self.theta = 1
         else:
-            self.dy = None
-            self.dxnorm = None
-            self.znorm = None
-            self.theta = None
+            self.theta = dot(self.z, self.Pg) / (self.znorm * self.Pgnorm)
         return self
 
     def complete_y(self, state):
@@ -119,6 +113,21 @@ class Proposal(object):
         self.Pgnorm = dot(self.Pg, self.Pg) ** 0.5
         self.gnorm = dot(self.g, self.g) ** 0.5
 
+        return self
+
+class InitialProposal(Proposal):
+    def complete(self, state):
+        dot = self.problem.vs.dot
+        addmul = self.problem.vs.addmul
+        self.xnorm = dot(self.x, self.x) ** 0.5
+        self.Pxnorm = dot(self.Px, self.Px) ** 0.5
+        self.complete_y(state)
+        self.complete_g(state)
+
+        self.dy = None
+        self.dxnorm = None
+        self.znorm = None
+        self.theta = None
         return self
 
 class Preconditioner(object):
@@ -349,6 +358,12 @@ class Optimizer(object):
         # here is an example that doesn't yield a new solution
         return Proposal(Px=state.Px)
 
+    def start(self, problem, state, x0):
+        # make a full initial proposal with x and g
+        Px0 = problem.x2Px(x0) # the only place we convert from x to Px
+        prop = InitialProposal(problem, x=x0, Px=Px0).complete(state)
+        return prop
+
     def restart(optimizer, problem, state, monitor=None):
 
         if monitor is not None:
@@ -391,10 +406,7 @@ class Optimizer(object):
         # check the preconditioner.
         problem.check_preconditioner(x0)
 
-        Px0 = problem.x2Px(x0) # the only place we convert from x to Px
-
-        # make a full initial proposal with x and g
-        prop = Proposal(problem, x=x0, Px=Px0, init=True).complete(state)
+        prop = optimizer.start(problem, state, x0)
 
         optimizer.move(problem, state, prop)
 
@@ -402,9 +414,6 @@ class Optimizer(object):
 
         return state
 
-
-class TrustRegionOptimizer(Optimizer):
-    pass
 
 class GradientDescent(Optimizer):
     from .linesearch import backtrace
@@ -416,12 +425,13 @@ class GradientDescent(Optimizer):
         'linesearchiter' : 100,
     }
 
-    def move(self, problem, state, prop):
-        if prop.init:
-            state.rate = 1.0
-        else:
-            state.rate = prop.rate
+    def start(self, problem, state, x0):
+        prop = Optimizer.start(self, problem, state, x0)
+        prop.rate = 1.0
+        return prop
 
+    def move(self, problem, state, prop):
+        state.rate = prop.rate
         Optimizer.move(self, problem, state, prop)
 
     def single_iteration(self, problem, state):

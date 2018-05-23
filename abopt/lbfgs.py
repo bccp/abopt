@@ -300,9 +300,12 @@ class LBFGS(Optimizer):
         'rescale_diag' : False,
     }
 
-    def _newLBFGSHessian(self, problem):
-        return LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
-
+    def start(self, problem, state, x0):
+        prop = Optimizer.start(self, problem, state, x0)
+        prop.B = None
+        prop.z = prop.Pg
+        prop.r1 = 1.0
+        return prop
 
     def move(self, problem, state, prop):
         addmul = problem.vs.addmul
@@ -310,14 +313,13 @@ class LBFGS(Optimizer):
 
         prop.complete(state)
 
-        if prop.init:
-            state.B = self._newLBFGSHessian(problem)
-            state.z = prop.Pg
-            state.r1 = 1.0
+        state.B = prop.B
+        state.z = prop.z
+        state.r1 = prop.r1
+
+        if state.B is None:
+            state.B = LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
         else:
-            state.B = prop.B
-            state.z = prop.z
-            state.r1 = prop.r1
             state.B.update(state.Px, prop.Px, state.Pg, prop.Pg)
 
         Optimizer.move(self, problem, state, prop)
