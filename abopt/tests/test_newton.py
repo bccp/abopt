@@ -1,7 +1,7 @@
 from __future__ import print_function
 import numpy
 
-from abopt.abopt2 import Problem, Preconditioner
+from abopt.abopt2 import Problem
 from abopt.newton import Newton
 
 from numpy.testing import assert_allclose
@@ -15,11 +15,7 @@ def diag_scaling(v, direction):
     else:
         return 20 * v
 
-@pytest.mark.parametrize("precond",
-[
-    None,
-    Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
-])
+@pytest.mark.parametrize("precond", [ True, False ])
 def test_newton(precond):
     nt = Newton()
 

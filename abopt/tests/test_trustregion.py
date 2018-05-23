@@ -1,13 +1,13 @@
 from __future__ import print_function
-from abopt.abopt2 import Problem, Preconditioner
+
+from abopt.abopt2 import Problem
 from abopt.trustregion import cg_steihaug, TrustRegionCG
-from abopt.vectorspace import real_vector_space
+
 import numpy
 from numpy.testing import assert_allclose
-import pytest
-
 from abopt.testing import RosenProblem, ChiSquareProblem
 
+import pytest
 def test_cg_steihaug():
     import numpy
     #Hessian = numpy.diag([1, 2, 3, 400.**2])
@@ -29,21 +29,21 @@ def test_cg_steihaug():
 
     def Avp(v): return problem.Hvp(0, v)
 
-    z = cg_steihaug(real_vector_space, Avp, g, g, Delta, rtol, monitor=print)
+    z = cg_steihaug(problem.vs, Avp, g, g, Delta, rtol, monitor=print)
 
     assert_allclose(Avp(z), g)
 
-    z = cg_steihaug(real_vector_space, Avp, g, g*0, Delta, rtol, monitor=print)
+    z = cg_steihaug(problem.vs, Avp, g, g*0, Delta, rtol, monitor=print)
 
     assert_allclose(Avp(z), g)
 
-    def precond(v, direction):
+    def cg_precond(v, direction):
         if direction == -1:
             return numpy.linalg.inv(C).dot(v)
         else:
             return C.dot(v)
 
-    z = cg_steihaug(real_vector_space, Avp, g, g*0, Delta, rtol, monitor=print, C=precond)
+    z = cg_steihaug(problem.vs, Avp, g, g*0, Delta, rtol, monitor=print, C=cg_precond)
 
     assert_allclose(Avp(z), g)
 
