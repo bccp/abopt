@@ -7,6 +7,34 @@ from numpy.testing import assert_allclose
 from scipy.optimize import rosen, rosen_der, rosen_hess_prod
 import pytest
 
+class MyProblem(Problem):
+    """
+        chisquare problem with
+
+        y = |J phi(x) - 1.0|^2
+    """
+    def __init__(self, J, phi=lambda x:x, phiprime=lambda x: 1):
+        def f(x): return J.dot(phi(x))
+        def vjp(x, v): return v.dot(J) * phiprime(x)
+        def jvp(x, v): return J.dot(v * phiprime(x))
+
+        def objective(x):
+            y = f(x)
+            return numpy.sum((y - 1.0) ** 2)
+
+        def gradient(x):
+            y = f(x)
+            return vjp(x, y - 1.0) * 2
+
+        def hessian(x, v):
+            v = numpy.array(v)
+            return vjp(x, jvp(x, v)) * 2
+
+        Problem.__init__(self, objective=objective,
+                      gradient=gradient,
+                      hessian_vector_product=hessian)
+
+
 def test_cg_steihaug():
     import numpy
     #Hessian = numpy.diag([1, 2, 3, 400.**2])
@@ -18,29 +46,15 @@ def test_cg_steihaug():
                       [0, 1, 0, 0], 
                       [0, 0, 3, 0], 
                       [0, 0, 0, 1]])
-    def f(x): return J.dot(x)
-    def vjp(x, v): return v.dot(J)
-    def jvp(x, v): return J.dot(v)
 
-    def objective(x):
-        y = f(x)
-        return numpy.sum((y - 1.0) ** 2)
+    problem = MyProblem(J=J)
 
-    def gradient(x):
-        y = f(x)
-        return vjp(x, y - 1.0) * 2
-
-    def hessian(x, v):
-        return vjp(x, jvp(x, v)) * 2
-
-    
     g = numpy.zeros(4) + 1.0
     g[...] = [  -2.,   -4.,   -6., -800.]
     Delta = 8000.
     rtol = 1e-8
 
-    def Avp(v):
-        return hessian(0, v)
+    def Avp(v): return problem.hessian_vector_product(0, v)
 
     z = cg_steihaug(real_vector_space, Avp, g, g, Delta, rtol, monitor=print)
 
@@ -95,25 +109,8 @@ def test_gaussnewton(alpha, beta):
                       [400, 0,   0,  0]])
     def phi(x): return alpha * x + beta * x ** 2
     def phiprime(x): return alpha + 2 * beta * x
-    def f(x): return J.dot(phi(x))
-    def vjp(x, v): return v.dot(J) * phiprime(x)
-    def jvp(x, v): return J.dot(v * phiprime(x))
 
-    def objective(x):
-        y = f(x)
-        return numpy.sum((y - 1.0) ** 2)
-
-    def gradient(x):
-        y = f(x)
-        return vjp(x, y - 1.0) * 2
-
-    def fake_hessian(x, v):
-        v = numpy.array(v)
-        return vjp(x, jvp(x, v)) * 2
-
-    problem = Problem(objective=objective,
-                      gradient=gradient,
-                      hessian_vector_product=fake_hessian)
+    problem = MyProblem(J=J, phi=phi, phiprime=phiprime)
 
     x0 = numpy.zeros(4)
 #    print("Fake Hessian")
@@ -124,4 +121,5 @@ def test_gaussnewton(alpha, beta):
 
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
-    assert_allclose(f(r.x), 1.0, rtol=1e-4)
+    assert_allclose(problem.objective(r.x), 0, atol=1e-7)
+
