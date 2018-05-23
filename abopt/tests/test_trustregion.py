@@ -58,11 +58,14 @@ def test_tr():
 
 def test_tr_precond():
     trcg = TrustRegionCG(maxradius=10., maxiter=100)
-    precond = Preconditioner(
-                        Pvp=lambda x: 20 * x,
-                        vPp=lambda x: 20 * x,
-                        vQp=lambda x: 0.05 * x,
-                        Qvp=lambda x: 0.05 * x)
+    def diag_scaling(v, direction):
+        if direction == -1:
+            return 0.05 * v
+        else:
+            return 20 * v
+
+    precond = Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
+
     problem = RosenProblem(precond=precond)
 
     x0 = numpy.zeros(2)

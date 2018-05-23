@@ -58,11 +58,14 @@ def test_abopt_lbfgs_quad_P():
                       [0,  10,   2,  0],
                       [40, 100,  0,  0],
                       [400, 0,   0,  0]])
-    precond = Preconditioner(
-                        Pvp=lambda x: 20 * x,
-                        vPp=lambda x: 20 * x,
-                        vQp=lambda x: 0.05 * x,
-                        Qvp=lambda x: 0.05 * x)
+
+    def diag_scaling(v, direction):
+        if direction == -1:
+            return 0.05 * v
+        else:
+            return 20 * v
+
+    precond = Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
     problem = ChiSquareProblem(J=J, precond=precond)
 
     x0 = numpy.zeros(4)

@@ -24,13 +24,13 @@ def test_newton():
 def test_newton_pre():
     nt = Newton()
 
-    precond = Preconditioner(
-                            Pvp=lambda x: 20 * x,
-                            vPp=lambda x: 20 * x,
-                            vQp=lambda x: 0.05 * x,
-                            Qvp=lambda x: 0.05 * x,
-                            )
+    def diag_scaling(v, direction):
+        if direction == -1:
+            return 0.05 * v
+        else:
+            return 20 * v
 
+    precond = Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
     problem = RosenProblem(precond=precond)
 
     problem.atol = 1e-7 # ymin = 0

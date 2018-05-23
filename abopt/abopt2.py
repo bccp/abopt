@@ -134,7 +134,9 @@ class Preconditioner(object):
     """ A preconditioner has four functions, corresponding
         to left dot and right dot of P and Q on a vector.
 
-        The P = Q ^{-1}, given by the following coordinate transformations
+        P = Q ^{-1},
+
+        P and Q are Given by the following coordinate transformations
         from x to x~.
 
             x~ i  = P_ij x_j -> Pvp(x)
@@ -151,12 +153,14 @@ class Preconditioner(object):
             H~_ij v_j = Q_ia Q_jb v_j H_ab -> Qvp(Hvp(vQp(v)))
             h~_ij v_j = P_ai P_bj v_j h_ab -> vPp(hvp(Pvp(v)))
 
+        The input functions are
+
+            Pvp(v, direction),
+            vPp(v, direction);
     """
-    def __init__(self, Pvp, vPp, Qvp, vQp):
+    def __init__(self, Pvp, vPp):
         self.Pvp = Pvp
         self.vPp = vPp
-        self.Qvp = Qvp
-        self.vQp = vQp
 
 class Problem(object):
     """ Defines a problem.
@@ -173,7 +177,7 @@ class Problem(object):
         precond=None,
         ):
         if precond is None:
-            precond = Preconditioner(lambda x:x, lambda x:x, lambda x:x, lambda x:x)
+            precond = Preconditioner(lambda x, direction:x, lambda x, direction:x)
 
         if not isinstance(vs, VectorSpace):
             raise TypeError("expecting a VectorSpace object for vs, got type(vs) = %s", repr(type(vs)))
@@ -194,16 +198,16 @@ class Problem(object):
         self.gtol = gtol
 
     def Px2x(self, Px):
-        return self._precond.vQp(Px)
+        return self._precond.vPp(Px, direction=-1)
 
     def x2Px(self, x):
-        return self._precond.Pvp(x)
+        return self._precond.Pvp(x, direction=1)
 
     def g2Pg(self, g):
-        return self._precond.Qvp(g)
+        return self._precond.Pvp(g, direction=-1)
 
     def Pg2g(self, Pg):
-        return self._precond.vPp(Pg)
+        return self._precond.vPp(Pg, direction=1)
 
     def check_preconditioner(self, x0):
         vs = self.vs
@@ -224,39 +228,8 @@ class Problem(object):
         g = self._gradient(x)
         return g
 
-    def PHvp(self, x, v):
-        """ This returns the hessian product of the preconditioned variable against
-            a vector of the preconditioned variable.
-            uppercase H means Hessian, not Hessian inverse.
-
-            v is preconditioned.
-            x is not preconditioned.
-
-            result is preconditioned, and act like Px.
-        """
-        if self._hessian_vector_product is None:
-            raise ValueError("hessian vector product is not defined")
-        vQ = self._precond.vQp(v)
-        return self._precond.Qvp(self._hessian_vector_product(x, vQ))
-
-    def Phvp(self, x, v):
-        """ This returns the inverse hessian product of the preconditioned variable against
-            a vector of the preconditioned variable.
-            lowercase h means inverse of Hessian
-
-            v is preconditioned.
-            x is not preconditioned.
-
-            result is preconditioned, and act like Px.
-        """
-        if self._inverse_hessian_vector_product is None:
-            raise ValueError("inverse_hessian vector product is not defined")
-        Pv = self._precond.Pvp(v)
-        return self._precond.vPp(self._inverse_hessian_vector_product(x, Pv))
-
     def Hvp(self, x, v):
-        """ This returns the hessian product of the unpreconditioned variable against
-            a vector of the unpreconditioned variable.
+        """ This returns the raw hessian product H_x v
             uppercase H means Hessian, not Hessian inverse.
 
             v is not preconditioned.
@@ -267,6 +240,41 @@ class Problem(object):
         if self._hessian_vector_product is None:
             raise ValueError("hessian vector product is not defined")
         return self._hessian_vector_product(x, v)
+
+
+    def PHvp(self, x, v):
+        """ This returns the preconditioned hessian times v
+
+            uppercase H means Hessian, not Hessian inverse.
+
+            v is usually preconditioned (irrelevant)
+            x is always not preconditioned.
+
+            result is preconditioned, and act like Px.
+
+            ~H_x v = Q [H_x (v Q^T)]
+        """
+        if self._hessian_vector_product is None:
+            raise ValueError("hessian vector product is not defined")
+        vQ = self._precond.vPp(v, direction=-1)
+        return self._precond.Pvp(self._hessian_vector_product(x, vQ), direction=-1)
+
+    def Phvp(self, x, v):
+        """ This returns the preconditioned inverse hessian times v
+
+            lowercase h means inverse of Hessian
+
+            v is usually preconditioned (irrelevant)
+            x is always not preconditioned.
+
+            result is preconditioned, and act like Px.
+
+            ~h_x v = [h_x (P v)] P^T
+        """
+        if self._inverse_hessian_vector_product is None:
+            raise ValueError("inverse_hessian vector product is not defined")
+        Pv = self._precond.Pvp(v, direction=1)
+        return self._precond.vPp(self._inverse_hessian_vector_product(x, Pv), direction=1)
 
     def get_ytol(self, y):
         thresh = self.rtol * abs(y) + self.atol
