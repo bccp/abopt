@@ -1,9 +1,8 @@
 
 import pytest
 
-from abopt.abopt2 import Preconditioner, minimize
+from abopt.abopt2 import Preconditioner
 
-from abopt.vectorspace import real_vector_space, complex_vector_space
 from abopt.linesearch import minpack, backtrace, exact
 
 from abopt.lbfgs import LBFGS
