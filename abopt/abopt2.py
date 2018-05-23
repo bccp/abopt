@@ -423,37 +423,9 @@ class Optimizer(object):
         return state
 
 
-class GradientDescent(Optimizer):
-    from .linesearch import backtrace
-
-    optimizer_defaults = {
-        'maxiter' : 100000,
-        'conviter' : 1,
-        'linesearch' : backtrace,
-        'linesearchiter' : 100,
-    }
-
-    def start(self, problem, state, x0):
-        prop = Optimizer.start(self, problem, state, x0)
-        prop.rate = 1.0
-        return prop
-
-    def move(self, problem, state, prop):
-        state.rate = prop.rate
-        Optimizer.move(self, problem, state, prop)
-
-    def single_iteration(self, problem, state):
-        mul = problem.vs.mul
-
-        z = mul(state.Pg, 1 / state.Pgnorm)
-
-        prop, r1 = self.linesearch(problem, state, z, state.rate * 2, maxiter=self.linesearchiter)
-
-        prop.rate = r1
-        return prop
-
-
 from .lbfgs import LBFGS
+from .naivemethods import GradientDescent, DirectNewton
+from .trustregion import TrustRegionCG
 
 def minimize(optimizer, objective, gradient, x0, hessian_vector_product=None,
     monitor=None, vs=real_vector_space, precond=None):

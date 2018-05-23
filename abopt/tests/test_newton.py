@@ -2,7 +2,7 @@ from __future__ import print_function
 import numpy
 
 from abopt.abopt2 import Problem
-from abopt.newton import DirectNewton
+from abopt.naivemethods import DirectNewton
 
 from numpy.testing import assert_allclose
 from abopt.testing import RosenProblem
