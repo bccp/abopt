@@ -47,28 +47,22 @@ def test_cg_steihaug():
 
     assert_allclose(Avp(z), g)
 
-def test_tr():
+def diag_scaling(v, direction):
+    if direction == -1:
+        return 0.05 * v
+    else:
+        return 20 * v
+
+precond = Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
+
+
+@pytest.mark.parametrize("precond",
+[None, precond])
+def test_tr(precond):
     trcg = TrustRegionCG(maxradius=10., maxiter=100, cg_monitor=print)
     problem = RosenProblem()
 
     x0 = numpy.zeros(20)
-    r = trcg.minimize(problem, x0, monitor=print)
-    assert r.converged
-    assert_allclose(r.x, 1.0, rtol=1e-4)
-
-def test_tr_precond():
-    trcg = TrustRegionCG(maxradius=10., maxiter=100)
-    def diag_scaling(v, direction):
-        if direction == -1:
-            return 0.05 * v
-        else:
-            return 20 * v
-
-    precond = Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
-
-    problem = RosenProblem(precond=precond)
-
-    x0 = numpy.zeros(2)
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
     assert_allclose(r.x, 1.0, rtol=1e-4)

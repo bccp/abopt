@@ -1,4 +1,3 @@
-
 import pytest
 
 from abopt.abopt2 import Preconditioner
@@ -36,7 +35,17 @@ def test_abopt_lbfgs(linesearch, diag_update, rescale_diag):
     assert r.converged
     assert_allclose(r.x, 1.0, rtol=1e-4)
 
-def test_abopt_lbfgs_quad():
+
+def diag_scaling(v, direction):
+    if direction == -1:
+        return 0.05 * v
+    else:
+        return 20 * v
+
+precond = Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
+@pytest.mark.parametrize("precond",
+[None, precond])
+def test_abopt_lbfgs_quad(precond):
     lbfgs = LBFGS(linesearch=backtrace)
 
     J = numpy.array([ [0, 0,     2,  1],
@@ -44,32 +53,9 @@ def test_abopt_lbfgs_quad():
                       [40, 100,  0,  0],
                       [400, 0,   0,  0]])
 
-    problem = ChiSquareProblem(J=J)
-
-    x0 = numpy.zeros(4)
-    r = lbfgs.minimize(problem, x0, monitor=print)
-    assert r.converged
-    assert_allclose(problem.f(r.x), 0.0, atol=1e-7)
-
-def test_abopt_lbfgs_quad_P():
-    lbfgs = LBFGS(linesearch=backtrace)
-    J = numpy.array([ [0, 0,     2,  1],
-                      [0,  10,   2,  0],
-                      [40, 100,  0,  0],
-                      [400, 0,   0,  0]])
-
-    def diag_scaling(v, direction):
-        if direction == -1:
-            return 0.05 * v
-        else:
-            return 20 * v
-
-    precond = Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
     problem = ChiSquareProblem(J=J, precond=precond)
 
     x0 = numpy.zeros(4)
     r = lbfgs.minimize(problem, x0, monitor=print)
     assert r.converged
     assert_allclose(problem.f(r.x), 0.0, atol=1e-7)
-
-
