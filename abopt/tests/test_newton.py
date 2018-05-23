@@ -1,26 +1,18 @@
 from __future__ import print_function
-from abopt.abopt2 import Problem, Preconditioner
-from abopt.lbfgs import LBFGSHessian
-from abopt.newton import Newton
-from abopt.vectorspace import real_vector_space
 import numpy
-from scipy.optimize import rosen, rosen_der, rosen_hess_prod, rosen_hess
-from scipy.linalg import inv
-import pytest
-from numpy.testing import assert_allclose
 
-def rosen_inverse_hess(x):
-    H = rosen_hess(x)
-    return inv(H)
+from abopt.abopt2 import Problem, Preconditioner
+from abopt.newton import Newton
+
+from numpy.testing import assert_allclose
+from abopt.testing import RosenProblem
+
+import pytest
 
 def test_newton():
     nt = Newton()
 
-    problem = Problem(objective=rosen,
-                      gradient=rosen_der,
-                      inverse_hessian_vector_product=lambda x, v:
-                            rosen_inverse_hess(x).dot(v)
-                     )
+    problem = RosenProblem()
 
     problem.atol = 1e-7 # ymin = 0
 
@@ -38,12 +30,8 @@ def test_newton_pre():
                             vQp=lambda x: 0.05 * x,
                             Qvp=lambda x: 0.05 * x,
                             )
-    problem = Problem(objective=rosen,
-                      gradient=rosen_der,
-                      inverse_hessian_vector_product=lambda x, v:
-                            rosen_inverse_hess(x).dot(v),
-                      precond=precond
-                     )
+
+    problem = RosenProblem(precond=precond)
 
     problem.atol = 1e-7 # ymin = 0
 

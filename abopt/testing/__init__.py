@@ -1,5 +1,5 @@
 from abopt.abopt2 import Problem, Preconditioner
-from scipy.optimize import rosen, rosen_der, rosen_hess_prod
+from scipy.optimize import rosen, rosen_der, rosen_hess_prod, rosen_hess
 import numpy
 
 class ChiSquareProblem(Problem):
@@ -29,7 +29,15 @@ class ChiSquareProblem(Problem):
                       gradient=gradient,
                       hessian_vector_product=hessian, precond=precond)
 
+from scipy.linalg import inv
+def rosen_inverse_hess(x):
+    H = rosen_hess(x)
+    return inv(H)
+
 class RosenProblem(Problem):
+    """ RosenBrock problem that supports up to hessian inverse. """
     def __init__(self, precond=None):
         Problem.__init__(self, objective=rosen, gradient=rosen_der,
-                    hessian_vector_product=rosen_hess_prod, precond=precond)
+                    hessian_vector_product=rosen_hess_prod,
+                    inverse_hessian_vector_product = lambda x, v: rosen_inverse_hess(x).dot(v),
+                    precond=precond)
