@@ -172,30 +172,47 @@ class Problem(object):
         if not isinstance(precond, Preconditioner):
             raise TypeError("expecting a VPreconditioner object for precond, got type(vs) = %s", repr(type(precond)))
 
-        self.precond = precond
+        self._precond = precond
         self.vs = vs
 
-        self.objective = objective
-        self.gradient = gradient
-        self.hessian_vector_product = hessian_vector_product
-        self.inverse_hessian_vector_product = inverse_hessian_vector_product
+        self._objective = objective
+        self._gradient = gradient
+        self._hessian_vector_product = hessian_vector_product
+        self._inverse_hessian_vector_product = inverse_hessian_vector_product
         self.atol = atol
         self.rtol = rtol
         self.xtol = xtol
         self.gtol = gtol
 
     def Px2x(self, Px):
-        return self.precond.vQp(Px)
+        return self._precond.vQp(Px)
+
+    def x2Px(self, x):
+        return self._precond.Pvp(x)
 
     def g2Pg(self, g):
-        return self.precond.Qvp(g)
+        return self._precond.Qvp(g)
+
+    def Pg2g(self, Pg):
+        return self._precond.vPp(Pg)
+
+    def check_preconditioner(self, x0):
+        vs = self.vs
+
+        d = vs.addmul(self.Px2x(self.x2Px(x0)), x0, -1)
+        if not vs.dot(d, d) ** 0.5 < 1e-15:
+            raise ValueError("Preconditioner's vQp and Pvp are not inverses.")
+
+        d = vs.addmul(self.Pg2g(self.g2Pg(x0)), x0, -1)
+        if not vs.dot(d, d) ** 0.5 < 1e-15:
+            raise ValueError("Preconditioner's vPp and Qvp are not inverses.")
 
     def f(self, x):
-        return self.objective(x)
+        return self._objective(x)
 
     def g(self, x):
         """ This returns the gradient for the original variable"""
-        g = self.gradient(x)
+        g = self._gradient(x)
         return g
 
     def PHvp(self, x, v):
@@ -208,10 +225,10 @@ class Problem(object):
 
             result is preconditioned, and act like Px.
         """
-        if self.hessian_vector_product is None:
+        if self._hessian_vector_product is None:
             raise ValueError("hessian vector product is not defined")
-        vQ = self.precond.vQp(v)
-        return self.precond.Qvp(self.hessian_vector_product(x, vQ))
+        vQ = self._precond.vQp(v)
+        return self._precond.Qvp(self._hessian_vector_product(x, vQ))
 
     def Phvp(self, x, v):
         """ This returns the inverse hessian product of the preconditioned variable against
@@ -223,10 +240,10 @@ class Problem(object):
 
             result is preconditioned, and act like Px.
         """
-        if self.inverse_hessian_vector_product is None:
+        if self._inverse_hessian_vector_product is None:
             raise ValueError("inverse_hessian vector product is not defined")
-        Pv = self.precond.Pvp(v)
-        return self.precond.vPp(self.inverse_hessian_vector_product(x, Pv))
+        Pv = self._precond.Pvp(v)
+        return self._precond.vPp(self._inverse_hessian_vector_product(x, Pv))
 
     def Hvp(self, x, v):
         """ This returns the hessian product of the unpreconditioned variable against
@@ -238,9 +255,9 @@ class Problem(object):
 
             result is not preconditioned, and act like x.
         """
-        if self.hessian_vector_product is None:
+        if self._hessian_vector_product is None:
             raise ValueError("hessian vector product is not defined")
-        return self.hessian_vector_product(x, v)
+        return self._hessian_vector_product(x, v)
 
     def get_ytol(self, y):
         thresh = self.rtol * abs(y) + self.atol
@@ -371,7 +388,10 @@ class Optimizer(object):
         for key, value in state_args.items():
             setattr(state, key, value)
 
-        Px0 = problem.precond.Pvp(x0) # the only place we convert from x to Px
+        # check the preconditioner.
+        problem.check_preconditioner(x0)
+
+        Px0 = problem.x2Px(x0) # the only place we convert from x to Px
 
         # make a full initial proposal with x and g
         prop = Proposal(problem, x=x0, Px=Px0, init=True).complete(state)
@@ -421,11 +441,6 @@ def minimize(optimizer, objective, gradient, x0, hessian_vector_product=None,
     monitor=None, vs=real_vector_space, precond=None):
 
     problem = Problem(objective, gradient, hessian_vector_product=hessian_vector_product, vs=vs, precond=precond)
-
-    d = vs.addmul(problem.precond.vQp(problem.precond.Pvp(x0)), x0, -1)
-
-    # assert vPv and Pvp are inverses
-    assert vs.dot(d, d) ** 0.5 < 1e-15
 
     return optimizer.minimize(problem, x0, monitor=monitor)
 

@@ -4,36 +4,9 @@ from abopt.trustregion import cg_steihaug, TrustRegionCG
 from abopt.vectorspace import real_vector_space
 import numpy
 from numpy.testing import assert_allclose
-from scipy.optimize import rosen, rosen_der, rosen_hess_prod
 import pytest
 
-class MyProblem(Problem):
-    """
-        chisquare problem with
-
-        y = |J phi(x) - 1.0|^2
-    """
-    def __init__(self, J, phi=lambda x:x, phiprime=lambda x: 1):
-        def f(x): return J.dot(phi(x))
-        def vjp(x, v): return v.dot(J) * phiprime(x)
-        def jvp(x, v): return J.dot(v * phiprime(x))
-
-        def objective(x):
-            y = f(x)
-            return numpy.sum((y - 1.0) ** 2)
-
-        def gradient(x):
-            y = f(x)
-            return vjp(x, y - 1.0) * 2
-
-        def hessian(x, v):
-            v = numpy.array(v)
-            return vjp(x, jvp(x, v)) * 2
-
-        Problem.__init__(self, objective=objective,
-                      gradient=gradient,
-                      hessian_vector_product=hessian)
-
+from abopt.testing import RosenProblem, ChiSquareProblem
 
 def test_cg_steihaug():
     import numpy
@@ -47,14 +20,14 @@ def test_cg_steihaug():
                       [0, 0, 3, 0], 
                       [0, 0, 0, 1]])
 
-    problem = MyProblem(J=J)
+    problem = ChiSquareProblem(J=J)
 
     g = numpy.zeros(4) + 1.0
     g[...] = [  -2.,   -4.,   -6., -800.]
     Delta = 8000.
     rtol = 1e-8
 
-    def Avp(v): return problem.hessian_vector_product(0, v)
+    def Avp(v): return problem.Hvp(0, v)
 
     z = cg_steihaug(real_vector_space, Avp, g, g, Delta, rtol, monitor=print)
 
@@ -69,10 +42,9 @@ def test_cg_steihaug():
 
     assert_allclose(Avp(z), g)
 
-
 def test_tr():
     trcg = TrustRegionCG(maxradius=10., maxiter=100, cg_monitor=print)
-    problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod)
+    problem = RosenProblem()
 
     x0 = numpy.zeros(20)
     r = trcg.minimize(problem, x0, monitor=print)
@@ -86,7 +58,7 @@ def test_tr_precond():
                         vPp=lambda x: 20 * x,
                         vQp=lambda x: 0.05 * x,
                         Qvp=lambda x: 0.05 * x)
-    problem = Problem(objective=rosen, gradient=rosen_der, hessian_vector_product=rosen_hess_prod, precond=precond)
+    problem = RosenProblem(precond=precond)
 
     x0 = numpy.zeros(2)
     r = trcg.minimize(problem, x0, monitor=print)
@@ -110,7 +82,7 @@ def test_gaussnewton(alpha, beta):
     def phi(x): return alpha * x + beta * x ** 2
     def phiprime(x): return alpha + 2 * beta * x
 
-    problem = MyProblem(J=J, phi=phi, phiprime=phiprime)
+    problem = ChiSquareProblem(J=J, phi=phi, phiprime=phiprime)
 
     x0 = numpy.zeros(4)
 #    print("Fake Hessian")
@@ -121,5 +93,5 @@ def test_gaussnewton(alpha, beta):
 
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
-    assert_allclose(problem.objective(r.x), 0, atol=1e-7)
+    assert_allclose(problem.f(r.x), 0, atol=1e-7)
 

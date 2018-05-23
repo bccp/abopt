@@ -112,7 +112,7 @@ def minpack(problem, state, z, rate, maxiter, c1=1e-4, c2=0.9, amax=50):
     def phi(alpha):
         state.fev = state.fev + 1
         Px1 = addmul(state.Px, z, -alpha)
-        x1 = problem.precond.vQp(Px1)
+        x1 = problem.Px2x(Px1)
         y1 = problem.f(x1)
         # print('phi', -alpha, y1, state.y)
         return y1

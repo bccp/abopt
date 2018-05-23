@@ -16,7 +16,8 @@ class TrustRegionCG(Optimizer):
                         't2' : 2.0,
                         'maxiter' : 1000,
                         'm' : 6,
-                        'conviter' : 6, 
+                        'conviter' : 6,
+                        'cg_preconditioner' : None,
                         'linesearch' : backtrace,
                         'linesearchiter' : 100,
                         'cg_monitor' : None,
@@ -39,8 +40,11 @@ class TrustRegionCG(Optimizer):
             if self.cg_monitor is not None:
                 self.cg_monitor(*kwargs)
 
-        Cinv = None
-        C = None
+        if self.cg_preconditioner:
+            C, Cinv = self.cg_preconditioner(problem, state)
+        else:
+            Cinv = None
+            C = None
 
         # solve - H z = g constrained by the radius
         radius1 = state.radius

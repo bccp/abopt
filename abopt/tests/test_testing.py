@@ -8,7 +8,7 @@ import pytest
 
 try:
     import autograd
-    from abopt.testing import get_all_nd, get_all_2d
+    from abopt.testing.autograd_problems import get_all_nd, get_all_2d
 except ImportError:
     autograd = None
     def get_all_nd(): return []
