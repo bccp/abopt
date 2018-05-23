@@ -1,11 +1,13 @@
-from .abopt2 import Optimizer, Problem, Proposal, ContinueIteration, ConvergedIteration, FailedIteration
+from .abopt2 import (
+        Optimizer,
+        )
 
-class Newton(Optimizer):
+class DirectNewton(Optimizer):
     """
-        A general Newton method.
+        A direct Newton method.
 
-        This method assumes the problem also knows how to compute the inverse of hessian, without actually
-        inverting it.
+        This method assumes the problem knows how to compute the inverse of hessian,
+        without actually inverting it.
 
         A line search along the newton proposal direction, starting from the newton step size
         is used.
