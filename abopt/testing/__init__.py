@@ -36,9 +36,19 @@ def rosen_inverse_hess(x):
     H = rosen_hess(x)
     return inv(H)
 
+def diag_scaling(v, direction):
+    if direction == -1:
+        return 0.05 * v
+    else:
+        return 20 * v
+
 class RosenProblem(Problem):
     """ RosenBrock problem that supports up to hessian inverse. """
-    def __init__(self, precond=None):
+    def __init__(self, precond=False):
+        if precond == True:
+            precond = Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
+        else: 
+            precond = None
         Problem.__init__(self, objective=rosen, gradient=rosen_der,
                     hessian_vector_product=rosen_hess_prod,
                     inverse_hessian_vector_product = lambda x, v: rosen_inverse_hess(x).dot(v),
