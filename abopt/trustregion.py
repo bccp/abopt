@@ -41,16 +41,15 @@ class TrustRegionCG(Optimizer):
                 self.cg_monitor(*kwargs)
 
         if self.cg_preconditioner:
-            C, Cinv = self.cg_preconditioner(problem, state)
+            C = self.cg_preconditioner(Avp)
         else:
-            Cinv = None
             C = None
 
         # solve - H z = g constrained by the radius
         radius1 = state.radius
 
         z = cg_steihaug(problem.vs, Avp, state.Pg, state.z, radius1,
-                self.cg_rtol, self.cg_maxiter, monitor=cg_monitor, Cinv=Cinv, C=C)
+                self.cg_rtol, self.cg_maxiter, monitor=cg_monitor, C=C)
 
         mdiff = 0.5 * dot(z, Avp(z)) - dot(state.Pg, z)
 
@@ -163,7 +162,7 @@ class TrustRegionCG(Optimizer):
         #print('move', prop.y)
         Optimizer.move(self, problem, state, prop)
 
-def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, Cinv=None, C=None):
+def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, C=None):
     """ best effort solving for y = A^{-1} g with cg,
         given the trust-region constraint;
 
@@ -180,16 +179,16 @@ def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, Cinv=No
             http://epubs.siam.org/doi/abs/10.1137/S1052623497327854
 
 
-        Cinv and C are the preconditioner operator. C^{-1}, and C, where C is close to A;
-        or Cinv(A) has a lower condition number.
+        C(v, direction) the preconditioner operator. C^{direction}. 
+        Usually, C is close to A, such that C^{-1} A has a lower condition number.
 
         One particular case is if C is the diagonal of A.
 
         See Steihaug's paper. https://epubs.siam.org/doi/pdf/10.1137/0720042
 
     """
-    if C is None: C = lambda x:x
-    if Cinv is None: Cinv = lambda x:x
+    if C is None: C = lambda x, direction: x
+
     dot = vs.dot
     mul = vs.mul
     addmul = vs.addmul
@@ -199,7 +198,7 @@ def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, Cinv=No
 
     # FIXME: how to seed cg with a different starting point?
     r0 = addmul(Avp(z0), g, -1)
-    mr0 = Cinv(r0)
+    mr0 = C(r0, -1)
     d0 = mul(mr0, 1)
 
     j = 0
@@ -226,14 +225,14 @@ def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, Cinv=No
             d1 = d0
             message = "zero hessian"
 
-        elif dBd0 <= 0 or dot(p0, C(p0)) ** 0.5 >= Delta:
+        elif dBd0 <= 0 or dot(p0, C(p0, 1)) ** 0.5 >= Delta:
             #print("dBd0", dBd0, "rad", dot(p0, p0) ** 0.5, Delta)
             # negative curvature or too fast
             # find tau such that p = z0 + tau d0 minimizes m(p)
             # and satisfies ||pk|| == \Delta_k.
-            a_ = dot(d0, C(d0))
-            b_ = 2 * dot(z0, C(d0))
-            c_ = dot(z0, C(z0)) - Delta ** 2
+            a_ = dot(d0, C(d0, 1))
+            b_ = 2 * dot(z0, C(d0, 1))
+            c_ = dot(z0, C(z0, 1)) - Delta ** 2
             cond = (b_ **2 - 4 * a_ * c_)
             if a_ == 0 or cond < 0: # already at the solution, do not move.
                 rho1 = -1
@@ -248,7 +247,7 @@ def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, Cinv=No
                     message = "no solution to second order equation, restarting "
                     z0 = vs.zeros_like(g)
                     r0 = addmul(Avp(z0), g, -1)
-                    mr0 = Cinv(r0)
+                    mr0 = C(r0, -1)
                     d0 = mul(mr0, 1)
                     rho1 = dot(mr0, r0)   # <r, mr>
             else:
@@ -273,7 +272,7 @@ def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, Cinv=No
         else:
             z1 = addmul(z0, d0,  -alpha)
             r1 = addmul(r0, Bd0, -alpha)
-            mr1 = Cinv(r1)
+            mr1 = C(r1, -1)
 
             rho1 = dot(mr1, r1)
             d1 = mul(mr1, 1)

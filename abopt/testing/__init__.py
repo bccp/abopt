@@ -25,9 +25,11 @@ class ChiSquareProblem(Problem):
             v = numpy.array(v)
             return vjp(x, jvp(x, v)) * 2
 
-        Problem.__init__(self, objective=objective,
+        Problem.__init__(self,
+                      objective=objective,
                       gradient=gradient,
-                      hessian_vector_product=hessian, precond=precond)
+                      hessian_vector_product=hessian,
+                      precond=precond)
 
 from scipy.linalg import inv
 def rosen_inverse_hess(x):

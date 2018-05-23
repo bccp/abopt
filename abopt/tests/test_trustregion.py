@@ -37,8 +37,13 @@ def test_cg_steihaug():
 
     assert_allclose(Avp(z), g)
 
-    z = cg_steihaug(real_vector_space, Avp, g, g*0, Delta, rtol, monitor=print,
-        C=lambda v: C.dot(v), Cinv=lambda v: numpy.linalg.inv(C).dot(v))
+    def precond(v, direction):
+        if direction == -1:
+            return numpy.linalg.inv(C).dot(v)
+        else:
+            return C.dot(v)
+
+    z = cg_steihaug(real_vector_space, Avp, g, g*0, Delta, rtol, monitor=print, C=precond)
 
     assert_allclose(Avp(z), g)
 
@@ -85,13 +90,51 @@ def test_gaussnewton(alpha, beta):
     problem = ChiSquareProblem(J=J, phi=phi, phiprime=phiprime)
 
     x0 = numpy.zeros(4)
-#    print("Fake Hessian")
-#    print(fake_hessian(x0, [1, 0, 0, 0]))
-#    print(fake_hessian(x0, [0, 1, 0, 0]))
-#    print(fake_hessian(x0, [0, 0, 1, 0]))
-#    print(fake_hessian(x0, [0, 0, 0, 1]))
+    r = trcg.minimize(problem, x0, monitor=print)
+    assert r.converged
+    assert_allclose(problem.f(r.x), 0, atol=1e-7)
+
+@pytest.mark.parametrize("alpha,beta", 
+    [
+    [1.0, 0.0],
+    ]
+)
+def test_gaussnewton_prec(alpha, beta):
+    trcg = TrustRegionCG(maxiter=100, cg_rtol=1e-9,
+            rtol=1e-8, maxradius=80,
+            cg_monitor=print)
+
+    J = numpy.array([ [1e6, 0,     0,  1],
+                      [0,  10,   0,  0],
+                      [2,  0,  10,  0],
+                      [1, 0,   0,  1]])
+
+    # finding the diagonals and use it to precondition
+    # the hessian inversion.
+    def cg_precond(Avp):
+        s = 0
+        for v in numpy.eye(len(J)):
+            Av = Avp(v)
+            vAv = v * Av
+            s = s + vAv
+        def C(r, direction):
+            if direction == -1:
+                return r / s
+            else:
+                return r * s
+        return C
+
+    trcg.cg_preconditioner = cg_precond
+
+    def phi(x): return alpha * x + beta * x ** 2
+    def phiprime(x): return alpha + 2 * beta * x
+
+    problem = ChiSquareProblem(J=J, phi=phi, phiprime=phiprime)
+
+    x0 = numpy.zeros(len(J))
 
     r = trcg.minimize(problem, x0, monitor=print)
     assert r.converged
+    assert r.nit < 10
     assert_allclose(problem.f(r.x), 0, atol=1e-7)
 
