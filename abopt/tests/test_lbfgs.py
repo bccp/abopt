@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import pytest
 
 from abopt.abopt2 import Preconditioner
