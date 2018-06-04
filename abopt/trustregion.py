@@ -24,6 +24,7 @@ class TrustRegionCG(Optimizer):
                         'cg_maxiter' : 50,
                         'cg_rtol' : 1e-2,
                         'maxradius' : 100.,
+                        'minradius' : 1e-9,
                         'initradius' : None,
                         }
 
@@ -108,6 +109,9 @@ class TrustRegionCG(Optimizer):
 
             prop, r1 = self.linesearch(problem, state, z, 2.0 * radius1, maxiter=self.linesearchiter)
 
+            if prop is None:
+                return None
+
             # reinit the trust region
             if self.initradius is None:
                 prop.radius = min(state.Pgnorm, self.maxradius)
@@ -130,13 +134,15 @@ class TrustRegionCG(Optimizer):
         if prop.reinit:
             if problem.check_convergence(state.y, prop.y):
                 return ConvergedIteration("Objective is not improving in GD")
-
         else:
             if prop.radius >= state.radius:
                 if problem.check_convergence(state.y, prop.y):
                     return ConvergedIteration("Objective is not improving in trust region")
                 if prop.dxnorm <= problem.xtol:
                     return ConvergedIteration("Solution is not moving in trust region")
+
+            if prop.radius < self.minradius:
+                return ConvergedIteration("Trust region is too small.")
 
         if prop.gnorm <= problem.gtol:
             return ConvergedIteration("Gradient is sufficiently small")
