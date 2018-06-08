@@ -134,7 +134,7 @@ class Preconditioner(object):
     """ A preconditioner has four functions, corresponding
         to left dot and right dot of P and Q on a vector.
 
-        P = Q ^{-1},
+        P = [Q ^{-1}]^T,
 
         P and Q are Given by the following coordinate transformations
         from x to x~.

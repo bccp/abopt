@@ -114,7 +114,7 @@ class TrustRegionCG(Optimizer):
 
             # reinit the trust region
             if self.initradius is None:
-                prop.radius = min(state.Pgnorm, self.maxradius)
+                prop.radius = min(r1, self.maxradius)
             else:
                 prop.radius = self.initradius
 
