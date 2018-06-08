@@ -211,14 +211,15 @@ class Problem(object):
 
     def check_preconditioner(self, x0):
         vs = self.vs
-
+            
         d = vs.addmul(self.Px2x(self.x2Px(x0)), x0, -1)
-        if not vs.dot(d, d) ** 0.5 < 1e-15:
+        if vs.dot(d, d) > 1e-6 * vs.dot(x0, x0):
             raise ValueError("Preconditioner's vQp and Pvp are not inverses.")
 
         d = vs.addmul(self.Pg2g(self.g2Pg(x0)), x0, -1)
-        if not vs.dot(d, d) ** 0.5 < 1e-15:
+        if vs.dot(d, d) > 1e-6 * vs.dot(x0, x0):
             raise ValueError("Preconditioner's vPp and Qvp are not inverses.")
+
 
     def f(self, x):
         return self._objective(x)
