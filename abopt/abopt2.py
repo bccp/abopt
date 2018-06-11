@@ -305,6 +305,11 @@ class Optimizer(object):
         self.__dict__.update(kwargs)
 
     def terminated(self, problem, state):
+        # check for maxiter first to overrride
+        # continuing due to ConvergedItreration.
+        if state.nit > self.maxiter: return True
+        if state.dy is None: return False
+
         if isinstance(state.assessment, ConvergedIteration):
             if state.Pgnorm == 0:
                 return True
@@ -314,8 +319,6 @@ class Optimizer(object):
                 return False
         if isinstance(state.assessment, FailedIteration):
             return True
-        if state.nit > self.maxiter: return True
-        if state.dy is None: return False
 
         return False
 
