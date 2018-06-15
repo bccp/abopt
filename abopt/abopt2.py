@@ -25,6 +25,8 @@ class ContinueIteration(str): pass
 class ConvergedIteration(str): pass
 class FailedIteration(str): pass
 
+import time
+
 class State(object):
     def __init__(self):
         self.nit = 0
@@ -40,6 +42,8 @@ class State(object):
         self.y_ = []
         self.z = None
         self.Pg = None
+        self.timestamp = time.time()
+        self.wallclock = 0
 
     def __getitem__(self, key):
         return getattr(self, key)
@@ -47,7 +51,15 @@ class State(object):
         return hasattr(self, key)
 
     def __repr__(self):
-        d = [(k, self[k]) for k in ['nit', 'fev', 'gev', 'hev', 'y', 'dy', 'xnorm', 'dxnorm', 'gnorm', 'theta', 'converged', 'message', 'assessment', 'radius', 'B', 'rate', 'rho', 'conviter'] if k in self]
+        keys = ['nit', 'wallclock', 'fev', 'gev', 'hev',
+                'radius', 'B', 'rate', 'rho',
+                'y', 'dy',
+                'xnorm', 'dxnorm', 'gnorm', 'theta',
+                'converged', 'message', 'assessment', 'conviter']
+
+        from collections import OrderedDict
+        d = [(k, self[k]) for k in keys if k in self]
+
         return repr(d)
 
 class Proposal(object):
@@ -346,6 +358,8 @@ class Optimizer(object):
         state.Pxnorm = prop.Pxnorm
         state.Pgnorm = prop.Pgnorm
         state.dxnorm = prop.dxnorm
+        state.wallclock = time.time() - state.timestamp
+        state.timestamp = timestamp = time.time()
 
     def assess(self, problem, state, prop):
         if prop is None:
@@ -437,5 +451,3 @@ def minimize(optimizer, objective, gradient, x0, hessian_vector_product=None,
     problem = Problem(objective, gradient, hessian_vector_product=hessian_vector_product, vs=vs, precond=precond)
 
     return optimizer.minimize(problem, x0, monitor=monitor)
-
-
