@@ -54,11 +54,11 @@
     Yu Feng
 """
 
-from .base import Optimizer
-from .base import Proposal
+from abopt.base import Optimizer
+from abopt.base import Proposal
 
-from .linesearch import backtrace
-from .linesearch import simpleregulator
+from abopt.linesearch import backtrace
+from abopt.linesearch import simpleregulator
 
 def scalar(vs, hessian):
     """ M1QN2.A in GL.  EQ 4.1;

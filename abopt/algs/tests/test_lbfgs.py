@@ -2,14 +2,14 @@ from __future__ import print_function
 
 import pytest
 
-from abopt.abopt2 import Preconditioner
+from abopt.base import Preconditioner
 
 from abopt.linesearch import minpack, backtrace, exact
 
-from abopt.lbfgs import LBFGS
-from abopt.lbfgs import inverse_bfgs, direct_bfgs, scalar, inverse_dfp
-from abopt.lbfgs import pre_scaled_direct_bfgs, pre_scaled_inverse_dfp
-from abopt.lbfgs import post_scaled_direct_bfgs, post_scaled_inverse_dfp
+from abopt.algs.lbfgs import LBFGS
+from abopt.algs.lbfgs import inverse_bfgs, direct_bfgs, scalar, inverse_dfp
+from abopt.algs.lbfgs import pre_scaled_direct_bfgs, pre_scaled_inverse_dfp
+from abopt.algs.lbfgs import post_scaled_direct_bfgs, post_scaled_inverse_dfp
 
 from abopt.testing import RosenProblem, ChiSquareProblem
 import numpy

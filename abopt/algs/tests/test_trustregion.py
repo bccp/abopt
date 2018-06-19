@@ -1,7 +1,6 @@
 from __future__ import print_function
 
-from abopt.abopt2 import Problem
-from abopt.trustregion import cg_steihaug, TrustRegionCG
+from abopt.algs.trustregion import cg_steihaug, TrustRegionCG
 
 import numpy
 from numpy.testing import assert_allclose

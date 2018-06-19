@@ -1,16 +1,16 @@
-from .vectorspace import VectorSpace
+from .algs.lbfgs import LBFGS
+from .algs.gradient import GradientDescent
+from .algs.newton import DirectNewton
+from .algs.trustregion import TrustRegionCG
+
 from .vectorspace import real_vector_space
 from .vectorspace import complex_vector_space
 
-from .lbfgs import LBFGS
-from .naivemethods import GradientDescent, DirectNewton
-from .trustregion import TrustRegionCG
-
 # compatibility
+from .base import VectorSpace
 from .base import State
 from .base import Preconditioner
 from .base import Problem
-
 
 def minimize(optimizer, objective, gradient, x0, hessian_vector_product=None,
     monitor=None, vs=real_vector_space, precond=None):

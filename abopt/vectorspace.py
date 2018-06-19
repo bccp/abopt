@@ -13,65 +13,7 @@
     space and :math:`x + \lambda g^\dagger` is well defined.
 
 """
-class VectorSpace(object):
-    def __init__(self, addmul=None, dot=None):
-        if addmul:
-            self.addmul = addmul
-        if dot:
-            self.dot = dot
-
-    def copy(self, a):
-        r = self.addmul(0, a, 1)
-        assert type(r) is type(a)
-        return r
-
-    def ones_like(self, b):
-        r = self.addmul(1, b, 0)
-        assert type(r) is type(b)
-        return r
-
-    def zeros_like(self, b):
-        r = self.addmul(0, b, 0)
-        assert type(r) is type(b)
-        return r
-
-    def mul(self, b, c, p=1):
-        return self.addmul(0, b, c, p)
-
-    def pow(self, c, p):
-        i = self.ones_like(c)
-        return self.addmul(0, i, c, p)
-
-    def addmul(self, a, b, c, p=1):
-        """ Defines the addmul operation.
-
-            either subclass this method or supply a method in the constructor, __init__
-
-            addmul(a, b, c, p) := a + b * c ** p
-
-            The result shall be a vector like b.
-
-            b is always a vector for this VectorSpace; though be aware
-            that there can be multiple valid Python types defined on the same
-            VectorSpace. For example, particle positions are straight numpy.ndarray,
-            An overdensity field may be a ComplexField or a RealField object.
-        """
-
-        raise NotImplementedError
-
-    def dot(self, a, b):
-        """ defines the inner product operation. 
-
-            dot(a, b) := a @ b
-
-            The result shall be a scalar floating point number.
-
-            a and b are always vector for this VectorSpace, and are guarenteed
-            to be of the same Python type -- if not there is a bug from upstream
-            callers.
-
-        """
-        raise NotImplementedError
+from abopt.base import VectorSpace
 
 class RealVectorSpace(VectorSpace):
     def addmul(self, a, b, c, p=1):

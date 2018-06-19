@@ -5,9 +5,9 @@
 
 """
 
-from .base import Optimizer, Problem, Proposal
-from .base import ContinueIteration, ConvergedIteration, FailedIteration
-from .linesearch import backtrace
+from abopt.base import Optimizer, Problem, Proposal
+from abopt.base import ContinueIteration, ConvergedIteration, FailedIteration
+from abopt.linesearch import backtrace
 
 class TrustRegionCG(Optimizer):
     optimizer_defaults = {'eta1' : 0.1,
