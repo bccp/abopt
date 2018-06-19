@@ -19,3 +19,13 @@ def simpleregulator(problem, state, z):
 
     return rmax
 
+def nullsearch(problem, state, z, rate, maxiter):
+    """ A null line search that does not change the rate;
+
+        Useful for e.g. stochastic gradient descent.
+
+    """
+
+    Px1 = addmul(state.Px, z, -rate)
+    prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
+    return prob, rate
