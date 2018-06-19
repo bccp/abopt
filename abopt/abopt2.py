@@ -1,12 +1,16 @@
+# expose optimization algorithms
 from .algs.lbfgs import LBFGS
 from .algs.gradient import GradientDescent
 from .algs.newton import DirectNewton
 from .algs.trustregion import TrustRegionCG
 
+# expose common vector spaces
 from .vectorspace import real_vector_space
 from .vectorspace import complex_vector_space
 
-# compatibility
+# providing base classes here
+# for external subclassing
+
 from .base import VectorSpace
 from .base import State
 from .base import Preconditioner
