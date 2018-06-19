@@ -224,7 +224,7 @@ class Problem(object):
 
     def check_preconditioner(self, x0):
         vs = self.vs
-            
+
         d = vs.addmul(self.Px2x(self.x2Px(x0)), x0, -1)
         if vs.dot(d, d) > 1e-6 * vs.dot(x0, x0):
             raise ValueError("Preconditioner's vQp and Pvp are not inverses.")
@@ -295,10 +295,11 @@ class Problem(object):
         return thresh
 
     def check_convergence(self, y0, y1):
+        # This condition may need to be removed.
+        # some optimizers do not need the objectve to have been strictly decreasing
+        # for convergence.
         if y1 > y0 :
             return False
-            # probably shall do this
-            # raise RuntimeError("new proposal is larger than previous value")
 
         valmax = max(abs(y0), abs(y1))
 
