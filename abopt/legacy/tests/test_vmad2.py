@@ -1,5 +1,5 @@
 from __future__ import print_function
-from abopt.vmad2 import CodeSegment, Engine, statement, programme, ZERO, logger, Literal
+from abopt.legacy.vmad2 import CodeSegment, Engine, statement, programme, ZERO, logger, Literal
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
 from numpy.testing.decorators import skipif
 import pytest
