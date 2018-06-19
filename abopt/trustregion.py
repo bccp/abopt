@@ -5,10 +5,11 @@
 
 """
 
-from .abopt2 import Optimizer, Problem, Proposal, ContinueIteration, ConvergedIteration, FailedIteration
+from .base import Optimizer, Problem, Proposal
+from .base import ContinueIteration, ConvergedIteration, FailedIteration
+from .linesearch import backtrace
 
 class TrustRegionCG(Optimizer):
-    from .linesearch import backtrace
     optimizer_defaults = {'eta1' : 0.1,
                         'eta2' : 0.25,
                         'eta3' : 0.75,

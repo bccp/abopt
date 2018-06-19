@@ -54,8 +54,11 @@
     Yu Feng
 """
 
-from .abopt2 import Optimizer
-from .abopt2 import Proposal
+from .base import Optimizer
+from .base import Proposal
+
+from .linesearch import backtrace
+from .linesearch import simpleregulator
 
 def scalar(vs, hessian):
     """ M1QN2.A in GL.  EQ 4.1;
@@ -287,8 +290,6 @@ class LBFGSFailure(StopIteration):
         StopIteration.__init__(self)
 
 class LBFGS(Optimizer):
-    from .linesearch import backtrace
-    from .linesearch import simpleregulator
     optimizer_defaults = {
         'maxiter' : 100000,
         'conviter' : 6,

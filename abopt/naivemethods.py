@@ -1,7 +1,4 @@
-from .abopt2 import (
-        Optimizer,
-        )
-
+from .base import Optimizer
 from .linesearch import backtrace
 
 class GradientDescent(Optimizer):

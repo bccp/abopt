@@ -1,4 +1,4 @@
-from .abopt2 import Proposal
+from .base import Proposal
 
 def simpleregulator(problem, state, z):
     # In LBFGS, the purpose of GD is to estimate the Hessian,
