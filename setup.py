@@ -17,7 +17,12 @@ setup(name="abopt", version=find_version("abopt/version.py"),
       maintainter_email="rainwoodman@gmail.com",
       description="Optimization of abstract data types in Python",
       zip_safe=True, # this should be pure python
-      packages=["abopt", "abopt.tests", "abopt.testing"],
+      packages=["abopt",
+                "abopt.linesearch",
+                "abopt.tests",
+                "abopt.testing",
+                "abopt.legacy",
+               ],
       license='GPLv3',
       install_requires=['numpy', 
                         'scipy', # currently needed for 1d linesearch

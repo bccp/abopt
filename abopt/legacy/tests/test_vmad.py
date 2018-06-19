@@ -1,5 +1,5 @@
 from __future__ import print_function
-from abopt.vmad import VM, microcode, programme, Zero, Tape
+from abopt.legacy.vmad import VM, microcode, programme, Zero, Tape
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
 import numpy
 

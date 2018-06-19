@@ -1,5 +1,5 @@
 from __future__ import print_function
-from abopt import GradientDescent, LBFGS, SLBFGS
+from abopt.legacy.abopt import GradientDescent, LBFGS, SLBFGS
 from numpy.testing import assert_raises, assert_allclose
 
 def test_nothing():
