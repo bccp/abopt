@@ -25,6 +25,9 @@ and linear operators are supplied via a ``vectorspace`` object. The reason for
 this is because on a distributed problem the inner product must do a global
 reduction.
 
+The usage involves defining a ``Problem``, then use an optimizer to minimize it.
+The test suite are a good source of examples.
+
 Things have been put together in more or less of a haste.
 I have a feeling we may need a restructure at some point; the current way
 of dealing with meta-parameters (e.g. trust region radius) is mutable and thus
