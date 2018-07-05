@@ -26,6 +26,6 @@ this is because on a distributed problem the inner product must do a global
 reduction.
 
 Things have been put together in more or less of a haste.
-I have a feeling we may need to move to abopt3 at some point; the current way
+I have a feeling we may need a restructure at some point; the current way
 of dealing with meta-parameters (e.g. trust region radius) is mutable and thus
-awkward. But maybe there is no way around it.
+awkward.
