@@ -20,7 +20,12 @@ The package contains two components:
 This is the second iteration of the design.
 The current main interface is in `abopt.abopt2`.
 
+The main difference between abopt and scipy's algorithm is that the inner product
+and linear operators are supplied via a ``vectorspace`` object. The reason for
+this is because on a distributed problem the inner product must do a global
+reduction.
+
+Things have been put together in more or less of a haste.
 I have a feeling we may need to move to abopt3 at some point; the current way
 of dealing with meta-parameters (e.g. trust region radius) is mutable and thus
 awkward. But maybe there is no way around it.
-
