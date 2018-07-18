@@ -76,4 +76,4 @@ def test_state():
     print()
     print(s.format(header=True))
     print(s.format())
-    print(s.format(columns=['nit']))
+    print(s.format(columns=['nit', 'na']))

@@ -30,6 +30,7 @@ class State(object):
         self.fev = 0
         self.gev = 0
         self.hev = 0
+        self.y = None
         self.dy = None
         self.dxnorm = None
         self.xnorm = None
@@ -47,6 +48,28 @@ class State(object):
         self.timestamp = time.time()
         self.wallclock = 0
 
+        self.default_format = dict(
+        [
+            ('nit', '%04d',),
+            ('fev', '%04d',),
+            ('gev', '%04d',),
+            ('hev', '%04d',),
+            ('y', '% 13.6e'),
+            ('dy', '% 13.6e'),
+            ('xnorm', '% 10.4e'),
+            ('gnorm', '% 10.4e'),
+            ('theta', '% 4.2f'),
+            ('radius', '% 8.4e'),
+            ('B', '%10s'),
+            ('rate', '% 8.2f'),
+            ('rho', '% 4.2f'),
+            ('conviter', '%04d'),
+            ('converged', '% 6s'),
+            ('message', '% 20s'),
+            ('assessment', '% 20s')
+        ])
+
+
     def __getitem__(self, key):
         return getattr(self, key)
     def __contains__(self, key):
@@ -55,34 +78,31 @@ class State(object):
     def __repr__(self):
         return self.format()
 
-    default_format = [
-        ('nit', '%04d',),
-        ('fev', '%04d',),
-        ('gev', '%04d',),
-        ('hev', '%04d',),
-        ('y', '% 13.6e'),
-        ('dy', '% 13.6e'),
-        ('xnorm', '% 10.4e'),
-        ('gnorm', '% 10.4e'),
-        ('theta', '% 4.2f'),
-        ('radius', '% 8.4e'),
-        ('B', '%10s'),
-        ('rate', '% 8.2f'),
-        ('rho', '% 4.2f'),
-        ('conviter', '%04d'),
-        ('converged', '% 6s'),
-        ('message', '% 20s'),
-        ('assessment', '% 20s')
-    ]
-
-
     def format(self, columns=None, header=False):
+        """ format a state object.
+
+            Parameters
+            ----------
+            columns : list of string or tuples.
+                for each item,
+                if tuple, the format of the column. if string, use a default format
+                for the column.
+            header : bool
+                format the column headers if True
+        """
+
         dd = dict(self.default_format)
 
         if columns is None:
-            columns = dd.keys()
+            columns = self.default_format
 
-        keys = { key : dd.get(key, '%10s') for key in columns if key in self}
+        c2 = []
+        for item in columns:
+            if not isinstance(item, tuple):
+                item = (item, dd.get(item, '%10s'))
+            c2.append((item[0], item[1]))
+
+        keys = { key : fmt for key, fmt in c2}
 
         def get_width(key):
             fmt = keys[key]
@@ -98,18 +118,21 @@ class State(object):
                 return ('%%%ds' % (get_width(key)))
 
         if header:
-            return (' '.join(get_strfmt(key, True) % key for key in keys))
+            return (' '.join(get_strfmt(key, True) % key for key, fmt in c2))
 
         else:
             def fmt_field(key):
-                try:
-                    s = keys[key] % self[key]
-                except TypeError:
-                    s = str(self[key])
+                if key not in self:
+                    s = "N/A"
+                else:
+                    try:
+                        s = keys[key] % self[key]
+                    except TypeError:
+                        s = str(self[key])
 
                 return get_strfmt(key, False) % s
 
-            return (' '.join(fmt_field(key)  for key in keys))
+            return (' '.join(fmt_field(key)  for key, fmt in c2))
 
 class Proposal(object):
     def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None, z=None):
