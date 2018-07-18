@@ -118,7 +118,7 @@ class TrustRegionCG(Optimizer):
 
             prop.rho = 1.0
             prop.reinit = True
-            prop.message = "Falling back to line search"
+            prop.message = "line search"
 
         return prop
 

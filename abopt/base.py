@@ -56,13 +56,13 @@ class State(object):
             ('hev', '%04d',),
             ('y', '% 13.6e'),
             ('dy', '% 13.6e'),
-            ('xnorm', '% 10.4e'),
-            ('gnorm', '% 10.4e'),
+            ('xnorm', '% 11.4e'),
+            ('gnorm', '% 11.4e'),
             ('theta', '% 4.2f'),
-            ('radius', '% 8.4e'),
+            ('radius', '% 9.2e'),
             ('B', '%10s'),
             ('rate', '% 8.2f'),
-            ('rho', '% 4.2f'),
+            ('rho', '% 5.2f'),
             ('conviter', '%04d'),
             ('converged', '% 6s'),
             ('message', '% 20s'),
@@ -78,7 +78,7 @@ class State(object):
     def __repr__(self):
         return self.format()
 
-    def format(self, columns=None, header=False):
+    def format(self, columns=None, header=False, sp='|'):
         """ format a state object.
 
             Parameters
@@ -118,7 +118,7 @@ class State(object):
                 return ('%%%ds' % (get_width(key)))
 
         if header:
-            return (' '.join(get_strfmt(key, True) % key for key, fmt in c2))
+            return (sp.join(get_strfmt(key, True) % key for key, fmt in c2))
 
         else:
             def fmt_field(key):
@@ -132,7 +132,7 @@ class State(object):
 
                 return get_strfmt(key, False) % s
 
-            return (' '.join(fmt_field(key)  for key, fmt in c2))
+            return (sp.join(fmt_field(key)  for key, fmt in c2))
 
 class Proposal(object):
     def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None, z=None):

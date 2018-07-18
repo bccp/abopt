@@ -340,17 +340,17 @@ class LBFGS(Optimizer):
 
             # no hessian approximation yet, use GD
             if len(B.Y) == 0:
-                raise LBFGSFailure("no hessian approximate")
+                raise LBFGSFailure("no lbfgs")
 
             z = B.hvp(state.Pg)
 
             # hvp cannot be computed, recover
             if z is None:
-                raise LBFGSFailure("hvp cannot be computed")
+                raise LBFGSFailure("hvp failed")
 
             znorm = dot(z, z) ** 0.5
             if dot(z, state.Pg) / (state.Pgnorm * znorm) < - 0.2:
-                raise LBFGSFailure("lbfgs misaligned with gradient, skipping it.")
+                raise LBFGSFailure("lbfgs misaligned")
 
             rmax = 1.
 
@@ -358,11 +358,11 @@ class LBFGS(Optimizer):
 
             # failed line search, recover
             if prop is None:
-                raise LBFGSFailure("line search along lbfgs failed.")
+                raise LBFGSFailure("lbfgs linesearch failed")
 
             #if LBFGS is not moving, try GD
             if problem.check_convergence(state.y, prop.y):
-                raise LBFGSFailure("motion along lbfgs produced no improvement")
+                raise LBFGSFailure("lbfgs no improvement")
                 # print('LBFGS Starting step = %0.2e, abort LBGFS at step = %0.2e'%(rmax, r1))
 
         except LBFGSFailure as e:
