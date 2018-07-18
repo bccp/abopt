@@ -32,6 +32,11 @@ class State(object):
         self.hev = 0
         self.dy = None
         self.dxnorm = None
+        self.xnorm = None
+        self.gnorm = None
+        self.Pxnorm = None
+        self.Pgnorm = None
+        self.dxnorm = None
         self.assessment = None
         self.conviter = 0
         self.converged = False
@@ -48,16 +53,63 @@ class State(object):
         return hasattr(self, key)
 
     def __repr__(self):
-        keys = ['nit', 'wallclock', 'fev', 'gev', 'hev',
-                'radius', 'B', 'rate', 'rho',
-                'y', 'dy',
-                'xnorm', 'dxnorm', 'gnorm', 'theta',
-                'converged', 'message', 'assessment', 'conviter']
+        return self.format()
 
-        from collections import OrderedDict
-        d = [(k, self[k]) for k in keys if k in self]
+    default_format = [
+        ('nit', '%04d',),
+        ('fev', '%04d',),
+        ('gev', '%04d',),
+        ('hev', '%04d',),
+        ('y', '% 13.6e'),
+        ('dy', '% 13.6e'),
+        ('xnorm', '% 10.4e'),
+        ('gnorm', '% 10.4e'),
+        ('theta', '% 4.2f'),
+        ('radius', '% 8.4e'),
+        ('B', '%10s'),
+        ('rate', '% 8.2f'),
+        ('rho', '% 4.2f'),
+        ('conviter', '%04d'),
+        ('converged', '% 6s'),
+        ('message', '% 20s'),
+        ('assessment', '% 20s')
+    ]
 
-        return repr(d)
+
+    def format(self, columns=None, header=False):
+        dd = dict(self.default_format)
+
+        if columns is None:
+            columns = dd.keys()
+
+        keys = { key : dd.get(key, '%10s') for key in columns if key in self}
+
+        def get_width(key):
+            fmt = keys[key]
+            width = int(fmt[1:-1].split('.')[0].strip())
+            if width < len(key):
+                width = len(key)
+            return width
+
+        def get_strfmt(key, strict):
+            if strict:
+                return ('%%%d.%ds' % (get_width(key), get_width(key)))
+            else:
+                return ('%%%ds' % (get_width(key)))
+
+        if header:
+            return (' '.join(get_strfmt(key, True) % key for key in keys))
+
+        else:
+            def fmt_field(key):
+                try:
+                    s = keys[key] % self[key]
+                except TypeError:
+                    s = str(self[key])
+
+                return get_strfmt(key, False) % s
+
+            return (' '.join(fmt_field(key)  for key in keys))
 
 class Proposal(object):
     def __init__(self, problem, y=None, x=None, Px=None, g=None, Pg=None, z=None):

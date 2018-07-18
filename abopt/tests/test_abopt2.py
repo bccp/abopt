@@ -70,3 +70,10 @@ def test_abopt_gd_complex():
 
     assert_allclose(X, Y, rtol=1e-4)
 
+def test_state():
+    from abopt.abopt2 import State
+    s = State()
+    print()
+    print(s.format(header=True))
+    print(s.format())
+    print(s.format(columns=['nit']))
