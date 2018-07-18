@@ -467,7 +467,11 @@ class Optimizer(object):
         prop = InitialProposal(problem, x=x0, Px=Px0).complete(state)
         return prop
 
-    def restart(optimizer, problem, state, monitor=None):
+    def _minimize(optimizer, problem, state, monitor=None):
+
+        prop = optimizer.start(problem, state, state['x'])
+
+        optimizer.move(problem, state, prop)
 
         if monitor is not None:
             monitor(state)
@@ -499,21 +503,46 @@ class Optimizer(object):
         return state
 
     def minimize(optimizer, problem, x0, monitor=None, **state_args):
+        """ minimize a problem starting from state x0
 
-        state = State()
+            Parameters
+            ----------
+            problem : Problem
+                the problem object, which defines the objective function
+                and the vector space of the parameters.
 
-        # initialize state with args
-        for key, value in state_args.items():
-            setattr(state, key, value)
+            x0 : object or a State
+                the initial state.
+                if a object is given, a state is constructed by setting state_args
+                positioning the parameters at x0.
+                if a State object is given it will be used and updated.
 
-        # check the preconditioner.
-        problem.check_preconditioner(x0)
+            monitor: function(state)
+                a function that gets called on each iteration.
+                if state.dy is None then it is the first time monitor is called.
 
-        prop = optimizer.start(problem, state, x0)
+            Returns
+            -------
+            state : a State object of the final minimization result.
+            state.converged : if the solution has converged
+            state.x : the new value of the parameter.
+            state.y : the new value of the objective
 
-        optimizer.move(problem, state, prop)
+        """
+        if not isinstance(x0, State):
+            state = State()
 
-        optimizer.restart(problem, state, monitor)
+            state.x = x0
+            # initialize state with args
+            for key, value in state_args.items():
+                setattr(state, key, value)
+
+            # check the preconditioner.
+            problem.check_preconditioner(x0)
+        else:
+            state = x0
+
+        optimizer._minimize(problem, state, monitor)
 
         return state
 
