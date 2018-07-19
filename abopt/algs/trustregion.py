@@ -100,25 +100,6 @@ class TrustRegionCG(Optimizer):
 
         prop.radius = radius1
         prop.rho = rho
-        prop.reinit = False
-
-        #if TrustRegion is not moving, try GD
-        if rho > self.eta1 and problem.check_convergence(state.y, prop.y):
-            mul = problem.vs.mul
-
-            z = mul(state.Pg, 1 / state.Pgnorm)
-
-            prop, r1 = self.linesearch(problem, state, z, 2.0 * radius1, maxiter=self.linesearchiter)
-
-            if prop is None:
-                return None
-
-            # set trustregion radius to the line search radius.
-            prop.radius = min(r1, self.maxradius)
-
-            prop.rho = 1.0
-            prop.reinit = True
-            prop.message = "line search"
 
         return prop
 
@@ -129,18 +110,14 @@ class TrustRegionCG(Optimizer):
         prop = prop.complete(state)
 
         #print("assess radius", state.radius, 'tol', problem.get_tol(state.y), 'gnorm', prop.gnorm, 'gtol', problem.gtol)
-        if prop.reinit:
+        if prop.radius >= state.radius:
             if problem.check_convergence(state.y, prop.y):
-                return ConvergedIteration("Objective is not improving in GD")
-        else:
-            if prop.radius >= state.radius:
-                if problem.check_convergence(state.y, prop.y):
-                    return ConvergedIteration("Objective is not improving in trust region")
-                if prop.dxnorm <= problem.xtol:
-                    return ConvergedIteration("Solution is not moving in trust region")
+                return ConvergedIteration("Objective is not improving in trust region")
+            if prop.dxnorm <= problem.xtol:
+                return ConvergedIteration("Solution is not moving in trust region")
 
-            if prop.radius < self.minradius:
-                return ConvergedIteration("Trust region is too small.")
+        if prop.radius < self.minradius:
+            return ConvergedIteration("Trust region is too small.")
 
         if prop.gnorm <= problem.gtol:
             return ConvergedIteration("Gradient is sufficiently small")
@@ -155,7 +132,6 @@ class TrustRegionCG(Optimizer):
         else:
             prop.radius = self.initradius
 
-        prop.reinit = False
         prop.rho = 1.0
         return prop
 
