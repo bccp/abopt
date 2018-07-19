@@ -400,18 +400,18 @@ class Optimizer(object):
     def terminated(self, problem, state):
         # check for maxiter first to overrride
         # continuing due to ConvergedItreration.
-        if state.nit > self.maxiter: return True
-        if state.dy is None: return False
 
-        if isinstance(state.assessment, ConvergedIteration):
+        if state.nit > self.maxiter: return True
+
+        if isinstance(state.assessment, (ConvergedIteration, FailedIteration)):
             if state.Pgnorm == 0:
                 return True
             if state.conviter >= self.conviter:
                 return True
             else:
                 return False
-        if isinstance(state.assessment, FailedIteration):
-            return True
+
+        if state.dy is None: return False
 
         return False
 
@@ -473,14 +473,18 @@ class Optimizer(object):
 
     def _minimize(optimizer, problem, state, monitor=None):
 
-        prop = optimizer.start(problem, state, state['x'])
-
-        optimizer.move(problem, state, prop)
-
-        if monitor is not None:
-            monitor(state)
-
+        first_iteration = True
         while not optimizer.terminated(problem, state):
+            if isinstance(state.assessment, (ConvergedIteration, FailedIteration)) \
+              or first_iteration:
+                prop = optimizer.start(problem, state, state['x'])
+
+                optimizer.move(problem, state, prop)
+
+                if monitor is not None:
+                    monitor(state)
+
+            first_iteration = False
 
             prop = optimizer.single_iteration(problem, state)
 
@@ -493,8 +497,9 @@ class Optimizer(object):
                 optimizer.move(problem, state, prop)
                 state.nit = state.nit + 1
 
-            if isinstance(assessment, ConvergedIteration):
+            if isinstance(assessment, (ConvergedIteration, FailedIteration)):
                 state.conviter = state.conviter + 1
+                # converged or failed -- restart cleanly
                 state.converged = True
 
             if isinstance(assessment, ContinueIteration):
