@@ -178,10 +178,6 @@ def scalar_search_wolfe2(phi, derphi=None, phi0=None,
         derphi_star = None
         warn('The line search algorithm did not converge', LineSearchWarning)
 
-    if alpha_star is None:
-        import pdb;pdb.set_trace()
-        raise
-
     return alpha_star, phi_star, phi0, derphi_star
 
 from scipy.optimize.linesearch import _cubicmin, _quadmin
