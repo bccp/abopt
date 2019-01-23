@@ -251,6 +251,7 @@ class LBFGSHessian(object):
         for i in range(len(self.Y)):
             beta[i] = 1.0 / self.YS[i] * dot(self.Y[i], z)
             z = addmul(z, self.S[i], (alpha[i] - beta[i]))
+
         return z
 
     def update(self, Px0, Px1, Pg0, Pg1):
@@ -305,7 +306,9 @@ class LBFGS(Optimizer):
         prop = Optimizer.start(self, problem, state, x0)
         prop.B = None
         prop.z = prop.Pg
-        prop.r1 = 1.0
+        # carry over the gradient descent search radius
+        prop.r1 = getattr(state, 'r1', 1.0)
+        prop.r2  = getattr(state, 'r2', 1.0)
         return prop
 
     def move(self, problem, state, prop):
@@ -317,6 +320,7 @@ class LBFGS(Optimizer):
         state.B = prop.B
         state.z = prop.z
         state.r1 = prop.r1
+        state.r2 = prop.r2
 
         if state.B is None:
             state.B = LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
@@ -330,6 +334,9 @@ class LBFGS(Optimizer):
         addmul = problem.vs.addmul
         dot = problem.vs.dot
         mul = problem.vs.mul
+
+        r1 = state.r1
+        r2 = state.r2
 
         if state.Pgnorm == 0:
             raise RuntimeError("gnorm is zero. This shall not happen because terminated() checks for this")
@@ -349,41 +356,47 @@ class LBFGS(Optimizer):
                 raise LBFGSFailure("hvp failed")
 
             znorm = dot(z, z) ** 0.5
-            if dot(z, state.Pg) / (state.Pgnorm * znorm) < - 0.2:
+            theta = dot(z, state.Pg) / (state.Pgnorm * znorm)
+            if theta < 0.0:
                 raise LBFGSFailure("lbfgs misaligned")
 
-            rmax = 1.
+            r2max = max(state.r2 * 2, 1.0)
 
-            prop, r1 = self.linesearch(problem, state, z, rmax, maxiter=self.linesearchiter)
+            prop, r2 = self.linesearch(problem, state, z, r2max, maxiter=self.linesearchiter)
 
             # failed line search, recover
             if prop is None:
-                raise LBFGSFailure("lbfgs linesearch failed")
+                r2 = state.r2
+                raise LBFGSFailure("lbfgs linesearch failed theta=%g r2=%g state.r2=%g" % (theta, r2, state.r2))
+
+            # print('BFGS Starting step = %0.2e, step moved = %0.2e'%(r2max, r2))
 
             #if LBFGS is not moving, try GD
             if problem.check_convergence(state.y, prop.y):
                 raise LBFGSFailure("lbfgs no improvement")
-                # print('LBFGS Starting step = %0.2e, abort LBGFS at step = %0.2e'%(rmax, r1))
+                # print('LBFGS Starting step = %0.2e, abort LBGFS at step = %0.2e'%(r2, r1))
 
         except LBFGSFailure as e:
 
             z = state.Pg
 
-            rmax = self.regulator(problem, state, z)
-            rmax = min(rmax, state.r1 * 2)
+            r1max = self.regulator(problem, state, z)
+            r1max = min(r1max, state.r1 * 2)
 
-            prop, r1 = self.linesearch(problem, state, state.Pg, rmax, maxiter=self.linesearchiter)
+            prop, r1 = self.linesearch(problem, state, state.Pg, r1max, maxiter=self.linesearchiter)
 
             # failed GD
             if prop is None:
+                r1 = state.r1
                 return None
 
             prop.message = e.message
-            #print('Starting step = %0.2e, step moved = %0.2e'%(rmax, r1))
+            print('GD Starting step = %0.2e, step moved = %0.2e'%(r1max, r1))
 
 
         prop.B = B
         prop.z = z
         prop.r1 = r1
+        prop.r2 = r2
 
         return prop
