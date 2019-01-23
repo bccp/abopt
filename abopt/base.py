@@ -163,6 +163,7 @@ class Proposal(object):
     def complete(self, state):
         dot = self.problem.vs.dot
         addmul = self.problem.vs.addmul
+        self.znorm = dot(self.z, self.z) ** 0.5
         self.xnorm = dot(self.x, self.x) ** 0.5
         self.Pxnorm = dot(self.Px, self.Px) ** 0.5
         self.complete_y(state)
@@ -171,11 +172,10 @@ class Proposal(object):
         self.dy = self.y - state.y
         dx = addmul(self.x, state.x, -1)
         self.dxnorm = dot(dx, dx) ** 0.5
-        self.znorm = dot(self.z, self.z) ** 0.5
-        if self.Pgnorm == 0:
+        if state.Pgnorm == 0:
             self.theta = 1
         else:
-            self.theta = dot(self.z, self.Pg) / (self.znorm * self.Pgnorm)
+            self.theta = dot(self.z, state.Pg) / (self.znorm * state.Pgnorm)
         return self
 
     def complete_y(self, state):
