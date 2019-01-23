@@ -358,7 +358,9 @@ class LBFGS(Optimizer):
             znorm = dot(z, z) ** 0.5
             theta = dot(z, state.Pg) / (state.Pgnorm * znorm)
             if theta < 0.0:
-                raise LBFGSFailure("lbfgs misaligned")
+                # purge the hessian approximation
+                B = LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
+                raise LBFGSFailure("lbfgs misaligned theta = %g" % (theta,))
 
             r2max = max(state.r2 * 2, 1.0)
 
@@ -366,6 +368,7 @@ class LBFGS(Optimizer):
 
             # failed line search, recover
             if prop is None:
+                B = LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
                 r2 = state.r2
                 raise LBFGSFailure("lbfgs linesearch failed theta=%g r2=%g state.r2=%g" % (theta, r2, state.r2))
 
