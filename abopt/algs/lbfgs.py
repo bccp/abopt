@@ -391,7 +391,7 @@ class LBFGS(Optimizer):
                 return None
 
             prop.message = e.message
-            print('GD Starting step = %0.2e, step moved = %0.2e'%(r1max, r1))
+            # print('GD Starting step = %0.2e, step moved = %0.2e'%(r1max, r1))
 
 
         prop.B = B
