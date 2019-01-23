@@ -50,6 +50,7 @@ class State(object):
 
         self.default_format = dict(
         [
+            ('wallclock', '[ %08.4f ]',),
             ('nit', '%04d',),
             ('fev', '%04d',),
             ('gev', '%04d',),
@@ -110,7 +111,10 @@ class State(object):
 
         def get_width(key):
             fmt = keys[key]
-            width = int(fmt[1:-1].split('.')[0].strip())
+            width = fmt[1:-1].split('.')[0]
+            while len(width) and width[0] not in '0123456789':
+                width = width[1:]
+            width = int(width.strip())
             if width < len(key):
                 width = len(key)
             return width
