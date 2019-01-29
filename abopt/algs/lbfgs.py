@@ -308,7 +308,6 @@ class LBFGS(Optimizer):
         prop.z = prop.Pg
         # carry over the gradient descent search radius
         prop.r1 = getattr(state, 'r1', 1.0)
-        prop.r2  = getattr(state, 'r2', 1.0)
         return prop
 
     def move(self, problem, state, prop):
@@ -320,7 +319,6 @@ class LBFGS(Optimizer):
         state.B = prop.B
         state.z = prop.z
         state.r1 = prop.r1
-        state.r2 = prop.r2
 
         if state.B is None:
             state.B = LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
@@ -336,7 +334,6 @@ class LBFGS(Optimizer):
         mul = problem.vs.mul
 
         r1 = state.r1
-        r2 = state.r2
 
         if state.Pgnorm == 0:
             raise RuntimeError("gnorm is zero. This shall not happen because terminated() checks for this")
@@ -362,17 +359,15 @@ class LBFGS(Optimizer):
                 B = LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
                 raise LBFGSFailure("lbfgs misaligned theta = %g" % (theta,))
 
-            r2max = max(state.r2 * 2, 1.0)
-
-            prop, r2 = self.linesearch(problem, state, z, r2max, maxiter=self.linesearchiter)
+            # LBFGS should have been good, so we shall not search too many times.
+            prop, r2 = self.linesearch(problem, state, z, 1.0, maxiter=3)
 
             # failed line search, recover
             if prop is None:
                 B = LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
-                r2 = state.r2
-                raise LBFGSFailure("lbfgs linesearch failed theta=%g r2=%g state.r2=%g" % (theta, r2, state.r2))
+                raise LBFGSFailure("lbfgs linesearch failed theta=%g " % (theta, ))
 
-            # print('BFGS Starting step = %0.2e, step moved = %0.2e'%(r2max, r2))
+            # print('BFGS Starting step = %0.2e, step moved = %0.2e'%(r2))
 
             #if LBFGS is not moving, try GD
             if problem.check_convergence(state.y, prop.y):
@@ -400,6 +395,5 @@ class LBFGS(Optimizer):
         prop.B = B
         prop.z = z
         prop.r1 = r1
-        prop.r2 = r2
 
         return prop
