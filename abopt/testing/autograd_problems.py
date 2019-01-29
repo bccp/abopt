@@ -10,7 +10,7 @@ from autograd.numpy import cos, sin, exp, log, pi
 from autograd import grad
 
 class FunctionND:
-    xatol = 1e-7
+    xatol = 2e-6
     yatol = 1e-7
     def __init__(self, nd):
         self.nd = nd
@@ -32,7 +32,7 @@ class FunctionND:
         return 0.0
 
 class Function2D:
-    xatol = 1e-7
+    xatol = 2e-6
     yatol = 1e-7
     def __init__(self, nd):
         assert nd == 2
