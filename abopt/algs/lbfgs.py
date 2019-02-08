@@ -30,8 +30,6 @@
 
     The authors showed scaling after D-update improves the convergence even more.
 
-    We use post_scaled_direct_bfgs D-update as *default*:
-
         VAFFast = LBFGS(diag_update=post_scaled_direct_bfgs, rescale_diag=False)
 
     VAF recommended a "new approach", where they do not scale D during D-update, but only
@@ -50,6 +48,11 @@
     but it is as slow as VAFGoodHessian, and due the prescaling it doesn't give good hessian.
 
     We shall do these tests more rigourously and write some notes.
+
+    We use the canonical scalar D-update as *default*. It seems to be more reliable than
+    other methods for our cases, where the problem is quasi-linear, with complicated off
+    diagonal structures. Perhaps in this case the low rank update is safer than the full
+    rank update.
 
     Yu Feng
 """
@@ -199,7 +202,7 @@ def post_scaled_inverse_dfp(vs, hessian):
     return inverse_dfp(vs, hessian, post_scaled=True)
 
 class LBFGSHessian(object):
-    def __init__(self, vs, m, diag_update=post_scaled_direct_bfgs, rescale_diag=False):
+    def __init__(self, vs, m, diag_update=scalar, rescale_diag=False):
         """ D is a vector represents the initial diagonal. """
         self.m = m
         self.Y = [] # Delta G
