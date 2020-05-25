@@ -376,12 +376,6 @@ class Problem(object):
         return thresh
 
     def check_convergence(self, y0, y1):
-        # This condition may need to be removed.
-        # some optimizers do not need the objectve to have been strictly decreasing
-        # for convergence.
-        if y1 > y0 :
-            return False
-
         valmax = max(abs(y0), abs(y1))
 
         thresh = self.get_ytol(valmax)
