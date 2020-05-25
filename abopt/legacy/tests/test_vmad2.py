@@ -1,9 +1,10 @@
 from __future__ import print_function
 from abopt.legacy.vmad2 import CodeSegment, Engine, statement, programme, ZERO, logger, Literal
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
-from numpy.testing.decorators import skipif
+
 import pytest
 xfail = pytest.mark.xfail
+skipif = pytest.mark.skipif
 import numpy
 import logging
 
@@ -256,7 +257,7 @@ def test_inplace():
     assert_array_equal(d, 54.0)
     assert_array_equal(_a, 54.0)
 
-@skipif(graphviz == None, "graphviz is not properly installed")
+@skipif(graphviz == None, reason="graphviz is not properly installed")
 def test_to_graph():
     engine = MyEngine()
     code = CodeSegment(engine)
