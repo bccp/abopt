@@ -18,6 +18,8 @@ def backtrace(problem, state, z, rate, maxiter, c=1e-5, tau=0.5):
     i = 0
     propmin = prop
     ratemin = rate
+    if maxiter < 0:
+        return prop, rate
     while i < maxiter:
         # print('rate', rate, 'y', state.y, 'y1', y1, 'x', state.Px, 'x1', Px1, 'z', z)
 
@@ -36,4 +38,3 @@ def backtrace(problem, state, z, rate, maxiter, c=1e-5, tau=0.5):
         prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
         i = i + 1
     return None, None
-

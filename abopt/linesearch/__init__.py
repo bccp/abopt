@@ -26,6 +26,8 @@ def nullsearch(problem, state, z, rate, maxiter):
 
     """
 
+    addmul = problem.vs.addmul
     Px1 = addmul(state.Px, z, -rate)
     prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
-    return prob, rate
+    print(Px1, state.Px, z)
+    return prop, rate

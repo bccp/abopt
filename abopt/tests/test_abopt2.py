@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-from abopt.abopt2 import GradientDescent, LBFGS, Preconditioner, minimize
+from abopt.abopt2 import LineSearchGradientDescent, GradientDescent, LBFGS, Preconditioner, minimize
 
 from abopt.linesearch import minpack, backtrace, exact
 from abopt.vectorspace import real_vector_space, complex_vector_space
@@ -32,15 +32,24 @@ x0 = numpy.zeros(2)
 
 
 def test_abopt_gd_backtrace():
-    gd = GradientDescent(linesearch=backtrace)
+    gd = LineSearchGradientDescent(linesearch=backtrace)
 
     s = minimize(gd, quad, quad_der, x0, monitor=print)
     print(s)
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
 
+def test_abopt_gd_nobacktrace():
+    # if rate is 1.0, we jump between mirror images around
+    # the center and run into a false convergence.
+    gd = GradientDescent(rate=0.9)
+
+    s = minimize(gd, quad, quad_der, x0, monitor=print)
+    assert s.converged
+    assert_allclose(s.x, 0.5, rtol=1e-4)
+
 def test_abopt_gd_minpack():
-    gd = GradientDescent(linesearch=minpack)
+    gd = LineSearchGradientDescent(linesearch=minpack)
     
     s = minimize(gd, quad, quad_der, x0)
     print(s)
@@ -48,14 +57,14 @@ def test_abopt_gd_minpack():
     assert_allclose(s.x, 0.5, rtol=1e-4)
 
 def test_abopt_gd_exact():
-    gd = GradientDescent(linesearch=exact, maxiter=10)
+    gd = LineSearchGradientDescent(linesearch=exact, maxiter=10)
     
     s = minimize(gd, quad, quad_der, x0, monitor=print)
     assert s.converged
     assert_allclose(s.x, 0.5, rtol=1e-4)
 
 def test_abopt_gd_complex():
-    gd = GradientDescent(linesearch=exact, maxiter=10)
+    gd = LineSearchGradientDescent(linesearch=exact, maxiter=10)
 
     X = []
     Y = []
