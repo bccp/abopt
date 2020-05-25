@@ -1,6 +1,6 @@
 # expose optimization algorithms
 from .algs.lbfgs import LBFGS
-from .algs.gradient import GradientDescent
+from .algs.gradient import GradientDescent, LineSearchGradientDescent
 from .algs.newton import DirectNewton
 from .algs.trustregion import TrustRegionCG
 
