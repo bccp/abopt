@@ -447,11 +447,6 @@ class Optimizer(object):
         state.timestamp = timestamp = time.time()
 
     def assess(self, problem, state, prop):
-        if prop is None:
-            return FailedIteration("no proposal is made")
-
-        prop = prop.complete(state)
-
         if prop.gnorm <= problem.gtol:
             return ConvergedIteration("Gradient is sufficiently small")
 
@@ -493,7 +488,11 @@ class Optimizer(object):
             prop = optimizer.single_iteration(problem, state)
 
             # assessment must be before the move, for it needs to see dy
-            assessment = optimizer.assess(problem, state, prop)
+            if prop is None:
+                assessment = FailedIteration("no proposal is made")
+            else:
+                prop = prop.complete(state)
+                assessment = optimizer.assess(problem, state, prop)
 
             state.assessment = assessment
 

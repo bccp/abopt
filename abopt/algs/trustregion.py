@@ -104,11 +104,6 @@ class TrustRegionCG(Optimizer):
         return prop
 
     def assess(self, problem, state, prop):
-        if prop is None:
-            return FailedIteration("no proposal is made")
-
-        prop = prop.complete(state)
-
         #print("assess radius", state.radius, 'tol', problem.get_tol(state.y), 'gnorm', prop.gnorm, 'gtol', problem.gtol)
         if prop.radius >= state.radius:
             if problem.check_convergence(state.y, prop.y):
