@@ -29,7 +29,7 @@ class TrustRegionCG(Optimizer):
                         'initradius' : None,
                         }
 
-    def single_iteration(self, problem, state):
+    def propose(self, problem, state):
         mul = problem.vs.mul
         dot = problem.vs.dot
         addmul = problem.vs.addmul
@@ -130,12 +130,12 @@ class TrustRegionCG(Optimizer):
         prop.rho = 1.0
         return prop
 
-    def move(self, problem, state, prop):
+    def accept(self, problem, state, prop):
         state.radius = prop.radius
         state.rho = prop.rho
 
-        #print('move', prop.y)
-        Optimizer.move(self, problem, state, prop)
+        #print('accept', prop.y)
+        Optimizer.accept(self, problem, state, prop)
 
 def cg_steihaug(vs, Avp, g, z0, Delta, rtol, maxiter=1000, monitor=None, C=None):
     """ best effort solving for y = A^{-1} g with cg,

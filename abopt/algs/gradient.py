@@ -15,11 +15,11 @@ class GradientDescent(Optimizer):
         prop.rate = 1.0
         return prop
 
-    def move(self, problem, state, prop):
+    def accept(self, problem, state, prop):
         state.rate = prop.rate
-        Optimizer.move(self, problem, state, prop)
+        Optimizer.accept(self, problem, state, prop)
 
-    def single_iteration(self, problem, state):
+    def propose(self, problem, state):
         mul = problem.vs.mul
 
         z = mul(state.Pg, 1 / state.Pgnorm)
