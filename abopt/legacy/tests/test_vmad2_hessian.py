@@ -1,9 +1,11 @@
 from __future__ import print_function
 from abopt.legacy.vmad2 import CodeSegment, Engine, statement, programme, ZERO, logger, Literal
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
-from numpy.testing.decorators import skipif
 import numpy
 import logging
+
+import pytest
+skipif = pytest.mark.skipif
 
 try: import graphviz
 except ImportError: graphviz = None
