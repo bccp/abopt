@@ -313,7 +313,7 @@ class LBFGS(Optimizer):
         prop.r1 = getattr(state, 'r1', 1.0)
         return prop
 
-    def move(self, problem, state, prop):
+    def accept(self, problem, state, prop):
         addmul = problem.vs.addmul
         dot = problem.vs.dot
 
@@ -328,9 +328,9 @@ class LBFGS(Optimizer):
         else:
             state.B.update(state.Px, prop.Px, state.Pg, prop.Pg)
 
-        Optimizer.move(self, problem, state, prop)
+        Optimizer.accept(self, problem, state, prop)
 
-    def single_iteration(self, problem, state):
+    def propose(self, problem, state):
         """ Line by line translation of the LBFGS on wikipedia """
         addmul = problem.vs.addmul
         dot = problem.vs.dot

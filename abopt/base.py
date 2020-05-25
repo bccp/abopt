@@ -38,7 +38,6 @@ class State(object):
         self.Pxnorm = None
         self.Pgnorm = None
         self.dxnorm = None
-        self.assessment = None
         self.conviter = 0
         self.converged = False
         self.message = ""
@@ -67,7 +66,6 @@ class State(object):
             ('conviter', '%04d'),
             ('converged', '% 6s'),
             ('message', '% 20s'),
-            ('assessment', '% 20s')
         ])
 
 
@@ -401,25 +399,7 @@ class Optimizer(object):
         self.__dict__.update(type(self).optimizer_defaults)
         self.__dict__.update(kwargs)
 
-    def terminated(self, problem, state):
-        # check for maxiter first to overrride
-        # continuing due to ConvergedItreration.
-
-        if state.nit > self.maxiter: return True
-
-        if isinstance(state.assessment, (ConvergedIteration, FailedIteration)):
-            if state.Pgnorm == 0:
-                return True
-            if state.conviter >= self.conviter:
-                return True
-            else:
-                return False
-
-        if state.dy is None: return False
-
-        return False
-
-    def move(self, problem, state, prop):
+    def accept(self, problem, state, prop):
 
         state.message = prop.message
 
@@ -447,6 +427,12 @@ class Optimizer(object):
         state.timestamp = timestamp = time.time()
 
     def assess(self, problem, state, prop):
+        if prop is None:
+            return ConvergedIteration("No proposal can be found.")
+
+        if state.Pgnorm == 0:
+            return ConvergedIteration("Gradient is sufficiently small")
+
         if prop.gnorm <= problem.gtol:
             return ConvergedIteration("Gradient is sufficiently small")
 
@@ -458,7 +444,7 @@ class Optimizer(object):
 
         return ContinueIteration("continue iteration")
 
-    def single_iteration(self, problem, state):
+    def propose(self, problem, state):
         # it shall return a Proposal object
         raise NotImplementedError
         # here is an example that doesn't yield a new solution
@@ -472,45 +458,40 @@ class Optimizer(object):
 
     def _minimize(optimizer, problem, state, monitor=None):
 
-        first_iteration = True
-        while not optimizer.terminated(problem, state):
-            if isinstance(state.assessment, (ConvergedIteration, FailedIteration)) \
-              or first_iteration:
-                prop = optimizer.start(problem, state, state['x'])
+        prop = optimizer.start(problem, state, state['x'])
+        optimizer.accept(problem, state, prop)
 
-                optimizer.move(problem, state, prop)
+        while True:
+            if monitor is not None:
+                monitor(state)
 
-                if monitor is not None:
-                    monitor(state)
+            if state.nit > optimizer.maxiter:
+                break
 
-            first_iteration = False
+            prop = optimizer.propose(problem, state)
 
-            prop = optimizer.single_iteration(problem, state)
-
-            # assessment must be before the move, for it needs to see dy
-            if prop is None:
-                assessment = FailedIteration("no proposal is made")
-            else:
+            if prop:
                 prop = prop.complete(state)
-                assessment = optimizer.assess(problem, state, prop)
 
-            state.assessment = assessment
+            assessment = optimizer.assess(problem, state, prop)
 
-            if isinstance(assessment, (ContinueIteration, ConvergedIteration)):
-                optimizer.move(problem, state, prop)
+            if isinstance(assessment, ContinueIteration):
+                optimizer.accept(problem, state, prop)
                 state.nit = state.nit + 1
-
-            if isinstance(assessment, (ConvergedIteration, FailedIteration)):
-                state.conviter = state.conviter + 1
+                state.conviter = 0
+                state.converged = False
+            elif isinstance(assessment, ConvergedIteration):
+                if prop is not None:
+                    optimizer.accept(problem, state, prop)
                 # converged or failed -- restart cleanly
                 state.converged = True
 
-            if isinstance(assessment, ContinueIteration):
-                state.conviter = 0
-                state.converged = False
-
-            if monitor is not None:
-                monitor(state)
+                state.nit = state.nit + 1
+                state.conviter = state.conviter + 1
+                if state.conviter >= optimizer.conviter:
+                    break
+            else:
+                raise ValueError("assess returned unexpected value: %s." % assessment)
 
         return state
 

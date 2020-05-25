@@ -19,7 +19,7 @@ class DirectNewton(Optimizer):
                         'linesearchiter' : 100,
                         }
 
-    def single_iteration(self, problem, state):
+    def propose(self, problem, state):
         mul = problem.vs.mul
         dot = problem.vs.dot
         addmul = problem.vs.addmul
