@@ -338,9 +338,6 @@ class LBFGS(Optimizer):
 
         r1 = state.r1
 
-        if state.Pgnorm == 0:
-            raise RuntimeError("gnorm is zero. This shall not happen because terminated() checks for this")
-
         try:
             # use old LBFGSHessian, and update it
             B = state.B
@@ -356,14 +353,18 @@ class LBFGS(Optimizer):
                 raise LBFGSFailure("hvp failed")
 
             znorm = dot(z, z) ** 0.5
-            theta = dot(z, state.Pg) / (state.Pgnorm * znorm)
-            if theta < 0.0:
-                # purge the hessian approximation
-                B = LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
-                raise LBFGSFailure("lbfgs misaligned theta = %g" % (theta,))
+            if state.Pgnorm == 0:
+                prop = None
+                theta = 0.0
+            else:
+                theta = dot(z, state.Pg) / (state.Pgnorm * znorm)
+                if theta < 0.0:
+                    # purge the hessian approximation
+                    B = LBFGSHessian(problem.vs, self.m, self.diag_update, self.rescale_diag)
+                    raise LBFGSFailure("lbfgs misaligned theta = %g" % (theta,))
 
-            # LBFGS should have been good, so we shall not search too many times.
-            prop, r2 = self.linesearch(problem, state, z, 1.0, maxiter=3)
+                # LBFGS should have been good, so we shall not search too many times.
+                prop, r2 = self.linesearch(problem, state, z, 1.0, maxiter=3)
 
             # failed line search, recover
             if prop is None:
