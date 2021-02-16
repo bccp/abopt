@@ -21,15 +21,19 @@ class ChiSquareProblem(Problem):
             y = f(x)
             return vjp(x, y - 1.0) * 2
 
+        def objective_gradient(x):
+            return objective(x), gradient(x)
+
         def hessian(x, v):
             v = numpy.array(v)
             return vjp(x, jvp(x, v)) * 2
 
         Problem.__init__(self,
-                      objective=objective,
-                      gradient=gradient,
-                      hessian_vector_product=hessian,
-                      precond=precond)
+                      objective = objective,
+                      gradient = gradient,
+                      objective_gradient = objective_gradient,
+                      hessian_vector_product = hessian,
+                      precond = precond)
 
 from scipy.linalg import inv
 def rosen_inverse_hess(x):
