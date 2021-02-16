@@ -133,7 +133,7 @@ class State(object):
                 else:
                     try:
                         s = keys[key] % self[key]
-                    except TypeError:
+ TypeError:
                         s = str(self[key])
 
                 return get_strfmt(key, False) % s
@@ -168,8 +168,12 @@ class Proposal(object):
         self.znorm = dot(self.z, self.z) ** 0.5
         self.xnorm = dot(self.x, self.x) ** 0.5
         self.Pxnorm = dot(self.Px, self.Px) ** 0.5
-        self.complete_y(state)
-        self.complete_g(state)
+        
+        if self.problem_dual_eval:
+            self.complete_y_g(state)
+        else:
+            self.complete_y(state)
+            self.complete_g(state)
 
         self.dy = self.y - state.y
         dx = addmul(self.x, state.x, -1)
@@ -204,6 +208,30 @@ class Proposal(object):
         self.gnorm = dot(self.g, self.g) ** 0.5
 
         return self
+
+    def complete_y_g(self, state):
+        f, g = problem.f_g(self.x)
+
+        if self.y is None:
+            self.y = f
+            state.fev = state.fev + 1
+
+        dot = self.problem.vs.dot
+        problem = self.problem
+
+        # fill missing values in prop
+        if self.g is None:
+            self.g = g
+            state.gev = state.gev + 1
+
+        if self.Pg is None:
+            self.Pg = problem.g2Pg(self.g)
+
+        self.Pgnorm = dot(self.Pg, self.Pg) ** 0.5
+        self.gnorm = dot(self.g, self.g) ** 0.5
+
+        return self
+
 
 class InitialProposal(Proposal):
     def complete(self, state):
@@ -257,6 +285,7 @@ class Problem(object):
 
     """
     def __init__(self, objective, gradient,
+        objective_gradient=None,
         hessian_vector_product=None,
         inverse_hessian_vector_product=None,
         vs=None,
@@ -282,8 +311,14 @@ class Problem(object):
         self._precond = precond
         self.vs = vs
 
+        self.problem_dual_eval = False
+
+        if objective_gradient is not None:
+            self.problem_dual_eval = True
+
         self._objective = objective
         self._gradient = gradient
+        self._objective_gradient = objective_gradient
         self._hessian_vector_product = hessian_vector_product
         self._inverse_hessian_vector_product = inverse_hessian_vector_product
         self.atol = atol
@@ -322,6 +357,11 @@ class Problem(object):
         """ This returns the gradient for the original variable"""
         g = self._gradient(x)
         return g
+
+    def f_g(self, x):
+        """ This return the gradient and the function """
+        f, g = self._objective_gradient(x)
+        return f, g
 
     def Hvp(self, x, v):
         """ This returns the raw hessian product H_x v
