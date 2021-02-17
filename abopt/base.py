@@ -133,7 +133,7 @@ class State(object):
                 else:
                     try:
                         s = keys[key] % self[key]
- TypeError:
+                    except TypeError:
                         s = str(self[key])
 
                 return get_strfmt(key, False) % s
@@ -169,7 +169,7 @@ class Proposal(object):
         self.xnorm = dot(self.x, self.x) ** 0.5
         self.Pxnorm = dot(self.Px, self.Px) ** 0.5
         
-        if self.problem_dual_eval:
+        if self.problem.problem_dual_eval:
             self.complete_y_g(state)
         else:
             self.complete_y(state)
@@ -210,6 +210,7 @@ class Proposal(object):
         return self
 
     def complete_y_g(self, state):
+        problem = self.problem
         f, g = problem.f_g(self.x)
 
         if self.y is None:
@@ -217,7 +218,6 @@ class Proposal(object):
             state.fev = state.fev + 1
 
         dot = self.problem.vs.dot
-        problem = self.problem
 
         # fill missing values in prop
         if self.g is None:
