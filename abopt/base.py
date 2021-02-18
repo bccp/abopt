@@ -169,11 +169,7 @@ class Proposal(object):
         self.xnorm = dot(self.x, self.x) ** 0.5
         self.Pxnorm = dot(self.Px, self.Px) ** 0.5
         
-        if self.problem.problem_dual_eval:
-            self.complete_y_g(state)
-        else:
-            self.complete_y(state)
-            self.complete_g(state)
+        self.complete_y_g(state)
 
         self.dy = self.y - state.y
         dx = addmul(self.x, state.x, -1)
@@ -184,34 +180,9 @@ class Proposal(object):
             self.theta = dot(self.z, state.Pg) / (self.znorm * state.Pgnorm)
         return self
 
-    def complete_y(self, state):
-        problem = self.problem
-
-        if self.y is None:
-            self.y = problem.f(self.x)
-            state.fev = state.fev + 1
-        return self
-
-    def complete_g(self, state):
-        dot = self.problem.vs.dot
-        problem = self.problem
-
-        # fill missing values in prop
-        if self.g is None:
-            self.g = problem.g(self.x)
-            state.gev = state.gev + 1
-
-        if self.Pg is None:
-            self.Pg = problem.g2Pg(self.g)
-
-        self.Pgnorm = dot(self.Pg, self.Pg) ** 0.5
-        self.gnorm = dot(self.g, self.g) ** 0.5
-
-        return self
-
     def complete_y_g(self, state):
         problem = self.problem
-        f, g = problem.f_g(self.x)
+        f, g = problem.fg(self.x)
 
         if self.y is None:
             self.y = f
@@ -239,8 +210,7 @@ class InitialProposal(Proposal):
         addmul = self.problem.vs.addmul
         self.xnorm = dot(self.x, self.x) ** 0.5
         self.Pxnorm = dot(self.Px, self.Px) ** 0.5
-        self.complete_y(state)
-        self.complete_g(state)
+        self.complete_y_g(state)
 
         self.dy = None
         self.dxnorm = None
@@ -313,12 +283,9 @@ class Problem(object):
 
         self.problem_dual_eval = False
 
-        if objective_gradient is not None:
-            self.problem_dual_eval = True
-        else:
+        if objective_gradient is None:
             if not (objective is not None and gradient is not None):
                 raise ValueError("if objective_gradient is None, gradient and objective cannot be None.")
-
 
         self._objective = objective
         self._gradient = gradient
@@ -353,7 +320,6 @@ class Problem(object):
         if vs.dot(d, d) > 1e-6 * vs.dot(x0, x0):
             raise ValueError("Preconditioner's vPp and Qvp are not inverses.")
 
-
     def f(self, x):
         return self._objective(x)
 
@@ -362,9 +328,13 @@ class Problem(object):
         g = self._gradient(x)
         return g
 
-    def f_g(self, x):
+    def fg(self, x):
         """ This return the gradient and the function """
-        f, g = self._objective_gradient(x)
+        if self._objective_gradient is not None:
+            f, g = self._objective_gradient(x)
+        else:
+            g = self.g(x)
+            f = self.f(x)
         return f, g
 
     def Hvp(self, x, v):
