@@ -11,7 +11,7 @@ from abopt.algs.lbfgs import inverse_bfgs, direct_bfgs, scalar, inverse_dfp
 from abopt.algs.lbfgs import pre_scaled_direct_bfgs, pre_scaled_inverse_dfp
 from abopt.algs.lbfgs import post_scaled_direct_bfgs, post_scaled_inverse_dfp
 
-from abopt.testing import RosenProblem, ChiSquareProblem
+from abopt.testing import RosenProblem, ChiSquareProblem, ChiSquareProblem_dual, ChiSquareProblem_dual2
 import numpy
 from numpy.testing import assert_allclose
 
@@ -61,3 +61,22 @@ def test_abopt_lbfgs_quad(precond):
     r = lbfgs.minimize(problem, x0, monitor=print)
     assert r.converged
     assert_allclose(problem.f(r.x), 0.0, atol=1e-7)
+
+precond = Preconditioner(Pvp=diag_scaling, vPp=diag_scaling)
+@pytest.mark.parametrize("precond",
+[None, precond])
+def test_abopt_lbfgs_quad_dual(precond):
+    lbfgs = LBFGS(linesearch=backtrace)
+
+    J = numpy.array([ [0, 0,     2,  1],
+                      [0,  10,   2,  0],
+                      [40, 100,  0,  0],
+                      [400, 0,   0,  0]])
+
+    problem = ChiSquareProblem_dual(J=J, precond=precond)
+
+    x0 = numpy.zeros(4)
+    r = lbfgs.minimize(problem, x0, monitor=print)
+    assert r.converged
+    assert_allclose(problem.f(r.x), 0.0, atol=1e-7)
+
