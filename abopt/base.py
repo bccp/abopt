@@ -284,7 +284,7 @@ class Problem(object):
     """ Defines a problem.
 
     """
-    def __init__(self, objective, gradient,
+    def __init__(self, objective=None, gradient=None,
         objective_gradient=None,
         hessian_vector_product=None,
         inverse_hessian_vector_product=None,
@@ -315,6 +315,10 @@ class Problem(object):
 
         if objective_gradient is not None:
             self.problem_dual_eval = True
+        else:
+            if not (objective is not None and gradient is not None):
+                raise ValueError("if objective_gradient is None, gradient and objective cannot be None.")
+
 
         self._objective = objective
         self._gradient = gradient
