@@ -182,7 +182,7 @@ class Proposal(object):
 
     def complete_y_g(self, state):
         problem = self.problem
-        f, g = problem.fg(self.x)
+        f,g = problem.fg(self.x)
 
         if self.y is None:
             self.y = f
@@ -321,11 +321,18 @@ class Problem(object):
             raise ValueError("Preconditioner's vPp and Qvp are not inverses.")
 
     def f(self, x):
-        return self._objective(x)
+        if self._objective_gradient is not None:
+            f, _ = self.fg(x)
+        else:
+            f    = self._objective(x)
+        return f
 
     def g(self, x):
         """ This returns the gradient for the original variable"""
-        g = self._gradient(x)
+        if self._objective_gradient is not None:
+            _, g = self.fg(x)
+        else:
+            g = self._gradient(x)
         return g
 
     def fg(self, x):

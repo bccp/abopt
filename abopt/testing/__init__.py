@@ -15,25 +15,16 @@ class ChiSquareProblem_dual(Problem):
         def vjp(x, v): return v.dot(J) * phiprime(x)
         def jvp(x, v): return J.dot(v * phiprime(x))
 
-        def objective(x):
-            y = f(x)
-            return numpy.sum((y - 1.0) ** 2)
-
-        def gradient(x):
-            y = f(x)
-            return vjp(x, y - 1.0) * 2
-
         def objective_gradient(x):
-            return objective(x), gradient(x)
+            y = f(x)
+            g = vjp(x, y - 1.0) * 2
+            return numpy.sum((y - 1.0) ** 2), g
 
         def hessian(x, v):
             v = numpy.array(v)
             return vjp(x, jvp(x, v)) * 2
 
-        Problem.__init__(self,
-                      objective = objective,
-                      gradient = gradient,
-                      objective_gradient = objective_gradient,
+        Problem.__init__(self, objective_gradient = objective_gradient,
                       hessian_vector_product = hessian,
                       precond = precond)
 
