@@ -28,6 +28,37 @@ class ChiSquareProblem_dual(Problem):
                       hessian_vector_product = hessian,
                       precond = precond)
 
+class ChiSquareProblem_dual2(Problem):
+    """
+        chisquare problem with
+
+        y = |J phi(x) - 1.0|^2
+
+        adding on same time evaluation of gradient and forward pass
+    """
+    def __init__(self, J, phi=lambda x:x, phiprime=lambda x: 1, precond=None):
+        def f(x): return J.dot(phi(x))
+        def vjp(x, v): return v.dot(J) * phiprime(x)
+        def jvp(x, v): return J.dot(v * phiprime(x))
+
+        def objective_gradient(x):
+            y = f(x)
+            g = vjp(x, y - 1.0) * 2
+            return numpy.sum((y - 1.0) ** 2), g
+
+        def objective(x):
+            y = f(x)
+            return numpy.sum((y - 1.0) ** 2)
+
+        def hessian(x, v):
+            v = numpy.array(v)
+            return vjp(x, jvp(x, v)) * 2
+
+        Problem.__init__(self, objective_gradient = objective_gradient, objective=objective,
+                      hessian_vector_product = hessian,
+                      precond = precond)
+
+
 class ChiSquareProblem(Problem):
     """
         chisquare problem with
