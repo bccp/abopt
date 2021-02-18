@@ -13,7 +13,7 @@ def backtrace(problem, state, z, rate, maxiter, c=1e-5, tau=0.5):
         return None, None
 
     Px1 = addmul(state.Px, z, -rate)
-    prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
+    prop = Proposal(problem, Px=Px1, z=z).complete_y_g(state)
 
     i = 0
     propmin = prop
@@ -35,6 +35,6 @@ def backtrace(problem, state, z, rate, maxiter, c=1e-5, tau=0.5):
 
         rate *= tau
         Px1 = addmul(state.Px, z, -rate)
-        prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
+        prop = Proposal(problem, Px=Px1, z=z).complete_y_g(state)
         i = i + 1
     return None, None

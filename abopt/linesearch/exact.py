@@ -10,7 +10,7 @@ def exact(problem, state, z, rate, maxiter, c=0.5):
     from scipy.optimize import minimize_scalar
 
     Px1 = addmul(state.Px, z, - rate)
-    prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
+    prop = Proposal(problem, Px=Px1, z=z).complete_y_g(state)
 
     best = [prop, 1.0]
 
@@ -18,7 +18,7 @@ def exact(problem, state, z, rate, maxiter, c=0.5):
         if tau == 0: return state.y
 
         Px1 = addmul(state.Px, z, -tau * rate)
-        prop = Proposal(problem, Px=Px1, z=z).complete_y(state)
+        prop = Proposal(problem, Px=Px1, z=z).complete_y_g(state)
 
         if prop.y < best[0].y:
             best[0] = prop
