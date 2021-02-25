@@ -281,8 +281,6 @@ class Problem(object):
         self._precond = precond
         self.vs = vs
 
-        self.problem_dual_eval = False
-
         if objective_gradient is None:
             if not (objective is not None and gradient is not None):
                 raise ValueError("if objective_gradient is None, gradient and objective cannot be None.")
