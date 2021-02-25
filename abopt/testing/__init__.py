@@ -2,7 +2,7 @@ from abopt.abopt2 import Problem, Preconditioner
 from scipy.optimize import rosen, rosen_der, rosen_hess_prod, rosen_hess
 import numpy
 
-class ChiSquareProblem_dual(Problem):
+class ChiSquareProblemWithFG(Problem):
     """
         chisquare problem with
 
@@ -28,7 +28,7 @@ class ChiSquareProblem_dual(Problem):
                       hessian_vector_product = hessian,
                       precond = precond)
 
-class ChiSquareProblem_dual2(Problem):
+class ChiSquareProblemWithFandFG(Problem):
     """
         chisquare problem with
 
